@@ -33,7 +33,7 @@
 |---|---|---|---|---|---|---|---|
 | **F0.1a** | Dockerfiles **otimizados** para os 3 serviços | Build multi-stage; imagem final **sem toolchain**; usuário **não-root**; `HEALTHCHECK`; tamanho registrado antes/depois | `services/*/Dockerfile` | `docs/07-evidencias/f1-imagens-tamanho.md` (saída de `docker images`) | Demo Tech | 🟠 | 🟨 |
 | **F0.1b** | Implantação em **Kubernetes gerenciado** | Cluster **EKS** provisionado por IaC; os 3 serviços `Running` e `Ready` | `infra/modules/eks/` | `kubectl get pods -A` + console EKS | Demo Tech | 🔴 | ⬜ |
-| **F0.2** | **IaC com Terraform** cobrindo **todo** o ambiente | Cluster **+ Bancos + Mensageria + Rede** provisionados 100% por Terraform. **Zero** recurso criado no console | `infra/` completo | `terraform plan` limpo + `terraform state list` | Demo Tech (item 2) | 🔴 | ⬜ |
+| **F0.2** | **IaC com Terraform** cobrindo **todo** o ambiente | Cluster **+ Bancos + Mensageria + Rede** provisionados 100% por Terraform. **Zero** recurso criado no console | `infra/` completo | `terraform plan` limpo + `terraform state list` | Demo Tech (item 2) | 🔴 | 🟨 |
 | **F0.3a** | Pipeline com **testes automatizados** | Job `test` roda e publica cobertura; falha de teste **quebra** o pipeline | `.github/workflows/ci-*.yml` | Run verde no Actions | Demo Tech (item 1) | 🔴 | 🟨 |
 | **F0.3b** | **SCA/SAST** com Trivy e Sonar | **Trivy em 2 camadas** (filesystem + imagem), `CRITICAL` bloqueia o push; **SonarCloud** recebe código + cobertura | `.github/workflows/ci-*.yml` | Print do PR **bloqueado** por CVE plantado + dashboard Sonar | Demo Tech (item 1) | 🔴 | ⬜ |
 | **F0.3c** | **Construção da imagem** e push ao registry | Imagem taggeada com **SHA de 40 chars** publicada no ECR | `.github/workflows/ci-*.yml` | `aws ecr describe-images` | Demo Tech (item 1) | 🟠 | ⬜ |
@@ -60,7 +60,7 @@
 
 | ID | Requisito | Critério de aceitação | Artefato no repo | Evidência | Vídeo | Risco | Status |
 |---|---|---|---|---|---|---|---|
-| **F2.1** | **Tags obrigatórias em todos os recursos, via Terraform** | `Project=SolidaryTech`, `Environment=Production`, `CostCenter=NGO-Core` presentes em **100%** dos recursos — **inclusive nas EC2 do node group** (que não herdam tags do managed node group sem *launch template*) | `infra/environments/prod-use1/providers.tf` (`default_tags`) + `infra/modules/eks/` | Print do **Tag Editor** filtrando por `CostCenter=NGO-Core` | Demo Tech (item 2) | 🔴 | ⬜ |
+| **F2.1** | **Tags obrigatórias em todos os recursos, via Terraform** | `Project=SolidaryTech`, `Environment=Production`, `CostCenter=NGO-Core` presentes em **100%** dos recursos — **inclusive nas EC2 do node group** (que não herdam tags do managed node group sem *launch template*) | `infra/environments/prod-use1/providers.tf` (`default_tags`) + `infra/modules/eks/` | Print do **Tag Editor** filtrando por `CostCenter=NGO-Core` | Demo Tech (item 2) | 🔴 | 🟨 |
 | **F2.2** | **Rightsizing** de `requests`/`limits` **via GitOps** | Métricas de CPU/memória coletadas → ajuste **commitado** nos YAML → ArgoCD aplica. Tabela antes/depois com % de desperdício eliminado | `gitops/apps/*/base/deployment.yaml` + `docs/04-finops/rightsizing.md` | `kubectl top` antes/depois + **diff do commit** | Pitch | 🔴 | ⬜ |
 | **F2.3a** | **Forecast de custo mensal** | Projeção mensal item a item, com premissas explícitas | `docs/04-finops/forecast.md` | Tabela + OpenCost por namespace | Pitch | 🔴 | ⬜ |
 | **F2.3b** | **≥1 recomendação de otimização nativa** | Recomendação **quantificada** (economia estimada em US$ e %). Entregar **3** | `docs/04-finops/recomendacoes.md` | — | Pitch | 🔴 | ⬜ |
@@ -85,7 +85,7 @@
 |---|---|---|---|---|---|---|---|
 | **F4.1** | **PCN executivo com RTO e RPO** | Documento **para diretoria** (linguagem de negócio, não de infra), com RTO/RPO **justificados** especificamente para os **dados de doação** | `docs/06-dr-pcn/pcn.md` | Documento (evidência visual **obrigatória**) | Pitch | 🔴 | ⬜ |
 | **F4.2a** | **DR Opção A — Velero** | Backup de manifestos **e volumes** para bucket **externo** (S3 em `us-west-2`, cross-region real) + **restore drill executado** | `gitops/addons/velero/` | Namespace apagado e **restaurado** com sucesso | Demo Tech (item 5) | 🔴 | ⬜ |
-| **F4.2b** | **DR Opção B — Warm Standby** | Módulos Terraform reutilizáveis levantando a região espelho com **1 comando** (`make dr-up`) | `infra/environments/dr-usw2/` | `terraform plan` da região DR limpo | Demo Tech (item 5) | 🔴 | ⬜ |
+| **F4.2b** | **DR Opção B — Warm Standby** | Módulos Terraform reutilizáveis levantando a região espelho com **1 comando** (`make dr-up`) | `infra/environments/dr-usw2/` | `terraform plan` da região DR limpo | Demo Tech (item 5) | 🔴 | 🟨 |
 | **F4.x** | *(extra)* Segurança em profundidade | `gitleaks` no CI, NetworkPolicies por namespace, encryption at rest e in transit, **nenhum segredo versionado** | `.github/workflows/` + `gitops/apps/*/base/networkpolicy.yaml` | `gitleaks detect` limpo | — | 🟢 | ⬜ |
 
 > **Nota de escopo — "Multicloud".** O enunciado nomeia a frente como *"Multicloud, Segurança e
@@ -104,7 +104,7 @@
 
 | ID | Entregável | Critério de aceitação | Onde | Risco | Status |
 |---|---|---|---|---|---|
-| **E1.1** | IaC completo com tags FinOps | `infra/` versionado, `terraform validate` limpo | repo | 🔴 | ⬜ |
+| **E1.1** | IaC completo com tags FinOps | `infra/` versionado, `terraform validate` limpo | repo | 🔴 | 🟨 |
 | **E1.2** | Manifestos com `limits`/`requests` | **Todos** os Deployments com ambos definidos e justificados pelo rightsizing | `gitops/apps/` | 🔴 | ⬜ |
 | **E1.3** | Pipelines DevSecOps | Workflows versionados com testes + Trivy + Sonar | `.github/workflows/` | 🔴 | ⬜ |
 | **E2.1** | Vídeo — Pitch Executivo (15–20 min) | Arquitetura + PCN + estratégia financeira, **em linguagem de diretoria** | `docs/roteiro-video.md` | 🔴 | ⬜ |
@@ -123,13 +123,13 @@
 
 | Frente | Requisitos | 🔴 Alto risco | Status |
 |---|---|---|---|
-| F0 — Fundação | 9 | 6 | 0/9 ✅ · 3/9 🟨 |
+| F0 — Fundação | 9 | 6 | 0/9 ✅ · 4/9 🟨 |
 | F1 — SRE | 6 | 5 | 0/6 |
-| F2 — FinOps | 5 | 4 | 0/5 |
+| F2 — FinOps | 5 | 4 | 0/5 ✅ · 1/5 🟨 |
 | F3 — ITSM/AIOps | 4 | 2 | 0/4 |
-| F4 — Segurança/DR | 4 | 3 | 0/4 |
-| Entregáveis | 12 | 12 | 0/12 |
-| **Total** | **40** | **32** | **0/40 ✅ · 3/40 🟨** |
+| F4 — Segurança/DR | 4 | 3 | 0/4 ✅ · 1/4 🟨 |
+| Entregáveis | 12 | 12 | 0/12 ✅ · 1/12 🟨 |
+| **Total** | **40** | **32** | **0/40 ✅ · 7/40 🟨** |
 
 > Atualizar esta tabela ao fim de cada fase, junto com `docs/PROGRESSO.md`.
 
@@ -141,3 +141,4 @@
 |---|---|---|
 | 2026-09-05 | F0 | Matriz criada — 40 requisitos mapeados |
 | 2026-09-05 | F1 | F0.1a, F0.3a e F0.5b passam a 🟨: artefato pronto (Dockerfiles multi-stage, 62 testes, instrumentação OTel com trace atravessando o SQS), evidência de execução ainda pendente |
+| 2026-09-05 | F2 | F0.2, F2.1, F4.2b e E1.1 passam a 🟨: Terraform completo (20 arquivos, 8 modulos, 2 ambientes) com gate do Academy verde; falta `terraform validate` e a evidencia de execucao |

@@ -46,9 +46,15 @@ estática é criada, distribuída ou versionada. No Terraform, `LabRole` é refe
 *Negativas — registradas como débito:*
 - **Perde-se granularidade por pod.** Qualquer pod no nó alcança tudo que a `LabRole` alcança. Em
   produção real, cada serviço teria sua própria role de menor privilégio via IRSA.
-- Mitigações aplicadas: **NetworkPolicy** por namespace, `httpPutResponseHopLimit = 1` no launch
-  template (impede que um container alcance o IMDS através de um proxy), e o risco declarado
-  explicitamente no PCN.
+- **O `httpPutResponseHopLimit` precisa ser 2, e isso e uma consequencia inescapavel.** O valor 1
+  seria a configuracao endurecida, mas o trafego de um pod ate o IMDS atravessa um salto de rede a
+  mais que o do host: com hop limit 1 o pacote e descartado e **nenhum pod consegue credencial**.
+  Como sem IRSA o IMDS e a UNICA fonte de credencial, hop limit 2 nao e uma escolha — e o que faz o
+  cluster funcionar. Consequencia honesta: qualquer processo em qualquer container do no consegue
+  ler a credencial da `LabRole`.
+- Mitigações aplicadas: **IMDSv2 obrigatório** (`http_tokens = "required"`, o que bloqueia o vetor
+  clássico de SSRF contra o endpoint de metadados), **NetworkPolicy** por namespace, e o risco
+  declarado explicitamente no PCN.
 
 **Alternativas descartadas.** Access keys estáticas em `Secret` (pior: reintroduz exatamente a
 vulnerabilidade que a Fase 4 tinha). `kube2iam`/`kiam` (exigem criar roles — bloqueado).
@@ -117,7 +123,8 @@ mudança de código.
 
 *Negativas:*
 - Nós com IP público têm **superfície de ataque maior**. Mitigado por Security Group de menor
-  privilégio e `httpPutResponseHopLimit = 1`.
+  privilégio (entrada apenas do control plane do EKS e entre nós; **nenhuma porta aberta para
+  `0.0.0.0/0`**, nem mesmo SSH) e por **IMDSv2 obrigatório**.
 - **Não seria aceitável em produção real com dados de doadores.** Declarado assim, nessas palavras,
   no PCN e no relatório de FinOps.
 

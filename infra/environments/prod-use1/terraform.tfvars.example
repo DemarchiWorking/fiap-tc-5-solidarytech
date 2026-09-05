@@ -1,0 +1,65 @@
+# Copie para terraform.tfvars e ajuste. terraform.tfvars NAO e versionado.
+#
+# Os valores abaixo sao os padroes e ja funcionam em uma conta AWS Academy
+# Learner Lab sem nenhuma alteracao. Estao explicitos aqui para deixar visivel
+# o que cada escolha custa.
+
+###############################################################################
+# Identificacao
+###############################################################################
+
+prefixo     = "solidarytech-prod"
+responsavel = "grupo-fiap-fase5"   # vai para a tag Owner
+
+regiao    = "us-east-1"
+regiao_dr = "us-west-2"
+
+###############################################################################
+# Cluster
+###############################################################################
+
+versao_kubernetes   = "1.31"
+tipos_instancia_nos = ["t3.medium"]   # 2 vCPU / 4 GiB cada
+quantidade_nos      = 3               # 6 vCPU / 12 GiB no total
+maximo_nos          = 4
+tamanho_disco_no_gb = 30              # teto do lab: 100
+
+# Desligue APENAS se o provisionamento de PVC falhar na conta da turma. Sem
+# IRSA, o driver depende das permissoes de EC2 da LabRole. Plano de
+# contingencia: Prometheus e Grafana em emptyDir, Loki ja usa S3.
+instalar_ebs_csi = true
+
+# ARNs de outros integrantes que tambem precisem de kubectl. O criador do
+# cluster ja e admin automaticamente.
+principais_admin_adicionais = []
+
+###############################################################################
+# Rede
+###############################################################################
+
+cidr_vpc = "10.0.0.0/16"
+
+# NAT Gateway custa ~US$ 32/mes: cerca de 16% do burn diario deste ambiente e
+# o maior item isolado depois de compute. Falso deixa os nos em subnet publica,
+# com Security Group restritivo. Em producao real com dados de doadores seria
+# true — ver ADR-003.
+enable_nat_gateway = false
+
+###############################################################################
+# Dados
+###############################################################################
+
+classe_instancia_rds     = "db.t3.micro"   # teto do lab: `medium`
+armazenamento_rds_gb     = 20
+retencao_backup_rds_dias = 7               # habilita o PITR, base do RPO do PCN
+
+# Falso: nenhum dos tres microsservicos abre conexao com cache. O modulo existe
+# e esta validado; ligar custa ~US$ 12/mes por um recurso com zero requisicao.
+habilitar_elasticache = false
+
+###############################################################################
+# Retencao
+###############################################################################
+
+retencao_logs_loki_dias      = 14
+retencao_backups_velero_dias = 30

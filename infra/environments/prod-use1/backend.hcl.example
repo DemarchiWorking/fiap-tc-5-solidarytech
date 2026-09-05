@@ -1,0 +1,10 @@
+# Copie para backend.hcl e preencha com a saida de `terraform output` do
+# infra/bootstrap. Este arquivo e apenas o modelo; backend.hcl fica fora do Git.
+#
+#     cd ../../bootstrap && terraform output bloco_backend
+
+bucket         = "solidarytech-tfstate-SUFIXO"
+key            = "prod-use1/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "SolidaryTech-tfstate-lock"
+encrypt        = true

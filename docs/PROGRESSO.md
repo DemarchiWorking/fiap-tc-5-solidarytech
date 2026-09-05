@@ -7,9 +7,9 @@
 
 | Campo | Valor |
 |---|---|
-| Fase corrente | **F1 — Serviços e containers** |
-| Status | 🟨 Código pronto e testado; gate de container **pendente do Docker Desktop** |
-| Próxima fase | **F2 — Terraform / IaC** |
+| Fase corrente | **F2 — Terraform / IaC** |
+| Status | 🟨 Código completo; `terraform validate` **pendente do Docker Desktop** |
+| Próxima fase | **F3 — GitOps (ArgoCD)** |
 | Cobertura da matriz | 0/40 com evidência de execução (F0 e F1 produzem artefato; a evidência vem quando a stack subir) |
 | Crédito AWS consumido | **US$ 0,00** — nenhuma infraestrutura provisionada até aqui |
 
@@ -102,7 +102,64 @@ sem queimar ~US$ 12/mês de crédito por um recurso que ninguém consome.
 
 ---
 
-### F2 — Terraform / IaC ⬜
+### F2 — Terraform / IaC 🟨
+
+**Entregue:** 20 arquivos `.tf` — backend remoto, 8 módulos e 2 ambientes.
+
+- `infra/bootstrap/` — bucket S3 versionado + tabela DynamoDB de lock. Atende
+  literalmente o *"Backend Remoto usando um Bucket S3"* que a Fase 3 pedia e que a
+  Fase 4 substituiu por Azure Storage.
+- Módulos: `network`, `eks`, `rds`, `dynamodb`, `sqs`, `ecr`, `storage`, `elasticache`.
+- `environments/prod-use1` (us-east-1) e `environments/dr-usw2` (warm standby, us-west-2).
+  **O ambiente de DR não redefine nada** — chama os mesmos módulos com outra região e
+  capacidade reduzida, que é o que prova a modularização exigida pela Opção B.
+- **Tags FinOps** por `default_tags` do provider **mais** `tag_specifications` no launch
+  template, porque `default_tags` não alcança as EC2 nem os volumes de um managed node
+  group — e são eles que dominam a fatura.
+
+**Três decisões que fazem o EKS funcionar no Learner Lab:**
+
+| Decisão | Sem ela |
+|---|---|
+| `bootstrap_cluster_creator_admin_permissions = true` | Cluster sobe mas o `kubectl` não autentica — a queixa nº 1 de EKS no Academy |
+| `http_put_response_hop_limit = 2` | **Nenhum pod obtém credencial AWS**, sem erro aparente: o tráfego pod→IMDS tem um salto a mais que o do host |
+| `launch_template` com `tag_specifications` | A maior parte do custo apareceria **sem tag** no Tag Editor, arruinando a evidência do F2.1 |
+
+**Gates executados:**
+
+| Gate | Resultado |
+|---|---|
+| `scripts/verificar-academy.py` | ✅ 7 verificações, 20 arquivos, **0 falhas** |
+| Teste negativo do gate | ✅ detecta escape HCL inválido plantado de propósito |
+| `terraform fmt` / `validate` / `plan` | ⏳ **bloqueado** — Docker Desktop parado |
+
+**Dois erros reais encontrados durante a fase:**
+1. **Escape HCL inválido** (`"\.(nano...)"` escrito como `"\."` em cinco lugares e como
+   `"\."` em um): o Terraform recusa com *Invalid escape sequence*. Virou a verificação
+   nº 6 do gate, com teste negativo.
+2. **Ciclo de dependência** `network → eks → network`: as regras de Security Group
+   referenciam o SG do cluster, que só existe depois do cluster, que precisa das subnets.
+   Resolvido separando o *container* (o SG, no módulo de rede) da *permissão* (a regra, no
+   módulo raiz). O SG nasce negando tudo.
+
+**Correções de rumo feitas nesta fase:**
+- **ADR-001 corrigido**: eu havia escrito `hop limit = 1` como mitigação de segurança — isso
+  quebraria a autenticação de todos os pods. O valor correto é 2, e a mitigação real é
+  IMDSv2 obrigatório (`http_tokens = "required"`).
+- **Spot sai das recomendações de FinOps**: o Learner Lab documenta *"On-Demand instances
+  only"*. A economia de 60–70 % passa a constar como recomendação **para produção real**,
+  explicitamente marcada como não aplicável aqui.
+
+**ElastiCache:** módulo escrito e validado, `habilitar_elasticache = false` por padrão.
+Nenhum dos 3 serviços abre conexão com cache; ligar custaria ~US$ 12/mês por um recurso com
+zero requisição.
+
+**Ponto levado para a F7 (FinOps):** o GSI `ngo_id-index` já é criado no DynamoDB, mas a
+aplicação continua usando `Scan` **de propósito** — assim a otimização Scan→Query ganha
+medição antes/depois com número real, em vez de virar recomendação teórica.
+
+---
+
 ### F3 — GitOps ⬜
 ### F4 — CI/CD DevSecOps ⬜
 ### F5 — Observabilidade e APM ⬜

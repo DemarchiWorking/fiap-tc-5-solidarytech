@@ -12,6 +12,12 @@ override.tf.json
 terraform.rc
 terraform.tfvars
 *.auto.tfvars
+!terraform.tfvars.example
+
+# Config parcial do backend: carrega o nome do bucket de state, que e gerado
+# com sufixo aleatorio por conta. Cada integrante do grupo tem o seu.
+backend.hcl
+!backend.hcl.example
 
 # Credenciais e segredos — NUNCA versionar
 # (a Fase 4 versionou secrets.yaml em texto puro; aqui isso e bloqueado por politica)

@@ -295,12 +295,21 @@ jobs:
       - name: Fixar a tag da imagem
         working-directory: ${{ inputs.overlay }}
         run: |
-          # Le o newName ja configurado (registry real da conta) e troca apenas
-          # a tag. Assim `make configurar-repo` roda uma vez e a pipeline nunca
-          # precisa saber o ID da conta AWS.
-          ATUAL=$(kustomize cfg grep "kind=Kustomization" . 2>/dev/null || true)
-          kustomize edit set image \
-            ${{ inputs.servico }}=$(grep -A1 "name: ${{ inputs.servico }}" kustomization.yaml | grep newName | awk '{print $2}'):${{ github.sha }}
+          set -euo pipefail
+
+          # Lê o `newName` que `make configurar-repo` já gravou (o registry ECR
+          # real da conta) e troca APENAS a tag. Assim a pipeline nunca precisa
+          # conhecer o ID da conta AWS — que, aliás, muda a cada aluno do grupo.
+          REGISTRY=$(awk '/name: ${{ inputs.servico }}$/{achou=1} achou && /newName:/{print $2; exit}' kustomization.yaml)
+
+          if [[ -z "$REGISTRY" ]]; then
+            echo "::error::newName não encontrado em kustomization.yaml."
+            echo "::error::Rode 'make configurar-repo' e faça commit antes do primeiro deploy."
+            exit 1
+          fi
+
+          kustomize edit set image "${{ inputs.servico }}=${REGISTRY}:${{ github.sha }}"
+          echo "Imagem fixada: ${REGISTRY}:${{ github.sha }}"
 
       - name: Commit
         run: |

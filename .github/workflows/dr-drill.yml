@@ -1,0 +1,178 @@
+# Drill de Disaster Recovery — evidência automatizada do requisito F4.2.
+#
+# Um plano de DR nunca testado é uma hipótese, não um plano. Este workflow
+# executa o teste e **captura a evidência sozinho**, no summary da execução — o
+# que resolve o problema real de "fizemos o teste, mas ninguém tirou print".
+#
+# Disparo sempre manual: o drill apaga um namespace de propósito. Nenhuma
+# automação deve fazer isso sem alguém decidindo.
+#
+# Dois modos:
+#   verificar  — só confere que existe backup recente. Não destrói nada.
+#   restaurar  — apaga um namespace e o traz de volta pelo Velero. É o drill.
+
+name: DR Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "verificar (seguro) ou restaurar (apaga e restaura)"
+        required: true
+        type: choice
+        options: [verificar, restaurar]
+        default: verificar
+      namespace:
+        description: "Namespace do drill"
+        required: true
+        type: choice
+        options:
+          # solidary-donation NÃO está na lista de propósito: é o hot path.
+          # Um drill não pode derrubar o caminho crítico.
+          - solidary-volunteer
+          - solidary-ngo
+        default: solidary-volunteer
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dr-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    name: Drill (${{ inputs.modo }})
+    runs-on: ubuntu-latest
+    # `restaurar` exige aprovação: o environment com proteção é a barreira entre
+    # "quero testar" e "apaguei um namespace por engano".
+    environment: ${{ inputs.modo == 'restaurar' && 'prod-use1' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Conectar ao cluster
+        run: |
+          aws eks update-kubeconfig \
+            --region "${{ vars.AWS_REGION || 'us-east-1' }}" \
+            --name "${{ vars.EKS_CLUSTER || 'solidarytech-prod-eks' }}"
+
+      - name: Instalar o CLI do Velero
+        run: |
+          curl -sfL https://github.com/vmware-tanzu/velero/releases/download/v1.15.0/velero-v1.15.0-linux-amd64.tar.gz | tar -xz
+          sudo mv velero-v1.15.0-linux-amd64/velero /usr/local/bin/
+
+      # =====================================================================
+      - name: Backups disponíveis
+        id: backups
+        run: |
+          echo "## Drill de DR — ${{ inputs.modo }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Backups disponíveis" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          velero backup get | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          ULTIMO=$(velero backup get -o json \
+            | python -c "
+          import json, sys
+          dados = json.load(sys.stdin)
+          itens = [b for b in dados.get('items', [])
+                   if b.get('status', {}).get('phase') == 'Completed']
+          if not itens:
+              sys.exit('Nenhum backup concluido com sucesso')
+          itens.sort(key=lambda b: b['status']['completionTimestamp'], reverse=True)
+          print(itens[0]['metadata']['name'])
+          ")
+          echo "ultimo=$ULTIMO" >> "$GITHUB_OUTPUT"
+          echo "Backup mais recente: \`$ULTIMO\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # =====================================================================
+      - name: Estado ANTES
+        run: |
+          echo "### Estado antes" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          kubectl -n ${{ inputs.namespace }} get all 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # =====================================================================
+      - name: Apagar o namespace (drill)
+        if: inputs.modo == 'restaurar'
+        run: |
+          echo "### Falha provocada" >> "$GITHUB_STEP_SUMMARY"
+
+          # Remover o Application do ArgoCD ANTES: com selfHeal ligado, ele
+          # recriaria os manifestos em segundos e o drill provaria o GitOps, não
+          # o Velero. São duas capacidades diferentes, e cada uma merece seu
+          # próprio teste.
+          SERVICO=$(echo "${{ inputs.namespace }}" | sed 's/solidary-//')
+          kubectl -n argocd patch application "app-${SERVICO}" --type merge \
+            -p '{"spec":{"syncPolicy":{"automated":null}}}' || true
+
+          kubectl delete namespace ${{ inputs.namespace }} --wait=true --timeout=300s
+          echo "Namespace \`${{ inputs.namespace }}\` apagado às $(date -u +%H:%M:%SZ)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restaurar pelo Velero
+        if: inputs.modo == 'restaurar'
+        id: restore
+        run: |
+          INICIO=$(date +%s)
+          NOME="drill-$(date +%s)"
+
+          velero restore create "$NOME" \
+            --from-backup "${{ steps.backups.outputs.ultimo }}" \
+            --include-namespaces ${{ inputs.namespace }} \
+            --wait
+
+          FIM=$(date +%s)
+          echo "duracao=$((FIM - INICIO))" >> "$GITHUB_OUTPUT"
+          echo "nome=$NOME" >> "$GITHUB_OUTPUT"
+
+          echo "### Restauração" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          velero restore describe "$NOME" --details | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Estado DEPOIS
+        if: inputs.modo == 'restaurar'
+        run: |
+          kubectl -n ${{ inputs.namespace }} wait --for=condition=available \
+            deployment --all --timeout=300s || true
+
+          echo "### Estado depois" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          kubectl -n ${{ inputs.namespace }} get all | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**RTO medido: ${{ steps.restore.outputs.duracao }} segundos**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "PCN declara RTO de 8 h para este serviço — ver docs/06-dr-pcn/pcn.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Devolver o namespace ao GitOps
+        # `always()`: mesmo que a restauração falhe, o ArgoCD volta a gerenciar o
+        # serviço. Deixar um Application sem sincronização automática depois de
+        # um drill é a forma clássica de o próximo deploy "não funcionar" sem
+        # ninguém entender por quê.
+        if: always() && inputs.modo == 'restaurar'
+        run: |
+          SERVICO=$(echo "${{ inputs.namespace }}" | sed 's/solidary-//')
+          kubectl -n argocd patch application "app-${SERVICO}" --type merge \
+            -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true,"prune":true}}}}' || true
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "GitOps reativado para \`app-${SERVICO}\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Próximo passo
+        if: always()
+        run: |
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Depois do drill" >> "$GITHUB_STEP_SUMMARY"
+          echo "Preencher o post-mortem a partir de \`docs/05-itsm-aiops/post-mortem-modelo.md\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Preencher também num drill PLANEJADO: é ele que valida o processo" >> "$GITHUB_STEP_SUMMARY"
+          echo "de post-mortem antes de um incidente real exigi-lo." >> "$GITHUB_STEP_SUMMARY"

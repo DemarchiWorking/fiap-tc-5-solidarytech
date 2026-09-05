@@ -11,12 +11,13 @@
 | Pendente | **Evidência de execução** — depende de uma sessão do Learner Lab |
 | Cobertura da matriz | **39/40** requisitos com artefato · 0/40 com evidência |
 | Crédito AWS consumido | **US$ 0,00** — nada provisionado até aqui |
-| Commits | 4 locais · **nenhum push** |
+| Commits | 5 locais · **nenhum push** |
 
 ### O que falta, exatamente
 
-Tudo que resta é **rodar**. A sequência está no
-[`README.md`](../README.md#subir-o-ambiente):
+Tudo que resta é **rodar**. O checklist de pré-voo — com as perguntas que só você
+pode responder (credencial do Academy, repositório Git, chave do New Relic, RMs
+do grupo) — está em [`../COMO-SUBIR.md`](../COMO-SUBIR.md). Resumo:
 
 ```bash
 make bootstrap        # 1x por conta
@@ -161,6 +162,21 @@ PCN executivo com RTO/RPO justificados por serviço, **as duas opções de DR**
 
 Roteiro do vídeo cronometrado (Pitch 9 min + Demo 10 min + fecho 1 min), com mapa
 requisito→minuto, e relatório com as 4 seções de evidência obrigatórias.
+
+### Auditoria final ✅
+
+- `COMO-SUBIR.md` — checklist de pré-voo (3 blocos de perguntas) + passo a passo
+  + troubleshooting.
+- `.trivyignore` — cada exceção com motivo escrito; **nenhuma** para
+  vulnerabilidade de dependência.
+- `validacao.yml` — os gates locais também em CI, porque a disciplina de rodar
+  antes de commitar não sobrevive a prazo apertado.
+- `dr-drill.yml` — drill de DR que **captura a própria evidência** no summary,
+  resolvendo o problema real de "fizemos o teste, mas ninguém tirou print".
+- **Bug corrigido:** o teste de carga era um `Job` com `suspend: true` disparado
+  por `kubectl patch`. Não funcionaria: o ArgoCD tem `selfHeal` e reverteria o
+  patch em segundos. Virou `CronJob` suspenso, e `make carga` cria um Job novo —
+  que não carrega os rótulos do ArgoCD e portanto roda até o fim.
 
 ---
 

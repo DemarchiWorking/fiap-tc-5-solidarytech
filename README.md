@@ -14,6 +14,11 @@ provisionada 100% por **Terraform** e entregue por **GitOps (ArgoCD)**.
 
 ## Subir o ambiente
 
+> 📋 **Primeira vez?** Comece pelo **[COMO-SUBIR.md](COMO-SUBIR.md)** — ele traz o
+> checklist de pré-voo com **todas as perguntas** que você precisa responder
+> antes (credencial do AWS Academy, repositório Git, chave do New Relic, RMs do
+> grupo) e o passo a passo completo com troubleshooting.
+
 **Pré-requisitos:** Docker, `aws` CLI, `kubectl`, `git`, sessão do AWS Academy
 ativa com as credenciais em `~/.aws/credentials`.
 
@@ -107,6 +112,7 @@ na fila** — nenhuma doação se perde.
 
 | Documento | Requisito |
 |---|---|
+| [**Como subir — checklist de pré-voo**](COMO-SUBIR.md) | operação |
 | [Enunciado transcrito](docs/00-enunciado/README.md) | — |
 | [**Matriz de requisitos × evidências**](docs/01-requisitos-e-criterios-de-aceitacao.md) | checklist de nota |
 | [Arquitetura](docs/02-arquitetura/README.md) e [ADRs 001–007](docs/02-arquitetura/adr/README.md) | — |

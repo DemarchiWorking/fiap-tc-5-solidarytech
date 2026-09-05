@@ -143,8 +143,7 @@ subir-tudo: ## Caminho completo: infraestrutura + GitOps + aplicacoes (exige rep
 
 .PHONY: carga
 carga: ## Dispara o teste de carga k6 (necessario para os paineis de SLO terem dado)
-	@kubectl -n solidary-loadtest patch job k6-load-test -p '{"spec":{"suspend":false}}' 2>/dev/null || kubectl -n solidary-loadtest delete job k6-load-test --ignore-not-found
-	@echo "Acompanhe:  kubectl -n solidary-loadtest logs -f job/k6-load-test"
+	@NOME=k6-run-$$(date +%s); 	kubectl -n solidary-loadtest create job --from=cronjob/k6-load-test $$NOME && 	echo "" && 	echo "Job criado: $$NOME (nao e gerenciado pelo ArgoCD, entao roda ate o fim)" && 	echo "Acompanhe:  kubectl -n solidary-loadtest logs -f job/$$NOME"
 
 .PHONY: senhas
 senhas: ## Mostra as credenciais de acesso ao Grafana e ao ArgoCD

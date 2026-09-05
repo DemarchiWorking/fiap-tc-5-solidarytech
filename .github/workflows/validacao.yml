@@ -1,0 +1,212 @@
+# Gates que rodam SEM nuvem, SEM credencial e SEM gastar crédito.
+#
+# São os mesmos que `make check` executa localmente. Ficam em CI porque a
+# disciplina de rodar o gate antes de commitar nunca sobrevive a um prazo
+# apertado — e é justamente sob prazo apertado que os erros entram.
+#
+# Roda em TODO push e TODO PR. Rápido de propósito: se demorar, o time começa a
+# esperar o resultado depois do merge, e o gate perde a função.
+
+name: Validação
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: Gates locais
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependências
+        run: pip install --quiet pyyaml
+
+      # ---------------------------------------------------------------
+      - name: AWS Academy — recursos bloqueados no Terraform
+        # Verifica criação de IAM, Spot, RDS Multi-AZ, Performance Insights,
+        # Enhanced Monitoring, IRSA, região fora da lista, instância acima do
+        # teto, escape HCL inválido e segredo literal.
+        run: python scripts/verificar-academy.py infra
+
+      # ---------------------------------------------------------------
+      - name: Observabilidade — coerência entre dashboards, regras e código
+        # O mais sutil dos gates: se os buckets do histograma divergirem entre
+        # Go e Python, o histogram_quantile mistura fronteiras diferentes e o
+        # p95 do SLO passa a mentir — sem erro, sem log, sem sintoma.
+        run: python scripts/verificar-observabilidade.py .
+
+      # ---------------------------------------------------------------
+      - name: Sintaxe YAML
+        run: |
+          python - <<'PY'
+          import io, os, sys, yaml
+          erros = total = 0
+          for d, _, fs in os.walk("."):
+              if ".git" in d: continue
+              for f in fs:
+                  if not f.endswith((".yaml", ".yml")): continue
+                  p = os.path.join(d, f)
+                  try:
+                      list(yaml.safe_load_all(io.open(p, encoding="utf-8")))
+                      total += 1
+                  except yaml.YAMLError as e:
+                      print(f"FALHA {p}: {str(e).splitlines()[0]}")
+                      erros += 1
+          print(f"{total} arquivos YAML válidos, {erros} com erro")
+          sys.exit(1 if erros else 0)
+          PY
+
+      # ---------------------------------------------------------------
+      - name: Links da documentação
+        # Documentação com link quebrado é documentação que ninguém confere — e
+        # este projeto usa a documentação como evidência de nota.
+        run: |
+          python - <<'PY'
+          import io, os, re, sys
+          quebrados = []
+          for d, _, fs in os.walk("."):
+              if ".git" in d: continue
+              for f in fs:
+                  if not f.endswith(".md"): continue
+                  p = os.path.join(d, f)
+                  txt = io.open(p, encoding="utf-8").read()
+                  for m in re.finditer(r"\]\(([^)#][^)]*?)\)", txt):
+                      alvo = m.group(1).split("#")[0].strip()
+                      if not alvo or alvo.startswith(("http", "mailto:", "<")): continue
+                      if not os.path.exists(os.path.normpath(os.path.join(d, alvo))):
+                          quebrados.append(f"{p} -> {alvo}")
+          for q in quebrados: print("FALHA", q)
+          print(f"{len(quebrados)} link(s) quebrado(s)")
+          sys.exit(1 if quebrados else 0)
+          PY
+
+  # =========================================================================
+  manifestos:
+    name: Manifestos Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar kustomize e kubeconform
+        run: |
+          curl -sfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.5.0/kustomize_v5.5.0_linux_amd64.tar.gz | tar -xz
+          curl -sfL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar -xz
+          sudo mv kustomize kubeconform /usr/local/bin/
+
+      - name: kustomize build + kubeconform
+        run: |
+          set -euo pipefail
+          FALHAS=0
+          DIRS=$(find gitops -name kustomization.yaml -printf '%h\n' | sort)
+
+          for DIR in $DIRS; do
+            if SAIDA=$(kustomize build "$DIR" 2>&1); then
+              echo "  ok  $DIR"
+              # -ignore-missing-schemas: CRDs de terceiros (Application,
+              # PrometheusRule) não têm schema no catálogo público. O que
+              # interessa validar aqui são os recursos nativos.
+              printf '%s' "$SAIDA" | kubeconform -strict -ignore-missing-schemas -summary || FALHAS=$((FALHAS+1))
+            else
+              echo "  FALHA  $DIR"
+              printf '%s\n' "$SAIDA" | head -15
+              FALHAS=$((FALHAS+1))
+            fi
+          done
+          exit $FALHAS
+
+      - name: Política de manifestos
+        # Todo Deployment precisa de requests/limits (senão o rightsizing do
+        # requisito F2.2 não tem base), probes (senão o pod entra no
+        # balanceamento antes de estar pronto e devolve 5xx que consomem error
+        # budget sem falha real) e contexto de segurança.
+        run: |
+          python - <<'PY'
+          import io, os, sys
+          falhas = []
+          for d, _, fs in os.walk("gitops/apps"):
+              for f in fs:
+                  if not f.endswith(".yaml"): continue
+                  p = os.path.join(d, f)
+                  txt = io.open(p, encoding="utf-8").read()
+                  if "kind: Deployment" not in txt: continue
+                  exigidos = {
+                      "requests:": "sem requests — o scheduler agenda por request",
+                      "limits:": "sem limits — um pod sem teto pode inanir o Prometheus",
+                      "livenessProbe:": "sem livenessProbe",
+                      "runAsNonRoot: true": "sem runAsNonRoot",
+                      "allowPrivilegeEscalation: false": "sem allowPrivilegeEscalation: false",
+                  }
+                  # O worker não escuta porta: a saúde dele é observada por métrica.
+                  if "volunteer-worker" not in txt:
+                      exigidos["readinessProbe:"] = "sem readinessProbe"
+                      exigidos["startupProbe:"] = "sem startupProbe"
+                  for marcador, motivo in exigidos.items():
+                      if marcador not in txt:
+                          falhas.append(f"{p}: {motivo}")
+
+          for servico in ("ngo", "donation", "volunteer"):
+              if not os.path.exists(f"gitops/apps/{servico}/overlays/prod/pdb.yaml"):
+                  falhas.append(f"{servico}: sem PodDisruptionBudget")
+
+          for f in falhas: print("FALHA", f)
+          print("ok — todos os Deployments conformes" if not falhas else f"{len(falhas)} falha(s)")
+          sys.exit(1 if falhas else 0)
+          PY
+
+  # =========================================================================
+  testes:
+    name: Testes dos serviços
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - servico: ngo-service
+            linguagem: python
+          - servico: volunteer-service
+            linguagem: python
+          - servico: donation-service
+            linguagem: go
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        if: matrix.linguagem == 'python'
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-go@v5
+        if: matrix.linguagem == 'go'
+        with:
+          go-version: "1.23"
+          cache-dependency-path: services/${{ matrix.servico }}/go.sum
+
+      - name: Testes Python
+        if: matrix.linguagem == 'python'
+        working-directory: services/${{ matrix.servico }}
+        run: |
+          pip install --quiet -r requirements.txt -r requirements-dev.txt
+          python -m pytest -v --cov=. --cov-report=term
+
+      - name: Testes Go
+        if: matrix.linguagem == 'go'
+        working-directory: services/${{ matrix.servico }}
+        run: |
+          go mod tidy
+          go vet ./...
+          # -race: o donation-service publica em SQS dentro de uma goroutine, e
+          # corrida de dados nesse caminho corromperia o evento de doação em
+          # produção sem estourar erro nenhum.
+          go test -race -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out | tail -1

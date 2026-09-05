@@ -1,0 +1,54 @@
+# Exceções do Trivy — cada linha precisa de justificativa e prazo.
+#
+# Uma lista de exceções sem motivo escrito vira um depósito onde CVEs vão morrer
+# esquecidas. A regra deste repositório: se você adicionar uma linha aqui, diga
+# **por que** e **até quando**.
+#
+# Formato:  <CVE ou ID da regra>   # motivo · revisar em <data>
+
+# ---------------------------------------------------------------------------
+# Regras de IaC impossíveis de satisfazer no AWS Academy Learner Lab
+#
+# Estas NÃO são negligência: são limitações do ambiente que a FIAP disponibiliza.
+# Todas estão declaradas em docs/06-dr-pcn/pcn.md §6, com o desenho de produção
+# ao lado. O scan de IaC roda com exit-code 0 justamente por isto — o relatório
+# é evidência de consciência, não carimbo de aprovação.
+# ---------------------------------------------------------------------------
+
+# RDS sem Multi-AZ — o Learner Lab não suporta implantação Multi-AZ.
+AVD-AWS-0176
+
+# RDS sem Performance Insights — não suportado no Learner Lab.
+AVD-AWS-0133
+
+# Volumes EBS e RDS sem chave KMS gerenciada pelo cliente — gerenciar key policy
+# de KMS é categoria restrita no lab. A criptografia ESTÁ ligada, com chave
+# gerenciada pela AWS.
+AVD-AWS-0026
+AVD-AWS-0080
+
+# Endpoint público do API server do EKS — sem VPN nem bastion, é o único caminho
+# para o kubectl do aluno e para o runner do GitHub Actions. O acesso continua
+# autenticado e autorizado por IAM.
+AVD-AWS-0040
+
+# Logging completo do control plane do EKS — "audit" gera volume alto e custo por
+# GB ingerido no CloudWatch. A investigação de incidente deste projeto acontece
+# no Loki. Decisão de FinOps documentada em infra/modules/eks/main.tf.
+AVD-AWS-0038
+
+# Instâncias em subnet pública sem NAT Gateway — ADR-003. Decisão de custo
+# consciente (US$ 32/mês, 16% do burn), revertível com uma variável, com o risco
+# declarado. Não se aplicaria a produção com dados reais de doadores.
+AVD-AWS-0164
+
+# ---------------------------------------------------------------------------
+# Vulnerabilidades de dependência
+#
+# NENHUMA exceção aberta. O gate de CRITICAL bloqueia o push, e é para
+# permanecer assim: as versões de Flask, gunicorn, psycopg2, boto3, aws-sdk-go e
+# pgx foram elevadas justamente para passar sem exceção.
+#
+# Se algum dia uma CVE crítica sem correção disponível travar a entrega, a linha
+# entra aqui COM data de revisão — nunca em silêncio.
+# ---------------------------------------------------------------------------

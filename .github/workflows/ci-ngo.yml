@@ -1,0 +1,29 @@
+# Pipeline do ngo-service.
+#
+# Arquivo fino de proposito: toda a logica vive em ci-servico.yml, reutilizado
+# pelos tres servicos. Assim uma melhoria no scan de seguranca vale para todos
+# ao mesmo tempo, em vez de precisar ser replicada em tres lugares.
+name: CI — ngo-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/ngo-service/**"
+      - ".github/workflows/ci-ngo.yml"
+      - ".github/workflows/ci-servico.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/ngo-service/**"
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-servico.yml
+    with:
+      servico: ngo-service
+      linguagem: python
+      caminho: services/ngo-service
+      overlay: gitops/apps/ngo/overlays/prod
+    secrets: inherit

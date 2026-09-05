@@ -1,0 +1,27 @@
+# Roteamento por path atras do NLB compartilhado (ADR-002).
+#
+# UM load balancer serve todas as rotas por ~US$ 16/mes. Com o AWS Load Balancer
+# Controller e um ALB por Ingress, seriam cinco — e o Controller nem funciona
+# aqui, porque exige IRSA.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ngo-service
+  annotations:
+    # Remove o prefixo antes de repassar ao servico: o app responde em
+    # /donations, nao em /donations/donations.
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /ngo(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ngo-service
+                port:
+                  name: http

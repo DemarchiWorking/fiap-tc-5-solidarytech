@@ -1,0 +1,248 @@
+# Pipeline de infraestrutura — requisito F0.2 (IaC) e F2.1 (tags FinOps).
+#
+# Em PR:    gate do Academy -> fmt -> validate -> tfsec -> plan comentado no PR
+# Na main:  o mesmo, e o apply so acontece com APROVACAO MANUAL (environment).
+#
+# O apply nao e automatico de proposito. Um `terraform apply` sem revisao pode
+# destruir e recriar o cluster inteiro por causa de uma mudanca de atributo
+# imutavel — e num Learner Lab isso significa perder o ambiente no meio de uma
+# sessao de 4 horas.
+
+name: Terraform
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/**"]
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: "Ambiente"
+        required: true
+        type: choice
+        options: [prod-use1, dr-usw2]
+        default: prod-use1
+      acao:
+        description: "Acao"
+        required: true
+        type: choice
+        options: [plan, apply]
+        default: plan
+
+env:
+  TF_VERSION: "1.9.8"
+  AMBIENTE: ${{ inputs.ambiente || 'prod-use1' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # =========================================================================
+  # Gate do AWS Academy — PRIMEIRO, porque e o mais rapido e o mais especifico.
+  #
+  # Roda em segundos, sem Terraform, sem credencial e sem tocar na nuvem. Pega a
+  # classe de erro que de outra forma so apareceria como AccessDenied quinze
+  # minutos depois do apply comecar, ou como uma instancia terminada em silencio
+  # pela automacao do lab.
+  # =========================================================================
+  conformidade:
+    name: Conformidade com o AWS Academy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Policy gate
+        run: python scripts/verificar-academy.py infra
+
+  # =========================================================================
+  validar:
+    name: Formatacao e validacao
+    needs: conformidade
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ambiente: [prod-use1, dr-usw2]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive infra/
+
+      - name: terraform init (sem backend)
+        # -backend=false: a validacao nao precisa de state nem de credencial, o
+        # que permite rodar este job em pull request de fork.
+        run: terraform -chdir=infra/environments/${{ matrix.ambiente }} init -backend=false
+
+      - name: terraform validate
+        run: terraform -chdir=infra/environments/${{ matrix.ambiente }} validate
+
+  # =========================================================================
+  seguranca:
+    name: Seguranca do IaC
+    needs: conformidade
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy — configuracao de IaC
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: infra/
+          severity: CRITICAL,HIGH
+          # Nao bloqueia: varias regras do Trivy (Multi-AZ, chave KMS propria,
+          # logging completo do control plane) sao IMPOSSIVEIS de satisfazer no
+          # AWS Academy Learner Lab. Bloquear aqui pararia a entrega por
+          # limitacao do ambiente, nao por erro do time.
+          #
+          # Cada achado esperado esta justificado em docs/06-dr-pcn/, na secao
+          # de debitos de seguranca declarados. O relatorio e evidencia de
+          # consciencia, e nao um carimbo de aprovacao.
+          exit-code: "0"
+          trivyignores: .trivyignore
+
+      - name: gitleaks — segredos no historico
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # =========================================================================
+  plan:
+    name: Plan
+    needs: [validar, seguranca]
+    runs-on: ubuntu-latest
+    # Sem credencial AWS configurada, nao ha o que planejar. Pular em vez de
+    # falhar mantem o PR de um fork utilizavel.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Reconstruir backend.hcl
+        # backend.hcl nao e versionado (contem o nome do bucket de state, que
+        # carrega um sufixo por conta). Aqui ele e reconstruido a partir de
+        # variaveis do repositorio.
+        run: |
+          cat > infra/environments/${AMBIENTE}/backend.hcl <<EOF
+          bucket         = "${{ vars.TF_STATE_BUCKET }}"
+          key            = "${AMBIENTE}/terraform.tfstate"
+          region         = "${{ vars.AWS_REGION || 'us-east-1' }}"
+          dynamodb_table = "${{ vars.TF_LOCK_TABLE }}"
+          encrypt        = true
+          EOF
+
+      - name: terraform init
+        run: terraform -chdir=infra/environments/${AMBIENTE} init -backend-config=backend.hcl
+
+      - name: terraform plan
+        id: plan
+        run: |
+          terraform -chdir=infra/environments/${AMBIENTE} plan -no-color -out=tfplan 2>&1 | tee plan.txt
+          echo "resumo=$(grep -E '^Plan:|^No changes' plan.txt | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Comentar o plan no PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = fs.readFileSync('plan.txt', 'utf8');
+            // O comentario do GitHub tem limite de 65536 caracteres.
+            if (plan.length > 60000) {
+              plan = plan.slice(0, 60000) + '\n\n... (truncado — ver o log completo do job)';
+            }
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### Terraform plan — \`${process.env.AMBIENTE}\`\n\n` +
+                    `**${{ steps.plan.outputs.resumo }}**\n\n` +
+                    '<details><summary>Plano completo</summary>\n\n```terraform\n' +
+                    plan + '\n```\n</details>'
+            });
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ env.AMBIENTE }}
+          path: infra/environments/${{ env.AMBIENTE }}/tfplan
+          retention-days: 5
+
+  # =========================================================================
+  apply:
+    name: Apply
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.acao == 'apply'
+    runs-on: ubuntu-latest
+    # Environment com protecao: exige aprovacao humana antes de tocar na
+    # infraestrutura. E a ultima barreira entre um plan e um cluster destruido.
+    environment:
+      name: ${{ inputs.ambiente }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Reconstruir backend.hcl
+        run: |
+          cat > infra/environments/${AMBIENTE}/backend.hcl <<EOF
+          bucket         = "${{ vars.TF_STATE_BUCKET }}"
+          key            = "${AMBIENTE}/terraform.tfstate"
+          region         = "${{ vars.AWS_REGION || 'us-east-1' }}"
+          dynamodb_table = "${{ vars.TF_LOCK_TABLE }}"
+          encrypt        = true
+          EOF
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ env.AMBIENTE }}
+          path: infra/environments/${{ env.AMBIENTE }}/
+
+      - name: terraform init
+        run: terraform -chdir=infra/environments/${AMBIENTE} init -backend-config=backend.hcl
+
+      - name: terraform apply
+        # Aplica o PLANO REVISADO, e nao um plan novo. Sem isso, o apply poderia
+        # executar algo diferente do que foi aprovado.
+        run: terraform -chdir=infra/environments/${AMBIENTE} apply -auto-approve tfplan
+
+      - name: Evidencia das tags FinOps
+        # Requisito F2.1: prova de que 100% dos recursos carregam as tags
+        # obrigatorias, incluindo as EC2 do node group (que so sao taggeadas
+        # por causa do launch template).
+        run: |
+          echo "### Recursos com CostCenter=NGO-Core" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          aws resourcegroupstaggingapi get-resources \
+            --tag-filters Key=CostCenter,Values=NGO-Core \
+            --query 'ResourceTagMappingList[].ResourceARN' \
+            --output text | tr '\t' '\n' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

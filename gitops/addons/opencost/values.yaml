@@ -1,0 +1,59 @@
+# OpenCost — custo real por namespace, dentro do cluster.
+#
+# POR QUE ELE EXISTE AQUI, e nao o AWS Cost Explorer: o Cost Explorer NAO esta
+# na lista de servicos liberados do AWS Academy Learner Lab. Sem ele, a exigencia
+# de FinOps ("analise de custos mensais") ficaria sem fonte de dado real e viraria
+# uma planilha estimada.
+#
+# O OpenCost resolve isso com uma vantagem: ele mostra o custo por NAMESPACE, por
+# DEPLOYMENT e por POD — granularidade que o Cost Explorer, que enxerga recursos
+# AWS, nunca daria. A pergunta "quanto custa o donation-service?" so tem resposta
+# aqui.
+#
+# Sem IRSA, ele nao consulta a API de precos da AWS com credencial propria: usa a
+# tabela publica de precos on-demand, que e exatamente o modelo de cobranca deste
+# ambiente (o Learner Lab so libera On-Demand). A precisao nao e prejudicada.
+
+opencost:
+  prometheus:
+    internal:
+      enabled: true
+      serviceName: kube-prometheus-stack-prometheus
+      namespaceName: monitoring
+      port: 9090
+
+  exporter:
+    # Escreve as metricas de custo de volta no Prometheus, o que permite montar
+    # o painel de FinOps no Grafana junto das metricas tecnicas. Custo e
+    # confiabilidade no mesmo lugar e o que sustenta a conversa de trade-off.
+    defaultClusterId: solidarytech-prod
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 100Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  ui:
+    # A UI propria fica desligada: o painel de FinOps vive no Grafana, que ja
+    # esta exposto pelo ingress e ja tem autenticacao. Menos um servico para
+    # expor, menos uma superficie para proteger.
+    enabled: false
+
+  metrics:
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: kube-prometheus-stack
+
+# O chart cria ServiceAccount, ClusterRole e ClusterRoleBinding do KUBERNETES
+# (RBAC do cluster) — que nao tem nenhuma relacao com IAM da AWS e portanto nao
+# esbarra na restricao do Learner Lab. A confusao entre os dois e comum: o lab
+# bloqueia IAM, nao RBAC.
+serviceAccount:
+  create: true
+
+networkPolicies:
+  enabled: false

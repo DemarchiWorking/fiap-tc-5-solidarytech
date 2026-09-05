@@ -1,0 +1,37 @@
+# HPA por CPU a 70%.
+#
+# O enunciado descreve "picos de acesso imprevisiveis" apos a exposicao em rede
+# nacional — este e o mecanismo que absorve o pico sem manter capacidade ociosa
+# paga o tempo todo.
+#
+# maxReplicas=6 nao e arbitrario: com 3 nos t3.medium e
+# 100m de request por replica, e o teto que cabe no cluster junto
+# com a stack de observabilidade.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ngo-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ngo-service
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      # Reage rapido ao pico: 60s de janela evita oscilacao sem atrasar a
+      # resposta a uma campanha viral.
+      stabilizationWindowSeconds: 60
+    scaleDown:
+      # Desce devagar. Encolher rapido demais depois de um pico deixa o servico
+      # sem margem se o trafego voltar — e o custo de manter uma replica a mais
+      # por 5 minutos e irrisorio perto de um 5xx no caminho da doacao.
+      stabilizationWindowSeconds: 300

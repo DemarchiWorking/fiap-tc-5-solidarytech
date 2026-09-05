@@ -1,0 +1,29 @@
+# Pipeline do volunteer-service.
+#
+# Arquivo fino de proposito: toda a logica vive em ci-servico.yml, reutilizado
+# pelos tres servicos. Assim uma melhoria no scan de seguranca vale para todos
+# ao mesmo tempo, em vez de precisar ser replicada em tres lugares.
+name: CI — volunteer-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/volunteer-service/**"
+      - ".github/workflows/ci-volunteer.yml"
+      - ".github/workflows/ci-servico.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/volunteer-service/**"
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-servico.yml
+    with:
+      servico: volunteer-service
+      linguagem: python
+      caminho: services/volunteer-service
+      overlay: gitops/apps/volunteer/overlays/prod
+    secrets: inherit

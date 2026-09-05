@@ -1,0 +1,49 @@
+# StorageClass gp3 como PADRAO do cluster.
+#
+# O EKS entrega o cluster com uma StorageClass gp2 marcada como default. gp3 e
+# ~20% mais barato por GB, entrega 3000 IOPS de linha de base (contra 100/GB do
+# gp2, ou seja 300 IOPS num volume de 3 GB) e permite escalar IOPS sem aumentar
+# o tamanho. Trocar o default e a otimizacao nativa de nuvem mais barata que
+# existe: nenhum manifesto de aplicacao muda.
+#
+# A Fase 4 nao declarava storageClassName em NENHUM PVC e dependia do default do
+# AKS. Aqui o default e definido por nos, e os PVCs o referenciam explicitamente
+# — o que torna o comportamento igual em qualquer cluster.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+  # Sem kmsKeyId: usa a chave gerenciada pela AWS para EBS, gratuita e sem key
+  # policy — categoria de operacao restrita no AWS Academy Learner Lab.
+# WaitForFirstConsumer: o volume so e criado depois que o pod for agendado, na
+# MESMA zona de disponibilidade do no. Com Immediate, o volume pode nascer na
+# AZ "a" e o pod ser agendado na "b" — e o pod fica preso em Pending para
+# sempre, porque EBS nao atravessa AZ.
+volumeBindingMode: WaitForFirstConsumer
+# Retain deixaria volumes orfaos cobrando apos cada `make lab-down`.
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+---
+# Remove o gp2 do papel de default. Duas StorageClasses marcadas como default e
+# um estado ambiguo: o Kubernetes escolhe uma arbitrariamente.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nota-sobre-gp2
+  namespace: kube-system
+data:
+  README: |
+    A StorageClass gp2 vem marcada como default pelo EKS. Como o ArgoCD nao
+    gerencia recursos que nao estao no Git, a anotacao dela e removida pelo
+    script scripts/bootstrap-cluster.sh:
+
+      kubectl patch storageclass gp2 -p         '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+
+    Sem isso, o cluster fica com DUAS StorageClasses default e a escolha passa a
+    ser arbitraria.

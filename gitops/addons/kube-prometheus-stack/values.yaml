@@ -1,0 +1,220 @@
+# Prometheus + Grafana + Alertmanager
+#
+# Dimensionado para 3x t3.medium (6 vCPU / 12 GiB no total). A retencao e curta
+# de PROPOSITO: 3 dias de metrica cobrem o ciclo de um incidente e do seu
+# post-mortem, que e o que o SRE precisa. Reter 15 dias multiplicaria o PVC sem
+# ganho operacional — decisao de FinOps registrada no relatorio.
+
+# Nome fixo: os apps e o OTel Collector referenciam este hostname. Sem o
+# override, o Helm geraria "kube-prometheus-stack-kube-prom-prometheus" e cada
+# bump de chart quebraria as referencias.
+fullnameOverride: kube-prometheus-stack
+
+prometheus:
+  prometheusSpec:
+    # 10 dias, e nao os 3d da Fase 4. O motivo e o SLO: o error budget so pode
+    # ser calculado sobre uma janela que ainda exista no banco de metricas. Com
+    # 3 dias de retencao, um "error budget de 30 dias" seria uma conta que o
+    # Prometheus nao tem dado para fazer — o painel mostraria um numero
+    # inventado.
+    #
+    # 10 dias sustentam a janela rolante de 7 dias adotada nos SLOs, com folga
+    # para o compactador. O padrao de mercado (28-30 dias) exigiria ~5x mais
+    # disco; a diferenca esta declarada em docs/03-sre/sli-slo-sla.md, junto com
+    # o valor canonico de 30 dias usado na conversa de SLA.
+    retention: 10d
+    retentionSize: 9GB
+
+    # ESSENCIAL: habilita o endpoint /api/v1/write. E por ele que o OTel
+    # Collector entrega as metricas das aplicacoes (remote write). Sem isto, o
+    # histograma de latencia que sustenta o SLO nunca chega ao Prometheus.
+    enableRemoteWriteReceiver: true
+
+    # Descobre ServiceMonitor, PodMonitor e PrometheusRule de QUALQUER namespace
+    # sem exigir label do Helm release. E o que permite ao slo-rules e ao
+    # ingress-nginx registrarem regras sem conhecer este chart.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+
+    resources:
+      requests:
+        cpu: 150m
+        memory: 512Mi
+      limits:
+        cpu: 700m
+        memory: 1300Mi
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          # storageClassName EXPLICITO. A Fase 4 nao declarava em nenhum PVC e
+          # dependia do default do AKS, o que torna o manifesto dependente do
+          # cluster em que e aplicado.
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "service"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: "padrao"
+      routes:
+        # Queima rapida de error budget e a UNICA condicao que acorda alguem.
+        # Separar isso do resto e o que evita fadiga de alerta: um pico de CPU
+        # legitimo sob carga real nao deve paginar as 3h da manha.
+        - matchers: ['severity = "page"']
+          receiver: "paginacao"
+          group_wait: 10s
+          repeat_interval: 1h
+        - matchers: ['severity = "ticket"']
+          receiver: "chatops"
+    receivers:
+      - name: "padrao"
+      - name: "paginacao"
+        webhook_configs:
+          # O proxy le as URLs reais do Secret alertmanager-webhooks, criado
+          # pelo bootstrap a partir de variavel de ambiente. URL de webhook e
+          # credencial: nunca entram no Git.
+          - url: "http://alertmanager-webhook-proxy.monitoring.svc.cluster.local:8080/page"
+            send_resolved: true
+      - name: "chatops"
+        webhook_configs:
+          - url: "http://alertmanager-webhook-proxy.monitoring.svc.cluster.local:8080/chat"
+            send_resolved: true
+
+grafana:
+  adminUser: admin
+  # Senha vem do Secret grafana-admin, criado pelo bootstrap. A Fase 4
+  # versionava "ToggleMaster2026!" em texto puro neste mesmo arquivo.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # PVC ReadWriteOnce nao pode ser montado por dois pods ao mesmo tempo. Com o
+  # RollingUpdate padrao, o pod novo espera um volume que o antigo ainda segura
+  # e o rollout trava com "Multi-Attach error" — incidente real da Fase 4.
+  deploymentStrategy:
+    type: Recreate
+
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 2Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 400m
+      memory: 512Mi
+
+  grafana.ini:
+    server:
+      # Servido em /grafana atras do ingress compartilhado.
+      serve_from_sub_path: true
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+
+  # A URL publica vem de um ConfigMap gerado pelo bootstrap a partir do hostname
+  # REAL do NLB. A Fase 4 fixava o IP publico aqui (domain: "4.156.223.110") e
+  # isso quebrava a cada recriacao do cluster — incidente documentado no
+  # historico dela.
+  envValueFrom:
+    GF_SERVER_ROOT_URL:
+      configMapKeyRef:
+        name: solidary-endpoints
+        key: grafana_root_url
+
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki-gateway.monitoring.svc.cluster.local
+      jsonData:
+        maxLines: 1000
+
+# Componentes do control plane NAO sao scrapeaveis em Kubernetes gerenciado: o
+# EKS nao expoe etcd, scheduler nem controller-manager. Deixar habilitado gera
+# alerta permanente de "target down", que treina o time a ignorar alerta.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# kube-state-metrics e node-exporter ficam: sao a base do rightsizing (F2.2) e
+# do painel de saude do cluster.
+kubeStateMetrics:
+  enabled: true
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+nodeExporter:
+  enabled: true
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

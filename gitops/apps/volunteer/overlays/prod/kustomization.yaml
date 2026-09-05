@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: solidary-volunteer
+
+resources:
+  - ../../base
+  - ingress.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+  - worker-deployment.yaml
+
+# A pipeline reescreve `newTag` com o SHA de 40 caracteres do commit
+# (`kustomize edit set image`) e faz commit neste repositorio. E a ponte formal
+# entre CI e CD: o deploy nasce de um commit, nunca de um `kubectl` humano.
+#
+# `newName` recebe o registry ECR real por `make configurar-repo`.
+images:
+  - name: volunteer-service
+    newName: __ECR_REGISTRY__/solidarytech/volunteer-service
+    newTag: latest
+
+commonAnnotations:
+  solidarytech.io/gerenciado-por: argocd

@@ -1,0 +1,131 @@
+# Criacao do database e do schema do donation-service.
+#
+# POR QUE ISTO E UM JOB, E NAO TERRAFORM: o RDS so cria UM database no
+# provisionamento (ngo_db). O segundo precisa de uma conexao SQL, e Terraform
+# nao alcanca o banco — ele esta em subnet privada, acessivel apenas de dentro
+# do cluster.
+#
+# Rodar isso na mao violaria a Regra de Ouro do enunciado. Como Job entregue por
+# GitOps, a criacao do schema tambem nasce de um commit.
+#
+# O Job e IDEMPOTENTE: `CREATE DATABASE` protegido por consulta previa e
+# `CREATE TABLE IF NOT EXISTS`. O ArgoCD reexecuta o Job a cada sync, e um
+# script nao idempotente falharia a partir da segunda vez, deixando o
+# Application permanentemente Degraded.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init-donation
+  annotations:
+    # PreSync: roda ANTES do Deployment subir. Sem isso, o pod da aplicacao
+    # sobe, nao encontra a tabela e entra em CrashLoopBackOff ate o Job
+    # terminar — barulho desnecessario em todo deploy novo.
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: db-init-donation
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70          # usuario postgres na imagem alpine
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          env:
+            # Conexao ADMINISTRATIVA, apontando para o database inicial. E
+            # preciso estar conectado a algum database para poder criar outro.
+            - name: PGURL_ADMIN
+              valueFrom:
+                secretKeyRef: { name: donation-db, key: admin-url }
+            # Conexao com o donation_db, usada depois que ele existir.
+            - name: PGURL_APP
+              valueFrom:
+                secretKeyRef: { name: donation-db, key: database-url }
+
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "==> Verificando se o database donation_db existe"
+              EXISTE=$(psql "$PGURL_ADMIN" -tAc "SELECT 1 FROM pg_database WHERE datname='donation_db'")
+              if [ "$EXISTE" != "1" ]; then
+                echo "==> Criando donation_db"
+                # CREATE DATABASE nao aceita IF NOT EXISTS no PostgreSQL, dai a
+                # consulta previa. Tambem nao roda dentro de transacao.
+                psql "$PGURL_ADMIN" -c "CREATE DATABASE donation_db"
+              else
+                echo "==> donation_db ja existe, seguindo"
+              fi
+
+              echo "==> Aplicando o schema"
+              psql "$PGURL_APP" -v ON_ERROR_STOP=1 -f /sql/init.sql
+
+              echo "==> Pronto"
+
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+      volumes:
+        - name: sql
+          configMap:
+            name: sql-init-donation
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+# O schema vive aqui, e nao dentro da imagem da aplicacao: mudanca de schema e
+# revisavel em PR, sem exigir rebuild e novo deploy do servico.
+#
+# Copia fiel de services/donation-service/db/init.sql.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sql-init-donation
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS donations (
+        id         SERIAL PRIMARY KEY,
+        ngo_id     INT NOT NULL,
+        amount     NUMERIC(10, 2) NOT NULL,
+        donor_name VARCHAR(100) NOT NULL,
+        status     VARCHAR(20) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+        -- Invariantes tambem no banco, e nao so na aplicacao: validacao em
+        -- codigo protege o caminho da API, mas nao protege contra carga direta
+        -- ou migracao mal feita.
+        CONSTRAINT donations_amount_positivo CHECK (amount > 0),
+        CONSTRAINT donations_ngo_id_positivo CHECK (ngo_id > 0),
+        CONSTRAINT donations_status_valido   CHECK (status IN ('APPROVED', 'PENDING', 'FAILED'))
+    );
+
+    -- Sem estes indices, a listagem do hot path e o relatorio por ONG viram
+    -- Seq Scan num db.t3.micro — o que aparece direto no p95 e come error budget.
+    CREATE INDEX IF NOT EXISTS idx_donations_created_at ON donations (created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_donations_ngo_id     ON donations (ngo_id);

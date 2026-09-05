@@ -1,0 +1,289 @@
+# Dashboard SRE — requisito F1.2
+#
+# O enunciado pede um painel "focado EXCLUSIVAMENTE nos SLOs e no consumo do
+# Error Budget". Por isso aqui nao ha CPU de no, uso de memoria nem contagem de
+# pods: essas metricas sao diagnostico, e diagnostico mistura sintoma com causa.
+# Elas vivem no dashboard de visao geral.
+#
+# O sidecar do Grafana descobre este ConfigMap pela label grafana_dashboard="1"
+# e o carrega automaticamente — nenhum passo manual na UI.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-sre-slo
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "SRE"
+data:
+  sre-slo.json: |
+    {
+      "uid": "solidarytech-sre",
+      "title": "SolidaryTech — SRE: SLOs e Error Budget",
+      "tags": ["sre", "slo", "error-budget", "solidarytech"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": { "list": [] },
+      "panels": [
+        {
+          "type": "row",
+          "title": "Error Budget restante — janela rolante de 7 dias",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "collapsed": false
+        },
+        {
+          "type": "gauge",
+          "title": "Disponibilidade (SLO 99,9%)",
+          "description": "Quanto do orcamento de erro ainda resta. 100% = nenhum erro no periodo. 0% = SLO violado, congelamento total de mudancas.",
+          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "clamp_min(slo:donation_disponibilidade:error_budget_restante, 0)",
+              "legendFormat": "restante",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.2 },
+                  { "color": "yellow", "value": 0.5 },
+                  { "color": "green", "value": 0.8 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "showThresholdLabels": false, "showThresholdMarkers": true }
+        },
+        {
+          "type": "gauge",
+          "title": "Latencia < 300ms (SLO 99%)",
+          "description": "Proporcao de requisicoes servidas dentro do limite. Medido como proporcao, e nao como percentil, para que latencia tenha error budget igual ao de disponibilidade.",
+          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "clamp_min(slo:donation_latencia:error_budget_restante, 0)",
+              "legendFormat": "restante",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.2 },
+                  { "color": "yellow", "value": 0.5 },
+                  { "color": "green", "value": 0.8 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "gauge",
+          "title": "Frescor da fila < 60s (SLO 99,5%)",
+          "description": "Eventos de doacao processados a tempo. Este SLI existe porque a doacao e confirmada ao doador ANTES do consumo da fila: sem ele, o worker poderia estar parado ha horas com os outros dois SLIs verdes.",
+          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "clamp_min(slo:donation_frescor:error_budget_restante, 0)",
+              "legendFormat": "restante",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.2 },
+                  { "color": "yellow", "value": 0.5 },
+                  { "color": "green", "value": 0.8 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "Burn rate — velocidade de consumo do orcamento",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+          "collapsed": false
+        },
+        {
+          "type": "timeseries",
+          "title": "Burn rate de disponibilidade",
+          "description": "1 = ritmo exato de gastar todo o orcamento ao fim da janela. 6 = orcamento acaba em ~28h (abre ticket). 14,4 = acaba em ~12h (pagina).",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "slo:donation_disponibilidade:burn_rate1h", "legendFormat": "1h", "refId": "A" },
+            { "expr": "slo:donation_disponibilidade:burn_rate6h", "legendFormat": "6h", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "min": 0,
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "orange", "value": 6 },
+                  { "color": "red", "value": 14.4 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+        },
+        {
+          "type": "timeseries",
+          "title": "Burn rate de latencia",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "slo:donation_latencia:burn_rate1h", "legendFormat": "1h", "refId": "A" },
+            { "expr": "slo:donation_latencia:burn_rate6h", "legendFormat": "6h", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "min": 0,
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "orange", "value": 6 },
+                  { "color": "red", "value": 14.4 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "Golden Metrics do caminho critico",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+          "collapsed": false
+        },
+        {
+          "type": "timeseries",
+          "title": "Latencia — p95 e p99 (diagnostico)",
+          "description": "Percentil nao dispara alerta: serve para responder 'quao ruim ficou' DEPOIS que o burn rate acusou. A linha de 300ms e o limiar do SLO.",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "slo:donation_latencia:p95", "legendFormat": "p95", "refId": "A" },
+            { "expr": "slo:donation_latencia:p99", "legendFormat": "p99", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 5,
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 0.3 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Taxa de requisicoes por classe de status",
+          "description": "Rate e Errors do metodo RED. O 'D' (Duration) esta no painel ao lado — foi exatamente essa metrica que faltava na Fase 4 e que tornava o SLO de latencia incalculavel.",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (status_class) (rate(solidary_http_server_duration_seconds_count{service_name=\"donation-service\"}[5m]))",
+              "legendFormat": "{{status_class}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "stacking": { "mode": "normal" } }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "5xx" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "2xx" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+              }
+            ]
+          }
+        },
+        {
+          "type": "row",
+          "title": "Todos os servicos — visao comparativa",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+          "collapsed": false
+        },
+        {
+          "type": "timeseries",
+          "title": "Taxa de erro 5xx por servico",
+          "description": "ngo-service e volunteer-service nao tem SLO formal — o enunciado exige SLO apenas para o donation-service. Aparecem aqui para contexto.",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (service_name) (rate(solidary_http_server_duration_seconds_count{status_class=\"5xx\"}[5m])) / clamp_min(sum by (service_name) (rate(solidary_http_server_duration_seconds_count[5m])), 1e-9)",
+              "legendFormat": "{{service_name}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 5 }
+            },
+            "overrides": []
+          }
+        }
+      ]
+    }

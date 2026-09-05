@@ -1,0 +1,23 @@
+# Configuracao de observabilidade que NAO vem de chart Helm.
+#
+# Separado dos addons Helm de proposito: sao recursos declarativos puros
+# (PrometheusRule e ConfigMap) que evoluem no ritmo do PRODUTO, nao no ritmo dos
+# charts. Um ajuste de limiar de SLO nao deve exigir sync de um chart de 200 MB.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+resources:
+  # Requisito F1 — SLIs, SLOs, error budget e alertas de burn rate.
+  - slo-rules.yaml
+  # Alertas de causa (plataforma), separados dos alertas de sintoma (SLO).
+  - alertas-plataforma.yaml
+  # Requisito F1.2 — painel dedicado a SLO e error budget.
+  - dashboard-sre.yaml
+  # Requisitos F2.2 e F2.3 — custo por namespace e evidencia de rightsizing.
+  - dashboard-finops.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: solidarytech
+  app.kubernetes.io/managed-by: argocd

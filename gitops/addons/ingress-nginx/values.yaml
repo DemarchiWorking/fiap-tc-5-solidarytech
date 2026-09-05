@@ -1,0 +1,87 @@
+# ingress-nginx — porta de entrada unica do cluster.
+#
+# POR QUE NAO O AWS LOAD BALANCER CONTROLLER (ADR-002): ele exige IRSA para
+# assumir a role que cria load balancers, e o AWS Academy Learner Lab bloqueia a
+# criacao do OIDC provider. Aqui um Service do tipo LoadBalancer basta: o
+# cloud-controller GERENCIADO do EKS provisiona o NLB sem role adicional.
+#
+# Bonus de FinOps: UM NLB serve todas as rotas (/ngo, /donations, /volunteers,
+# /grafana, /argocd) por ~US$ 16/mes. Com o LB Controller e um ALB por Ingress,
+# seriam cinco.
+
+controller:
+  replicaCount: 2
+
+  service:
+    type: LoadBalancer
+    annotations:
+      # Anotacao do provider in-tree do EKS. NLB em vez do Classic LB (padrao):
+      # mais barato, menor latencia e preserva o IP de origem.
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+      service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+      # Health check no /healthz do proprio nginx. Sem isto o NLB usa TCP, que
+      # considera saudavel um nginx que aceita conexao mas devolve 503.
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "http"
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/healthz"
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "10254"
+
+  # Preserva o IP real do cliente. Sem isso, todo log e toda metrica de origem
+  # mostrariam o IP do no, inutilizando qualquer analise de trafego.
+  service.externalTrafficPolicy: Local
+
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: true
+
+  # Rightsizing: dimensionado para o trafego do hackathon (dezenas de req/s no
+  # teste de carga k6), nao para producao de verdade.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      # O kube-prometheus-stack e instalado com *SelectorNilUsesHelmValues=false,
+      # entao ele descobre ServiceMonitors de QUALQUER namespace sem precisar de
+      # label extra.
+      additionalLabels:
+        release: kube-prometheus-stack
+
+  config:
+    # Log em JSON: o OTel Collector DaemonSet coleta o stdout e envia ao Loki
+    # com campos ja consultaveis por LogQL, sem parsing fragil no Collector.
+    log-format-escape-json: "true"
+    log-format-upstream: '{"time":"$time_iso8601","remote_addr":"$remote_addr","request":"$request","status":$status,"request_time":$request_time,"upstream":"$proxy_upstream_name","upstream_status":"$upstream_status","trace_id":"$http_traceparent"}'
+    # Propaga o traceparent recebido do cliente, para que o trace comece no
+    # ingress e nao no primeiro pod.
+    enable-real-ip: "true"
+    use-forwarded-headers: "true"
+
+  # Espalha as replicas entre os nos: com as duas no mesmo no, perder aquele no
+  # derruba a entrada inteira do cluster.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+          app.kubernetes.io/component: controller
+
+  admissionWebhooks:
+    # Desligado: o webhook valida sintaxe de Ingress antes do apply, mas exige
+    # um Job de geracao de certificado a cada sync do ArgoCD, o que deixa o
+    # Application permanentemente OutOfSync. O ganho nao paga o ruido num
+    # cluster com 4 Ingress escritos e revisados por PR.
+    enabled: false
+
+defaultBackend:
+  enabled: false

@@ -1,0 +1,121 @@
+# volunteer-worker — consumidor da fila de eventos de doacao.
+#
+# MESMA IMAGEM do volunteer-service, apenas com `command` diferente. Isso
+# significa um build, um scan de seguranca e uma tag de imagem a menos para
+# manter em sincronia — e garante que API e worker nunca divirjam de versao,
+# que e uma classe inteira de bug de deploy eliminada.
+#
+# O worker nao existe no codigo original do enunciado. Foi acrescentado porque o
+# donation-service publica em SQS e NADA consumia a fila. Sem consumidor:
+#   * o trace distribuido terminava no produtor — o requisito F0.5b nao seria
+#     demonstravel de verdade;
+#   * a DLQ nunca receberia nada;
+#   * o SLI de frescor da fila (F1.1a) nao teria significado, porque a idade da
+#     mensagem cresceria para sempre.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: volunteer-worker
+  labels:
+    app: volunteer-worker
+    app.kubernetes.io/name: volunteer-worker
+    app.kubernetes.io/component: consumidor-de-eventos
+spec:
+  # UMA replica, de proposito. O SQS entrega at-least-once e sem ordenacao
+  # garantida: com duas replicas, o mesmo evento pode ser processado duas vezes
+  # em paralelo. O processamento e idempotente, mas duplicar trabalho para
+  # consumir uma fila de baixo volume nao compra nada.
+  #
+  # Se a fila crescer, o caminho e o KEDA escalando por profundidade de fila —
+  # nao replicas fixas. Registrado como evolucao no roadmap.
+  replicas: 1
+
+  strategy:
+    # Recreate, e nao RollingUpdate: durante um rollout com duas versoes ativas,
+    # ambas consumiriam a mesma fila. Preferimos alguns segundos sem consumo
+    # (o SLI de frescor tolera 60s) a duas versoes concorrendo.
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: volunteer-worker
+
+  template:
+    metadata:
+      labels:
+        app: volunteer-worker
+        app.kubernetes.io/name: volunteer-worker
+    spec:
+      serviceAccountName: volunteer-service
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: worker
+          image: volunteer-service:latest
+          imagePullPolicy: IfNotPresent
+
+          # A unica diferenca em relacao a API.
+          command: ["python", "worker.py"]
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          env:
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: "prod"
+            - name: SERVICE_VERSION
+              value: "prod"
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef: { name: solidary-infra, key: aws_region }
+            - name: AWS_SQS_URL
+              valueFrom:
+                configMapKeyRef: { name: solidary-infra, key: sqs_url }
+            - name: AWS_DYNAMODB_TABLE
+              valueFrom:
+                configMapKeyRef: { name: solidary-infra, key: dynamodb_table }
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "volunteer-worker"
+
+          # Sem probe HTTP: o worker nao escuta porta nenhuma. A saude dele e
+          # observada pela METRICA solidary_donation_events_processed_total e
+          # pelo SLI de frescor da fila — que e uma medida melhor de "o worker
+          # esta funcionando?" do que qualquer endpoint /health responderia.
+          #
+          # Uma liveness por exec (`pgrep -f worker.py`) so provaria que o
+          # processo existe, e um worker travado em I/O tambem existe.
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+
+      # 40s: o long polling do SQS bloqueia por ate 20s, e o lote em andamento
+      # precisa terminar antes do processo sair. Encerrar no meio devolveria as
+      # mensagens a fila (correto, mas gera retrabalho a cada deploy).
+      terminationGracePeriodSeconds: 40

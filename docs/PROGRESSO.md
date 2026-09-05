@@ -1,17 +1,46 @@
 # Progresso — TCC Fase 5 · SolidaryTech na AWS
 
-> Estado incremental do projeto. **Atualizado ao fim de cada fase**, antes do commit local.
-> Serve para retomar o trabalho em outra sessão sem reconstruir contexto.
+> Estado incremental do projeto. Serve para retomar o trabalho em outra sessão
+> sem reconstruir contexto.
 
 ## Situação atual
 
 | Campo | Valor |
 |---|---|
-| Fase corrente | **F2 — Terraform / IaC** |
-| Status | 🟨 Código completo; `terraform validate` **pendente do Docker Desktop** |
-| Próxima fase | **F3 — GitOps (ArgoCD)** |
-| Cobertura da matriz | 0/40 com evidência de execução (F0 e F1 produzem artefato; a evidência vem quando a stack subir) |
-| Crédito AWS consumido | **US$ 0,00** — nenhuma infraestrutura provisionada até aqui |
+| Fases F0–F10 | ✅ **Artefatos completos e validados** |
+| Pendente | **Evidência de execução** — depende de uma sessão do Learner Lab |
+| Cobertura da matriz | **39/40** requisitos com artefato · 0/40 com evidência |
+| Crédito AWS consumido | **US$ 0,00** — nada provisionado até aqui |
+| Commits | 4 locais · **nenhum push** |
+
+### O que falta, exatamente
+
+Tudo que resta é **rodar**. A sequência está no
+[`README.md`](../README.md#subir-o-ambiente):
+
+```bash
+make bootstrap        # 1x por conta
+make lab-up           # ~20 min
+make configurar-repo  # + commit e push
+make deploy           # ArgoCD assume
+make carga            # popula os painéis
+```
+
+Depois, capturar as evidências listadas em [`roteiro-video.md`](roteiro-video.md)
+e preencher:
+
+- [ ] Tabela antes/depois de rightsizing — [`04-finops/README.md`](04-finops/README.md) §2
+- [ ] Timeline do chaos drill — [`03-sre/mttr-chaos-drill.md`](03-sre/mttr-chaos-drill.md)
+- [ ] Post-mortem do drill — a partir do [modelo](05-itsm-aiops/post-mortem-modelo.md)
+- [ ] Nomes, RMs e links — [`relatorio/RELATORIO-DE-ENTREGA.md`](relatorio/RELATORIO-DE-ENTREGA.md) §1
+
+### Bloqueio conhecido nesta máquina
+
+**Docker Desktop está parado.** Sem ele ficam pendentes: `terraform
+fmt/validate/plan`, `go vet`/`go test` do `donation-service`, o build das imagens
+e o `smoke-local.sh`. Os gates que **não** dependem de Docker estão todos verdes.
+
+---
 
 ## Parâmetros fixados
 
@@ -19,152 +48,128 @@
 |---|---|
 | Nuvem | AWS **Academy Learner Lab** |
 | Regiões | `us-east-1` (prod) · `us-west-2` (DR) |
-| Cluster | EKS, managed node group `t3.medium` × 3 |
+| Cluster | EKS 1.31, node group `t3.medium` × 3 |
 | IAM | **`LabRole`** por `data source` — nunca `resource` |
 | APM | New Relic (Datadog atrás de flag — ADR-004) |
-| Código-fonte dos serviços | `dougls/hackathon-DCLT` @ **`79f5c20de1f039ae9c43c3ef4c09ad89362f5f1a`** (fixado) |
-| Toolchain local | Python 3.11 ✅ · Docker 29.5.2 instalado (daemon parado) · Go/Terraform/AWS CLI **ausentes** → gates rodam em container |
-| Repositório de referência (Fase 4) | `../../challenge-etapa-4/fiap-tc-3-gitops` (somente leitura) |
+| Código-fonte | `dougls/hackathon-DCLT` @ `79f5c20de1f039ae9c43c3ef4c09ad89362f5f1a` |
+| Custo | ≈ US$ 6,73/dia · US$ 202/mês |
+| Referência (Fase 4) | `../../challenge-etapa-4/fiap-tc-3-gitops` (somente leitura) |
+
+---
+
+## Gates — estado atual
+
+| Gate | Precisa de Docker? | Resultado |
+|---|---|---|
+| `scripts/verificar-academy.py` | não | ✅ 20 arquivos `.tf`, 7 verificações, **0 falhas** |
+| `scripts/verificar-observabilidade.py` | não | ✅ dashboards, regras de SLO e contrato de métrica coerentes |
+| Sintaxe YAML (51 arquivos) | não | ✅ 0 erros |
+| Links markdown | não | ✅ 0 quebrados |
+| `pytest` ngo-service | não | ✅ 25 passed · 91% |
+| `pytest` volunteer-service | não | ✅ 37 passed · 90% |
+| `terraform fmt/validate/plan` | **sim** | ⏳ bloqueado |
+| `go vet` + `go test` | **sim** | ⏳ bloqueado |
+| `docker build` (3 imagens) | **sim** | ⏳ bloqueado |
+| `smoke-local.sh` | **sim** | ⏳ bloqueado |
+| `verificar-manifestos.sh` | **sim** | ⏳ bloqueado |
+
+---
 
 ## Histórico por fase
 
 ### F0 — Requisitos e rastreabilidade ✅
 
-**Entregue:**
-- `docs/00-enunciado/` — transcrição estruturada do enunciado + texto original preservado.
-- `docs/01-requisitos-e-criterios-de-aceitacao.md` — **matriz mestre**: 40 requisitos mapeados
-  (28 do enunciado + 12 entregáveis), cada um com critério de aceitação, artefato esperado,
-  evidência exigida, ponto no vídeo e **classificação de risco de dedução de pontos**.
-- `docs/02-arquitetura/README.md` — visão macro, fluxo do hot path, mapeamento Azure→AWS,
-  o que se reaproveita e o que se corrige da Fase 4.
-- `docs/02-arquitetura/adr/README.md` — **ADR-001 a ADR-007**.
-- Esqueleto do monorepo + `.gitignore` com bloqueio de `*secrets.yaml` (a Fase 4 versionava
-  segredos reais em texto puro; aqui isso é política, não descuido).
+Transcrição do enunciado e **matriz mestre de 40 requisitos** (28 do enunciado +
+12 entregáveis), com critério de aceitação, artefato, evidência, ponto no vídeo e
+classificação de risco de dedução. Arquitetura e **ADR-001 a 007**.
 
-**Descobertas que mudaram o plano:**
-1. O Learner Lab **bloqueia criação de IAM role e OIDC provider** → IRSA, `eksctl`, AWS Load
-   Balancer Controller e GitHub OIDC são impossíveis. Redesenhado em ADR-001 e ADR-002.
-2. O código-fonte oficial da SolidaryTech **já é AWS-native** (DynamoDB + SQS) — o que valida a
-   escolha da nuvem e elimina reescrita da camada de dados.
-3. O trial do Datadog (14 dias) **não cobre** um hackathon de 2 meses, e seu free tier **não inclui
-   APM** → troca para New Relic (ADR-004).
-4. A Fase 4 **não tinha métrica de latência** (só contador de requisições), o que tornava o SLO de
-   latência incalculável. Corrigido por instrumentação com histograma desde a F1.
+**Descobertas que mudaram o plano:** o Learner Lab bloqueia IAM e OIDC (→ sem
+IRSA); o código-fonte oficial já é AWS-native; o trial do Datadog não cobre os 2
+meses; a Fase 4 não tinha métrica de latência.
 
-**Riscos ainda abertos:**
-- `LabRole` pode não ter trust policy para `eks.amazonaws.com` → **testar cedo na F2**, com apply
-  isolado do módulo EKS. Fallback: k3s em EC2 (o restante do plano não muda).
-- `aws-ebs-csi-driver` sem IRSA pode não provisionar PVC → fallback: `emptyDir` + Loki em S3.
+### F1 — Serviços e containers ✅
 
----
+3 serviços importados e reescritos, **22 defeitos corrigidos**. Instrumentação
+OTel com histograma de duração idêntico em Go e Python. `traceparent` W3C
+atravessando o SQS. **`volunteer-worker` acrescentado** — o código original
+publicava em SQS e nada consumia. Dockerfiles multi-stage, distroless para Go,
+`docker-compose` + LocalStack.
 
-### F1 — Serviços e containers 🟨
+Dois bugs foram encontrados **pelos próprios testes** e corrigidos no código, não
+no teste.
 
-**Entregue:**
-- Os 3 serviços importados e reescritos em `services/`, com **22 defeitos corrigidos** — tabela
-  completa em [`services/README.md`](../services/README.md).
-- Instrumentação **OpenTelemetry** nos 3, com o histograma `solidary.http.server.duration` de
-  **nome, unidade e buckets idênticos em Go e Python** — a lacuna que a Fase 4 admitia.
-- `traceparent` W3C atravessando o **SQS**, costurando produtor e consumidor em **um único trace**.
-- **`volunteer-worker`**: consumidor da fila, acrescentado ao projeto (o código original publicava
-  em SQS e nada consumia). Mesma imagem do `volunteer-service`, apenas com `command` diferente.
-- Dockerfiles multi-stage com estágio de teste, usuário não-root e `HEALTHCHECK`
-  (Go em **distroless**; Python sem compilador na imagem final).
-- `docker-compose.yml` + LocalStack replicando a topologia AWS (fila **com DLQ**, tabela DynamoDB,
-  um Postgres com dois databases conforme ADR-006) e `smoke-local.sh` cobrindo o fluxo de negócio.
+### F2 — Terraform / IaC ✅
 
-**Gates executados:**
+20 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. Restrições do
+Academy codificadas como `validation`, `precondition` e `check`.
 
-| Gate | Resultado |
-|---|---|
-| `pytest` ngo-service | ✅ **25 passed**, cobertura **91 %** |
-| `pytest` volunteer-service | ✅ **37 passed**, cobertura **90 %** |
-| `docker compose config` | ✅ válido |
-| `go vet` + `go test` (donation-service) | ⏳ **bloqueado** — Docker Desktop parado e Go não instalado |
-| `docker build` das 3 imagens | ⏳ **bloqueado** — Docker Desktop parado |
-| `./smoke-local.sh` | ⏳ **bloqueado** — Docker Desktop parado |
+**Três decisões sem as quais o ambiente não funciona:**
+`bootstrap_cluster_creator_admin_permissions = true` ·
+`http_put_response_hop_limit = 2` · `launch_template` com `tag_specifications`.
 
-**Dois bugs encontrados pelos próprios testes durante esta fase** (corrigidos no código, não no teste):
-1. `validar_ngo` rejeitava e-mail com espaços em volta, porque validava **antes** de normalizar —
-   e formulário web envia espaço em volta o tempo todo.
-2. O fixture de teste do worker dependia do `TracerProvider` **global** do OTel, que só aceita ser
-   definido uma vez por processo: passava isolado e falhava na suíte completa, conforme a ordem de
-   coleta do pytest. Tracer passou a ser injetado.
+Dois erros reais encontrados: escape HCL inválido e ciclo de dependência
+`network → eks → network`. **Correção de rumo:** o ADR-001 dizia hop limit 1, o
+que quebraria a autenticação de todos os pods.
 
-**Pendência para fechar a F1:** iniciar o **Docker Desktop** e rodar
-`docker build --target test ./donation-service` e `docker compose up -d --build && ./smoke-local.sh`.
+### F3 — GitOps ✅
 
-**Ponto em aberto levado para a F2:** o `README` do repositório oficial lista **ElastiCache** entre
-os recursos a provisionar, mas nenhum dos 3 serviços usa cache, e o enunciado avaliado pede apenas
-*"Cluster, Bancos de Dados, Mensageria, Rede"*. Decisão proposta: escrever o módulo Terraform de
-ElastiCache com `enable_elasticache = false` por padrão — o código existe e liga com uma variável,
-sem queimar ~US$ 12/mês de crédito por um recurso que ninguém consome.
+App-of-Apps → ApplicationSet com git directory generator. 8 addons
+(ingress-nginx, kube-prometheus-stack, Loki/S3, 2 OTel Collectors, OpenCost,
+Velero, config de observabilidade). 3 apps + worker + carga, com
+requests/limits, HPA, PDB, NetworkPolicy, `startupProbe` e Jobs de init de banco
+idempotentes.
 
----
+### F4 — CI/CD DevSecOps ✅
 
-### F2 — Terraform / IaC 🟨
+Workflow **reutilizável** para os 3 serviços: `lint‖test` → `sonar` +
+`build-scan-push` → `update-gitops`. Trivy em 2 camadas, SBOM CycloneDX, SARIF
+no GitHub Security, `gitleaks`. Pipeline de Terraform com plan comentado no PR e
+apply sob aprovação. `self-heal.yml` com allowlist.
 
-**Entregue:** 20 arquivos `.tf` — backend remoto, 8 módulos e 2 ambientes.
+### F5 — Observabilidade e APM ✅
 
-- `infra/bootstrap/` — bucket S3 versionado + tabela DynamoDB de lock. Atende
-  literalmente o *"Backend Remoto usando um Bucket S3"* que a Fase 3 pedia e que a
-  Fase 4 substituiu por Azure Storage.
-- Módulos: `network`, `eks`, `rds`, `dynamodb`, `sqs`, `ecr`, `storage`, `elasticache`.
-- `environments/prod-use1` (us-east-1) e `environments/dr-usw2` (warm standby, us-west-2).
-  **O ambiente de DR não redefine nada** — chama os mesmos módulos com outra região e
-  capacidade reduzida, que é o que prova a modularização exigida pela Opção B.
-- **Tags FinOps** por `default_tags` do provider **mais** `tag_specifications` no launch
-  template, porque `default_tags` não alcança as EC2 nem os volumes de um managed node
-  group — e são eles que dominam a fatura.
+Prometheus com retenção de **10 dias** (ajustada para viabilizar a janela de
+SLO), Grafana com `root_url` vindo do NLB real, Loki com backend S3 (dispensa o
+EBS CSI), dual OTel Collector, exporter New Relic plugável.
 
-**Três decisões que fazem o EKS funcionar no Learner Lab:**
+### F6 — SRE ✅
 
-| Decisão | Sem ela |
-|---|---|
-| `bootstrap_cluster_creator_admin_permissions = true` | Cluster sobe mas o `kubectl` não autentica — a queixa nº 1 de EKS no Academy |
-| `http_put_response_hop_limit = 2` | **Nenhum pod obtém credencial AWS**, sem erro aparente: o tráfego pod→IMDS tem um salto a mais que o do host |
-| `launch_template` com `tag_specifications` | A maior parte do custo apareceria **sem tag** no Tag Editor, arruinando a evidência do F2.1 |
+**3 SLIs** (o enunciado pede 2), 20 recording rules, alertas multi-window
+multi-burn-rate, dashboard dedicado a SLO e error budget, política de error
+budget com congelamento automatizado, procedimento de chaos drill para MTTR.
 
-**Gates executados:**
+### F7 — FinOps ✅
 
-| Gate | Resultado |
-|---|---|
-| `scripts/verificar-academy.py` | ✅ 7 verificações, 20 arquivos, **0 falhas** |
-| Teste negativo do gate | ✅ detecta escape HCL inválido plantado de propósito |
-| `terraform fmt` / `validate` / `plan` | ⏳ **bloqueado** — Docker Desktop parado |
+Tagging por `default_tags` + launch template, método e tabela de rightsizing,
+forecast de US$ 201,94/mês item a item, **5 recomendações quantificadas**,
+dashboard de custo e eficiência, OpenCost substituindo o Cost Explorer (não
+liberado no lab).
 
-**Dois erros reais encontrados durante a fase:**
-1. **Escape HCL inválido** (`"\.(nano...)"` escrito como `"\."` em cinco lugares e como
-   `"\."` em um): o Terraform recusa com *Invalid escape sequence*. Virou a verificação
-   nº 6 do gate, com teste negativo.
-2. **Ciclo de dependência** `network → eks → network`: as regras de Security Group
-   referenciam o SG do cluster, que só existe depois do cluster, que precisa das subnets.
-   Resolvido separando o *container* (o SG, no módulo de rede) da *permissão* (a regra, no
-   módulo raiz). O SG nasce negando tudo.
+### F8 — ITSM e AIOps ✅
 
-**Correções de rumo feitas nesta fase:**
-- **ADR-001 corrigido**: eu havia escrito `hop limit = 1` como mitigação de segurança — isso
-  quebraria a autenticação de todos os pods. O valor correto é 2, e a mitigação real é
-  IMDSv2 obrigatório (`http_tokens = "required"`).
-- **Spot sai das recomendações de FinOps**: o Learner Lab documenta *"On-Demand instances
-  only"*. A economia de 60–70 % passa a constar como recomendação **para produção real**,
-  explicitamente marcada como não aplicável aqui.
+Ciclo de vida do incidente em 8 etapas, AIOps com New Relic Applied
+Intelligence, 3 runbooks por alerta, modelo de post-mortem blameless,
+self-healing com allowlist e evidência garantida por `if: always()`.
 
-**ElastiCache:** módulo escrito e validado, `habilitar_elasticache = false` por padrão.
-Nenhum dos 3 serviços abre conexão com cache; ligar custaria ~US$ 12/mês por um recurso com
-zero requisição.
+### F9 — Segurança, DR e PCN ✅
 
-**Ponto levado para a F7 (FinOps):** o GSI `ngo_id-index` já é criado no DynamoDB, mas a
-aplicação continua usando `Scan` **de propósito** — assim a otimização Scan→Query ganha
-medição antes/depois com número real, em vez de virar recomendação teórica.
+PCN executivo com RTO/RPO justificados por serviço, **as duas opções de DR**
+(Velero cross-region **e** warm standby por Terraform), runbook com 6 cenários,
+8 débitos de segurança declarados com o desenho de produção ao lado.
+
+### F10 — Entrega ✅
+
+Roteiro do vídeo cronometrado (Pitch 9 min + Demo 10 min + fecho 1 min), com mapa
+requisito→minuto, e relatório com as 4 seções de evidência obrigatórias.
 
 ---
 
-### F3 — GitOps ⬜
-### F4 — CI/CD DevSecOps ⬜
-### F5 — Observabilidade e APM ⬜
-### F6 — SRE (SLI/SLO/Error Budget/MTTR) ⬜
-### F7 — FinOps (tagging/rightsizing/forecast) ⬜
-### F8 — ITSM e AIOps ⬜
-### F9 — Segurança, DR e PCN ⬜
-### F10 — Entrega (relatório + vídeo) ⬜
+## Decisões que valem revisitar
+
+| Ponto | Decisão | Onde |
+|---|---|---|
+| ElastiCache | Módulo escrito, **desligado** — nenhum serviço usa cache | `habilitar_elasticache = false` |
+| NAT Gateway | **Desligado** — US$ 32/mês, 16% do burn | ADR-003 |
+| GSI do DynamoDB | Criado, mas a app segue usando `Scan` **de propósito** | Vira medição antes/depois no FinOps |
+| Janela de SLO | **7 dias**, não 30 — limitada pela retenção do Prometheus | `03-sre/sli-slo-sla.md` §4 |
+| Spot | **Impossível** no lab (só On-Demand) | Recomendação para produção real |

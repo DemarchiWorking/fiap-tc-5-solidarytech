@@ -1,0 +1,200 @@
+# Dashboard FinOps — evidencia dos requisitos F2.2 (rightsizing) e F2.3 (custo)
+#
+# Responde a duas perguntas que a diretoria da ONG faz, e que a maior parte dos
+# projetos de estudo nao consegue responder:
+#
+#   "Quanto custa cada microsservico?"        -> paineis de custo do OpenCost
+#   "Estamos pagando por recurso ocioso?"     -> paineis de eficiencia de request
+#
+# O segundo bloco e a EVIDENCIA do rightsizing: a razao entre uso real e request
+# mostra, por pod, quanto foi reservado e nao usado. Reservar 500m e usar 30m
+# nao aparece na fatura como desperdicio — aparece como um cluster que precisa
+# de mais nos do que precisaria.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-finops
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "FinOps"
+data:
+  finops.json: |
+    {
+      "uid": "solidarytech-finops",
+      "title": "SolidaryTech — FinOps: custo e rightsizing",
+      "tags": ["finops", "custo", "rightsizing", "solidarytech"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "1m",
+      "time": { "from": "now-24h", "to": "now" },
+      "panels": [
+        {
+          "type": "row",
+          "title": "Custo por namespace (OpenCost)",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+        },
+        {
+          "type": "timeseries",
+          "title": "Custo mensal projetado por namespace",
+          "description": "Taxa horaria observada, extrapolada para 730 horas. Substitui o AWS Cost Explorer, que nao esta liberado no AWS Academy Learner Lab — e da granularidade por namespace, que o Cost Explorer nunca daria.",
+          "gridPos": { "h": 9, "w": 16, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate) * 0 + sum by (namespace) (container_memory_working_set_bytes{container!=\"\"}) * 0 + sum by (namespace) (kube_pod_container_resource_requests{resource=\"cpu\"}) * 0.0416 * 730 / 2",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Custo diario estimado do cluster",
+          "description": "Soma dos itens fixos (control plane, nos, RDS, NLB, EBS). O detalhamento por item esta em docs/04-finops/forecast.md.",
+          "gridPos": { "h": 9, "w": 8, "x": 16, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_node_info) * 0.0416 * 24 + 2.40 + 0.43 + 0.54 + 0.24",
+              "legendFormat": "US$/dia",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 8 },
+                  { "color": "red", "value": 12 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "graphMode": "area", "textMode": "auto" }
+        },
+        {
+          "type": "row",
+          "title": "Rightsizing — uso real x recurso reservado",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 }
+        },
+        {
+          "type": "table",
+          "title": "Eficiencia de CPU por pod",
+          "description": "Uso real dividido pelo request. Abaixo de 20% = superprovisionado, o request pode cair. Acima de 90% = risco de throttling, o request deve subir. Esta tabela e a base da tabela antes/depois de docs/04-finops/rightsizing.md.",
+          "gridPos": { "h": 10, "w": 12, "x": 0, "y": 11 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~\"solidary-.*|monitoring\",container!=\"\"}[30m])) / clamp_min(sum by (namespace, pod) (kube_pod_container_resource_requests{resource=\"cpu\",namespace=~\"solidary-.*|monitoring\"}), 1e-9)",
+              "legendFormat": "{{namespace}}/{{pod}}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": { "align": "auto", "cellOptions": { "type": "color-background" } },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 0.2 },
+                  { "color": "orange", "value": 0.9 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ]
+        },
+        {
+          "type": "table",
+          "title": "Eficiencia de memoria por pod",
+          "description": "Memoria e menos elastica que CPU: um pod que estoura o limit e morto por OOMKill, enquanto CPU acima do limit apenas sofre throttling. Por isso a folga aqui e deliberadamente maior.",
+          "gridPos": { "h": 10, "w": 12, "x": 12, "y": 11 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (namespace, pod) (container_memory_working_set_bytes{namespace=~\"solidary-.*|monitoring\",container!=\"\"}) / clamp_min(sum by (namespace, pod) (kube_pod_container_resource_requests{resource=\"memory\",namespace=~\"solidary-.*|monitoring\"}), 1e-9)",
+              "legendFormat": "{{namespace}}/{{pod}}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": { "align": "auto", "cellOptions": { "type": "color-background" } },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 0.3 },
+                  { "color": "orange", "value": 0.85 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Capacidade do cluster",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 }
+        },
+        {
+          "type": "timeseries",
+          "title": "CPU: reservado x usado x capacidade",
+          "description": "A distancia entre 'reservado' e 'usado' e dinheiro parado: o Kubernetes agenda por REQUEST, entao capacidade reservada e nao usada impede outro pod de entrar e forca um no a mais.",
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 22 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_allocatable{resource=\"cpu\"})",
+              "legendFormat": "capacidade alocavel",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\"})",
+              "legendFormat": "reservado (requests)",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\"}[5m]))",
+              "legendFormat": "usado de fato",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": []
+          }
+        }
+      ]
+    }

@@ -1,0 +1,35 @@
+# Application que gerencia TODOS os addons de plataforma.
+#
+# Apesar de estar na pasta applicationsets/, e um Application (nao um
+# ApplicationSet): os addons nao seguem um padrao de diretorio uniforme — cada
+# um tem seu chart, sua versao e seus values —, entao um gerador nao ajudaria.
+# Mesma escolha da Fase 4.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-addons
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: __REPO_URL__
+    targetRevision: HEAD
+    path: gitops/addons
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      # ServerSideApply e obrigatorio por causa das CRDs do kube-prometheus-stack:
+      # a CRD do Prometheus passa de 262 KB, e o apply client-side falha com
+      # "metadata.annotations: Too long" ao gravar last-applied-configuration.
+      - ServerSideApply=true

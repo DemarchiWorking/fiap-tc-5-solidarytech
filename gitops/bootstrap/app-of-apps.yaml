@@ -1,0 +1,49 @@
+# App-of-Apps — o UNICO `kubectl apply` de todo o projeto.
+#
+# A Regra de Ouro do enunciado diz "nao havera deploy manual via kubectl". Ela
+# nao proibe existir um ponto de entrada: proibe que o DEPLOY DAS APLICACOES
+# dependa de alguem rodando comandos. Este arquivo e aplicado uma unica vez,
+# quando o cluster nasce; a partir dai o ArgoCD sincroniza tudo — addons e
+# aplicacoes — a partir do Git, e qualquer mudanca feita na mao no cluster e
+# revertida pelo selfHeal.
+#
+# Cadeia completa:
+#
+#   app-of-apps.yaml  (1x, manual)
+#        v
+#   applicationsets/          -> Application "cluster-addons"  -> addons/*
+#                             -> ApplicationSet "apps"         -> apps/*/overlays/prod
+#
+# Mesmo padrao validado na Fase 4 (fiap-tc-3-gitops), reimplantado na AWS.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap
+  namespace: argocd
+  finalizers:
+    # Garante que apagar este Application remova em cascata tudo que ele gerou,
+    # em vez de deixar recursos orfaos no cluster.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: __REPO_URL__
+    targetRevision: HEAD
+    path: gitops/applicationsets
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      # selfHeal: o cluster volta sozinho ao estado do Git. E o que da sentido
+      # a frase "nao ha deploy manual": mesmo que alguem edite um Deployment na
+      # mao, o ArgoCD desfaz.
+      selfHeal: true
+      # prune: recurso removido do Git some do cluster. Sem isso, o repositorio
+      # deixa de ser a fonte de verdade e vira apenas uma sugestao.
+      prune: true
+    syncOptions:
+      - CreateNamespace=true

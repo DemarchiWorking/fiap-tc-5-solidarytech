@@ -1,0 +1,143 @@
+# Velero — Opcao A da estrategia de DR do enunciado.
+#
+# Faz backup do ESTADO DO CLUSTER (todos os manifestos: Deployments, Services,
+# ConfigMaps, Secrets, PVCs) e dos VOLUMES, para um bucket S3 em us-west-2 —
+# regiao DIFERENTE da do cluster. Backup na mesma regiao nao protege contra
+# falha regional, que e o cenario que o PCN precisa cobrir.
+#
+# O DETALHE QUE FAZ ISTO FUNCIONAR NO AWS ACADEMY:
+#
+#   credentials.useSecret: false
+#
+# A instalacao padrao do Velero cria uma IAM role dedicada (via IRSA) ou pede
+# uma access key estatica em um Secret. As duas opcoes estao fora: IRSA exige
+# OIDC provider, bloqueado; access key estatica reintroduz a vulnerabilidade
+# que este projeto eliminou. Com useSecret: false, o SDK da AWS cai na cadeia
+# padrao ate o IMDSv2 do no e assume a LabRole (ADR-001) — que ja tem permissao
+# de S3 e de EC2 (snapshot de EBS).
+
+image:
+  repository: velero/velero
+
+initContainers:
+  # O plugin da AWS nao vem na imagem base; e adicionado como initContainer que
+  # copia o binario para um volume compartilhado.
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.11.0
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: __VELERO_BUCKET__
+      default: true
+      config:
+        # Regiao do BUCKET, nao do cluster. Cross-region de proposito.
+        region: __DR_REGION__
+
+  volumeSnapshotLocation:
+    - name: default
+      provider: aws
+      config:
+        # Snapshot de EBS e regional: fica em us-east-1, junto dos volumes.
+        # Copiar snapshot entre regioes e um passo explicito do runbook de DR,
+        # nao algo que o Velero faz sozinho.
+        region: __AWS_REGION__
+
+credentials:
+  # Ver cabecalho. Esta linha e o que torna o Velero viavel no Learner Lab.
+  useSecret: false
+
+# Backup de volume via snapshot NATIVO de EBS, e nao via File System Backup
+# (restic/kopia). O snapshot e incremental do lado da AWS: mais rapido, mais
+# barato e nao consome CPU dos nos — que aqui sao 3 t3.medium disputados com a
+# stack de observabilidade.
+snapshotsEnabled: true
+deployNodeAgent: false
+
+schedules:
+  diario:
+    disabled: false
+    # 03:00 UTC = 00:00 em Brasilia. Janela de menor trafego de doacao.
+    schedule: "0 3 * * *"
+    useOwnerReferencesInBackup: false
+    template:
+      # 30 dias. Precisa cobrir com folga o RTO/RPO declarado no PCN e o prazo
+      # de investigacao de um incidente que so seja percebido dias depois.
+      ttl: "720h"
+      includedNamespaces:
+        - solidary-ngo
+        - solidary-donation
+        - solidary-volunteer
+        - monitoring
+        - argocd
+      # kube-system e velero ficam FORA: sao recriados pelo Terraform e pelo
+      # GitOps. Restaurar kube-system por cima de um cluster novo causa mais
+      # problema do que resolve.
+      excludedNamespaces:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+      snapshotVolumes: true
+      storageLocation: default
+
+  # Backup so das aplicacoes, de hora em hora. E este que sustenta o RPO de 15
+  # minutos prometido ao donation-service: o diario sozinho daria RPO de 24h.
+  #
+  # Vale a distincao: o dado da DOACAO em si tem RPO de ~5 min pelo PITR do RDS.
+  # Este backup horario cobre o ESTADO DO CLUSTER (ConfigMaps, Secrets, PVCs),
+  # que e o que determina quanto tempo leva para reconstruir o ambiente.
+  horario-aplicacoes:
+    disabled: false
+    schedule: "0 * * * *"
+    template:
+      ttl: "168h"
+      includedNamespaces:
+        - solidary-ngo
+        - solidary-donation
+        - solidary-volunteer
+      snapshotVolumes: true
+      storageLocation: default
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      release: kube-prometheus-stack
+  # Um backup que falha em silencio e pior que nao ter backup: da falsa
+  # seguranca. Estas regras alertam quando o ultimo backup falhou ou quando
+  # nenhum backup roda ha tempo demais.
+  prometheusRule:
+    enabled: true
+    additionalLabels:
+      release: kube-prometheus-stack
+    spec:
+      - alert: VeleroBackupFalhou
+        expr: increase(velero_backup_failure_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Backup do Velero falhou"
+          description: "O PCN deixa de ser cumprivel enquanto isto durar. Ver docs/06-dr-pcn/runbook-dr.md"
+
+      - alert: VeleroSemBackupRecente
+        expr: (time() - velero_backup_last_successful_timestamp) > 90000
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Nenhum backup bem-sucedido nas ultimas 25 horas"
+          description: "O RPO declarado no PCN nao esta sendo atendido."

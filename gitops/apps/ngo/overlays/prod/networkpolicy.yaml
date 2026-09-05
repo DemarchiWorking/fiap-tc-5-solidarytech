@@ -1,0 +1,71 @@
+# NetworkPolicy — mitigacao do ADR-001.
+#
+# Sem IRSA, todo pod do no alcanca a mesma credencial da LabRole. Nao da para
+# resolver isso na camada de IAM (o lab bloqueia), entao a defesa desce para a
+# camada de rede: cada namespace so aceita trafego do ingress e so fala com o
+# que precisa.
+#
+# Nao substitui o menor privilegio de IAM. Reduz o alcance de um pod
+# comprometido, e esta declarada como mitigacao parcial no PCN.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ngo-service
+spec:
+  podSelector:
+    matchLabels:
+      app: ngo-service
+  policyTypes: [Ingress, Egress]
+
+  ingress:
+    # So o ingress-nginx entra.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8081
+    # E o Prometheus, para raspar metricas.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+
+  egress:
+    # DNS: sem isto o pod nao resolve nem o proprio Service.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # OTel Collector.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+    # Servicos AWS (RDS, SQS, DynamoDB) e IMDS. Sao enderecos externos ao
+    # cluster; restringir por CIDR aqui exigiria fixar faixas da AWS, que mudam.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Bloqueia trafego lateral para a rede do cluster que nao tenha
+              # sido explicitamente permitido acima.
+              - 10.0.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 5432
+    # IMDSv2 — unica fonte de credencial AWS dos pods (ADR-001).
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80

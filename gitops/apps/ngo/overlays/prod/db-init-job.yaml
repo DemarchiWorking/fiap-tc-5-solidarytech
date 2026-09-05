@@ -1,0 +1,102 @@
+# Schema do ngo-service.
+#
+# Mais simples que o do donation-service: o database ngo_db ja e criado pelo
+# Terraform no provisionamento do RDS (e o `db_name` da instancia). Aqui so o
+# schema e aplicado.
+#
+# Idempotente: o ArgoCD reexecuta o Job a cada sync, e um script que falhasse na
+# segunda execucao deixaria o Application permanentemente Degraded.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init-ngo
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: db-init-ngo
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          env:
+            - name: PGURL
+              valueFrom:
+                secretKeyRef: { name: ngo-db, key: database-url }
+
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "==> Aplicando o schema em ngo_db"
+              psql "$PGURL" -v ON_ERROR_STOP=1 -f /sql/init.sql
+              echo "==> Pronto"
+
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+      volumes:
+        - name: sql
+          configMap:
+            name: sql-init-ngo
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sql-init-ngo
+data:
+  # Copia fiel de services/ngo-service/db/init.sql.
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS ngos (
+        id         SERIAL PRIMARY KEY,
+        name       VARCHAR(150) NOT NULL,
+        email      VARCHAR(100) UNIQUE NOT NULL,
+        cause      VARCHAR(100) NOT NULL,
+        city       VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+        CONSTRAINT ngos_name_nao_vazio  CHECK (length(trim(name))  > 0),
+        CONSTRAINT ngos_email_nao_vazio CHECK (length(trim(email)) > 0)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ngos_cause ON ngos (cause);
+    CREATE INDEX IF NOT EXISTS idx_ngos_city  ON ngos (city);
+
+    -- ON CONFLICT torna o seed idempotente: sem ele, a segunda execucao do Job
+    -- falharia com violacao de unique e travaria o sync do ArgoCD.
+    INSERT INTO ngos (name, email, cause, city) VALUES
+        ('Anjos de Patas', 'contato@anjosdepatas.org', 'Protecao Animal', 'Osasco'),
+        ('Educa Mais',     'info@educamais.org',       'Educacao',        'Sao Paulo')
+    ON CONFLICT (email) DO NOTHING;

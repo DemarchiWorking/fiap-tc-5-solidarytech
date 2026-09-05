@@ -1,0 +1,148 @@
+# Teste de carga com k6 — gerador de evidencia para tres requisitos ao mesmo
+# tempo:
+#
+#   F1.2 (Dashboard SRE)  — sem trafego, os paineis de SLO ficam vazios e a
+#                           evidencia do video nao existe;
+#   F2.2 (Rightsizing)    — os requests/limits so podem ser ajustados sobre uso
+#                           REAL sob carga, nao sobre um cluster ocioso;
+#   F3.1 (AIOps)          — a IA do APM precisa de uma linha de base de
+#                           comportamento normal para depois flagrar a anomalia.
+#
+# O Job nasce SUSPENSO. Se rodasse a cada sync do ArgoCD, geraria carga
+# continua, queimaria credito e poluiria o SLI com trafego sintetico. Para
+# executar:
+#
+#   kubectl create job -n solidary-loadtest --from=cronjob/... k6-manual   # nao
+#   kubectl -n solidary-loadtest patch job k6-load-test -p '{"spec":{"suspend":false}}'
+#
+# ou, mais simples:  make carga
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-load-test
+  annotations:
+    # Impede o ArgoCD de recriar o Job a cada sync depois que ele completa.
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: k6-load-test
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.55.0
+          command: ["k6", "run", "/scripts/carga.js"]
+
+          env:
+            # Alcanca o ingress-nginx por DNS interno: o teste passa pelo mesmo
+            # caminho do trafego real (ingress -> service -> pod), e nao por um
+            # atalho direto ao pod. Testar o atalho mediria uma coisa que
+            # usuario nenhum experimenta.
+            - name: BASE_URL
+              value: "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local"
+
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+
+          resources:
+            requests:
+              cpu: 300m
+              memory: 256Mi
+            limits:
+              # k6 e o gerador de carga: se ele mesmo for estrangulado por CPU,
+              # a carga fica abaixo do alvo e o teste mede o k6, nao o sistema.
+              cpu: 1000m
+              memory: 512Mi
+
+      volumes:
+        - name: scripts
+          configMap:
+            name: k6-scripts
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-scripts
+data:
+  carga.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+    import { Rate, Trend } from 'k6/metrics';
+
+    // Metricas proprias, separadas por endpoint. A metrica agregada do k6
+    // esconderia uma degradacao do hot path atras da media dos outros.
+    const errosDoacao = new Rate('erros_doacao');
+    const latenciaDoacao = new Trend('latencia_doacao');
+
+    export const options = {
+      scenarios: {
+        // Cenario 1 — leitura. Simula doadores navegando pelas ONGs.
+        navegacao: {
+          executor: 'ramping-vus',
+          startVUs: 0,
+          stages: [
+            { duration: '1m', target: 20 },
+            { duration: '3m', target: 20 },
+            { duration: '1m', target: 0 },
+          ],
+          exec: 'navegar',
+        },
+
+        // Cenario 2 — o HOT PATH. Comeca depois, para que o pico de doacao
+        // caia sobre um sistema que ja esta sob carga de leitura. Um pico em
+        // sistema ocioso nao reproduz o cenario do enunciado ("destaque em
+        // rede nacional gerou picos imprevisiveis").
+        doacoes: {
+          executor: 'ramping-arrival-rate',
+          startRate: 5,
+          timeUnit: '1s',
+          preAllocatedVUs: 20,
+          maxVUs: 100,
+          startTime: '1m',
+          stages: [
+            { duration: '2m', target: 30 },   // subida
+            { duration: '1m', target: 80 },   // PICO — dispara o HPA
+            { duration: '1m', target: 10 },   // queda
+          ],
+          exec: 'doar',
+        },
+      },
+
+      // Thresholds sao os limiares de TESTE DE ESTRESSE (achar o ponto de
+      // ruptura), deliberadamente mais frouxos que os SLOs de producao
+      // (p95 < 300ms, erro < 0,1%). Confundir os dois faria o teste "aprovar"
+      // um sistema que viola o SLO.
+      thresholds: {
+        'http_req_duration{scenario:doacoes}': ['p(95)<2000', 'p(99)<3000'],
+        'erros_doacao': ['rate<0.05'],
+        'http_req_failed': ['rate<0.05'],
+      },
+    };
+
+    export function navegar() {
+      const r = http.get(`${__ENV.BASE_URL}/ngo/ngos`);
+      check(r, { 'listagem de ONGs devolveu 200': (res) => res.status === 200 });
+      sleep(1);
+    }
+
+    export function doar() {
+      const payload = JSON.stringify({
+        ngo_id: Math.floor(Math.random() * 2) + 1,
+        amount: Math.round((Math.random() * 500 + 10) * 100) / 100,
+        donor_name: `Doador ${Math.floor(Math.random() * 100000)}`,
+      });
+
+      const r = http.post(`${__ENV.BASE_URL}/donations`, payload, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const ok = check(r, { 'doacao criada (201)': (res) => res.status === 201 });
+      errosDoacao.add(!ok);
+      latenciaDoacao.add(r.timings.duration);
+    }

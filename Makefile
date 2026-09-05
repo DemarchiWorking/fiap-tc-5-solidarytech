@@ -48,7 +48,15 @@ help: ## Lista os alvos disponiveis
 # ---------------------------------------------------------------------------
 
 .PHONY: check
-check: check-academy fmt-check validate ## Roda todos os gates locais
+check: check-academy check-observabilidade fmt-check validate check-manifestos ## Roda todos os gates locais
+
+.PHONY: check-observabilidade
+check-observabilidade: ## Coerencia da observabilidade (dashboards, regras de SLO, contrato da metrica)
+	@python scripts/verificar-observabilidade.py .
+
+.PHONY: check-manifestos
+check-manifestos: ## Valida os manifestos Kubernetes (kustomize build + kubeconform)
+	@./scripts/verificar-manifestos.sh
 
 .PHONY: check-academy
 check-academy: ## Verifica as restricoes do AWS Academy no codigo Terraform
@@ -109,11 +117,45 @@ apply: ## Aplica o plano gerado por `make plan`
 	@$(TF) -chdir=$(DIR_AMBIENTE) apply tfplan
 
 .PHONY: lab-up
-lab-up: check-academy ## Sobe o ambiente completo e configura o kubectl
+lab-up: check-academy ## Sobe a infraestrutura e configura o kubectl
 	@$(MAKE) init
 	@$(TF) -chdir=$(DIR_AMBIENTE) apply -auto-approve
 	@$(MAKE) kubeconfig
-	@echo -e "$(VERDE)Ambiente no ar.$(RESET) Nao esqueca de 'make lab-down' ao terminar."
+	@echo -e "$(VERDE)Infraestrutura no ar.$(RESET)"
+	@echo -e "Proximo: $(AMARELO)make configurar-repo$(RESET) (e commit+push), depois $(AMARELO)make deploy$(RESET)."
+
+.PHONY: configurar-repo
+configurar-repo: ## Substitui os placeholders do GitOps pelos valores da sua conta
+	@./scripts/configurar-repo.sh $(AMBIENTE)
+
+.PHONY: deploy
+deploy: ## Instala o ArgoCD, materializa Secrets/ConfigMaps e entrega o cluster ao GitOps
+	@AMBIENTE=$(AMBIENTE) ./scripts/bootstrap-cluster.sh
+
+.PHONY: subir-tudo
+subir-tudo: ## Caminho completo: infraestrutura + GitOps + aplicacoes (exige repo publicado)
+	@$(MAKE) lab-up
+	@$(MAKE) configurar-repo
+	@echo -e "$(AMARELO)Faca commit e push das mudancas do GitOps antes de seguir:$(RESET)"
+	@echo "  git add gitops .github && git commit -m 'chore: configura GitOps' && git push"
+	@read -p "Pressione ENTER depois do push... " _
+	@$(MAKE) deploy
+
+.PHONY: carga
+carga: ## Dispara o teste de carga k6 (necessario para os paineis de SLO terem dado)
+	@kubectl -n solidary-loadtest patch job k6-load-test -p '{"spec":{"suspend":false}}' 2>/dev/null || kubectl -n solidary-loadtest delete job k6-load-test --ignore-not-found
+	@echo "Acompanhe:  kubectl -n solidary-loadtest logs -f job/k6-load-test"
+
+.PHONY: senhas
+senhas: ## Mostra as credenciais de acesso ao Grafana e ao ArgoCD
+	@echo -n "Grafana  admin / "; kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo
+	@echo -n "ArgoCD   admin / "; kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+	@echo -n "URL base: http://"; kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
+
+.PHONY: status
+status: ## Estado do GitOps e das aplicacoes
+	@echo "== ArgoCD =="; kubectl -n argocd get applications
+	@echo; echo "== Pods =="; kubectl get pods -A | grep -E "solidary|monitoring|ingress|velero|argocd"
 
 .PHONY: lab-down
 lab-down: ## Destroi o ambiente (PRESERVA o bucket de state)

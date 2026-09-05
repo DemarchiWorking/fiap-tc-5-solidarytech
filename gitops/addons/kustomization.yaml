@@ -1,0 +1,11 @@
+# Os addons de plataforma. Todas as ArgoCD Applications vivem em
+# applications.yaml; os values de cada chart ficam na pasta do addon.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Pre-requisito: gp3 como StorageClass padrao do cluster.
+  - storageclass-gp3.yaml
+  # ingress-nginx, kube-prometheus-stack, loki, os dois OTel Collectors,
+  # opencost, velero e a config de observabilidade.
+  - applications.yaml

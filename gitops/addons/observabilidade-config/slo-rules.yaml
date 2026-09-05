@@ -1,0 +1,302 @@
+# Regras de SLO do donation-service — o caminho critico da plataforma.
+#
+# Este arquivo e o que transforma o requisito F1 de intencao em numero. A
+# entrega da Fase 4 definiu SLOs, mas os marcava explicitamente como
+# "propostos, nao implementados", porque a aplicacao so emitia um CONTADOR de
+# requisicoes — sem histograma de duracao, um SLO de latencia e incalculavel.
+# Aqui a instrumentacao emite `solidary.http.server.duration` desde o primeiro
+# commit, e por isso as regras abaixo produzem valores reais.
+#
+# METODO: multi-window, multi-burn-rate (Google SRE Workbook). Em vez de alertar
+# quando a taxa de erro passa de um limiar fixo, alerta-se quando o ORCAMENTO DE
+# ERRO esta sendo consumido rapido demais. A diferenca importa: 5% de erro por
+# 30 segundos e ruido; 0,5% de erro sustentado por 6 horas consome o mes inteiro.
+#
+# JANELA: 7 dias rolantes. O padrao de mercado sao 28-30 dias, mas o error
+# budget so pode ser calculado sobre dado que ainda exista no Prometheus, e a
+# retencao aqui e de 10 dias (dimensionada para o orcamento do Learner Lab).
+# Preferimos uma janela menor e HONESTA a um numero de 30 dias que o banco de
+# metricas nao teria como sustentar. O valor canonico de 30 dias aparece na
+# discussao de SLA, em docs/03-sre/sli-slo-sla.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: solidarytech-slo
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # =======================================================================
+    # SLI 1 — DISPONIBILIDADE
+    # Definicao: proporcao de requisicoes que NAO terminaram em 5xx.
+    # SLO: 99,9%  ->  orcamento de erro = 0,1%
+    #
+    # 4xx fica FORA do numerador de erro de proposito: payload invalido enviado
+    # pelo cliente e o servico funcionando corretamente. Contabilizar 4xx como
+    # falha faria um ataque de scanner "violar" o SLO sem nada estar quebrado.
+    # =======================================================================
+    - name: solidarytech.slo.donation.disponibilidade
+      interval: 30s
+      rules:
+        - record: slo:donation_disponibilidade_erro:ratio_rate5m
+          expr: |
+            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[5m]))
+            /
+            clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[5m])), 1e-9)
+
+        - record: slo:donation_disponibilidade_erro:ratio_rate30m
+          expr: |
+            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[30m]))
+            /
+            clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[30m])), 1e-9)
+
+        - record: slo:donation_disponibilidade_erro:ratio_rate1h
+          expr: |
+            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[1h]))
+            /
+            clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[1h])), 1e-9)
+
+        - record: slo:donation_disponibilidade_erro:ratio_rate6h
+          expr: |
+            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[6h]))
+            /
+            clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[6h])), 1e-9)
+
+        # Taxa de erro sobre a janela inteira do SLO.
+        - record: slo:donation_disponibilidade_erro:ratio_rate7d
+          expr: |
+            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[7d]))
+            /
+            clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[7d])), 1e-9)
+
+        # O NUMERO QUE VAI PARA O PAINEL: quanto do orcamento ainda resta, de 0
+        # a 1. Cai para 0 quando o SLO e violado; fica negativo se o consumo
+        # passar de 100%, o que e informacao util (mostra QUANTO se estourou).
+        - record: slo:donation_disponibilidade:error_budget_restante
+          expr: 1 - (slo:donation_disponibilidade_erro:ratio_rate7d / 0.001)
+
+        # Burn rate: quantas vezes mais rapido que o sustentavel o orcamento
+        # esta sendo consumido. 1 = no ritmo exato de gastar tudo ao fim da
+        # janela. 14,4 = a janela inteira some em ~12 horas.
+        - record: slo:donation_disponibilidade:burn_rate1h
+          expr: slo:donation_disponibilidade_erro:ratio_rate1h / 0.001
+
+        - record: slo:donation_disponibilidade:burn_rate6h
+          expr: slo:donation_disponibilidade_erro:ratio_rate6h / 0.001
+
+    # =======================================================================
+    # SLI 2 — LATENCIA
+    # Definicao: proporcao de requisicoes servidas em menos de 300 ms.
+    # SLO: 99% das requisicoes dentro do limite.
+    #
+    # A escolha e deliberada: medir "proporcao abaixo do limiar" em vez de
+    # "p95 < 300ms". Percentil e uma media disfarcada — nao existe error budget
+    # de percentil, e nao da para dizer "gastamos 40% do orcamento de latencia".
+    # Com proporcao, latencia e disponibilidade usam a MESMA matematica de
+    # orcamento, e o painel fica coerente.
+    #
+    # O bucket le="0.3" existe porque o histograma foi definido com fronteira
+    # exatamente em 0.3 (ver services/donation-service/telemetry.go). Sem esse
+    # bucket, o valor seria interpolado — ou seja, chutado.
+    # =======================================================================
+    - name: solidarytech.slo.donation.latencia
+      interval: 30s
+      rules:
+        - record: slo:donation_latencia_erro:ratio_rate5m
+          expr: |
+            1 - (
+              sum(rate(solidary_http_server_duration_seconds_bucket{service_name="donation-service",le="0.3"}[5m]))
+              /
+              clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[5m])), 1e-9)
+            )
+
+        - record: slo:donation_latencia_erro:ratio_rate1h
+          expr: |
+            1 - (
+              sum(rate(solidary_http_server_duration_seconds_bucket{service_name="donation-service",le="0.3"}[1h]))
+              /
+              clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[1h])), 1e-9)
+            )
+
+        - record: slo:donation_latencia_erro:ratio_rate6h
+          expr: |
+            1 - (
+              sum(rate(solidary_http_server_duration_seconds_bucket{service_name="donation-service",le="0.3"}[6h]))
+              /
+              clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[6h])), 1e-9)
+            )
+
+        - record: slo:donation_latencia_erro:ratio_rate7d
+          expr: |
+            1 - (
+              sum(rate(solidary_http_server_duration_seconds_bucket{service_name="donation-service",le="0.3"}[7d]))
+              /
+              clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[7d])), 1e-9)
+            )
+
+        - record: slo:donation_latencia:error_budget_restante
+          expr: 1 - (slo:donation_latencia_erro:ratio_rate7d / 0.01)
+
+        - record: slo:donation_latencia:burn_rate1h
+          expr: slo:donation_latencia_erro:ratio_rate1h / 0.01
+
+        - record: slo:donation_latencia:burn_rate6h
+          expr: slo:donation_latencia_erro:ratio_rate6h / 0.01
+
+        # Percentis, apenas para DIAGNOSTICO. Nao disparam alerta: servem para
+        # responder "quao ruim ficou?" depois que o burn rate ja acusou.
+        - record: slo:donation_latencia:p95
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(solidary_http_server_duration_seconds_bucket{service_name="donation-service"}[5m])))
+
+        - record: slo:donation_latencia:p99
+          expr: |
+            histogram_quantile(0.99,
+              sum by (le) (rate(solidary_http_server_duration_seconds_bucket{service_name="donation-service"}[5m])))
+
+    # =======================================================================
+    # SLI 3 — FRESCOR DA FILA
+    # Definicao: proporcao de eventos de doacao processados em menos de 60 s
+    # desde a criacao da doacao.
+    # SLO: 99,5%
+    #
+    # Este SLI existe porque a doacao e confirmada ao doador ANTES de o evento
+    # ser consumido. Sem ele, o worker poderia estar parado ha horas e os dois
+    # SLIs anteriores continuariam verdes — o hot path estaria "saudavel"
+    # enquanto nenhum voluntario seria notificado.
+    #
+    # A metrica vem da aplicacao (solidary.donation.event.lag), e nao do
+    # CloudWatch: o ApproximateAgeOfOldestMessage do SQS so enxerga a CABECA da
+    # fila e exigiria scrape do CloudWatch. Esta cobre TODOS os eventos e chega
+    # pelo mesmo caminho OTLP das demais.
+    # =======================================================================
+    - name: solidarytech.slo.donation.frescor_da_fila
+      interval: 30s
+      rules:
+        - record: slo:donation_frescor_erro:ratio_rate1h
+          expr: |
+            1 - (
+              sum(rate(solidary_donation_event_lag_seconds_bucket{le="60"}[1h]))
+              /
+              clamp_min(sum(rate(solidary_donation_event_lag_seconds_count[1h])), 1e-9)
+            )
+
+        - record: slo:donation_frescor_erro:ratio_rate7d
+          expr: |
+            1 - (
+              sum(rate(solidary_donation_event_lag_seconds_bucket{le="60"}[7d]))
+              /
+              clamp_min(sum(rate(solidary_donation_event_lag_seconds_count[7d])), 1e-9)
+            )
+
+        - record: slo:donation_frescor:error_budget_restante
+          expr: 1 - (slo:donation_frescor_erro:ratio_rate7d / 0.005)
+
+    # =======================================================================
+    # ALERTAS DE QUEIMA DE ORCAMENTO
+    #
+    # Duas janelas por alerta — uma longa e uma curta. A longa evita disparo por
+    # ruido; a CURTA garante que o alerta se RESOLVA rapido quando o problema
+    # acabar. Com uma janela so, um incidente de 5 minutos deixaria o alerta
+    # aceso por uma hora, e alerta que nao fecha e alerta que se aprende a
+    # ignorar.
+    #
+    # severity=page  -> acorda alguem (PagerDuty)
+    # severity=ticket -> ChatOps, dentro do horario comercial
+    # =======================================================================
+    - name: solidarytech.slo.alertas
+      rules:
+        - alert: DonationOrcamentoErroQueimaCritica
+          # 14,4x = o orcamento de 7 dias evapora em ~12 horas.
+          expr: |
+            slo:donation_disponibilidade_erro:ratio_rate1h > (14.4 * 0.001)
+            and
+            slo:donation_disponibilidade_erro:ratio_rate5m > (14.4 * 0.001)
+          for: 2m
+          labels:
+            severity: page
+            service: donation-service
+            slo: disponibilidade
+          annotations:
+            summary: "donation-service queimando error budget 14x acima do sustentavel"
+            description: >-
+              Taxa de erro 5xx em {{ $value | humanizePercentage }} na ultima hora.
+              Ao ritmo atual, o orcamento de 7 dias acaba em ~12 horas.
+            runbook_url: "__REPO_WEB__/blob/main/docs/05-itsm-aiops/runbooks/donation-taxa-de-erro.md"
+            # Consumido pelo webhook de self-healing: define QUAL Deployment
+            # reiniciar. A allowlist do workflow valida o valor.
+            servico_afetado: "donation-service"
+
+        - alert: DonationOrcamentoErroQueimaAlta
+          # 6x = o orcamento evapora em ~28 horas.
+          expr: |
+            slo:donation_disponibilidade_erro:ratio_rate6h > (6 * 0.001)
+            and
+            slo:donation_disponibilidade_erro:ratio_rate30m > (6 * 0.001)
+          for: 15m
+          labels:
+            severity: ticket
+            service: donation-service
+            slo: disponibilidade
+          annotations:
+            summary: "donation-service consumindo error budget acima do sustentavel"
+            runbook_url: "__REPO_WEB__/blob/main/docs/05-itsm-aiops/runbooks/donation-taxa-de-erro.md"
+
+        - alert: DonationLatenciaQueimaCritica
+          expr: |
+            slo:donation_latencia_erro:ratio_rate1h > (14.4 * 0.01)
+            and
+            slo:donation_latencia_erro:ratio_rate5m > (14.4 * 0.01)
+          for: 5m
+          labels:
+            severity: page
+            service: donation-service
+            slo: latencia
+          annotations:
+            summary: "Latencia do donation-service fora do SLO"
+            description: "p95 atual: {{ with query \"slo:donation_latencia:p95\" }}{{ . | first | value | humanizeDuration }}{{ end }}"
+            runbook_url: "__REPO_WEB__/blob/main/docs/05-itsm-aiops/runbooks/donation-latencia.md"
+            servico_afetado: "donation-service"
+
+        - alert: OrcamentoErroQuaseEsgotado
+          # Gatilho da politica de congelamento de deploy (>80% consumido).
+          expr: slo:donation_disponibilidade:error_budget_restante < 0.2
+          for: 10m
+          labels:
+            severity: ticket
+            service: donation-service
+          annotations:
+            summary: "Menos de 20% do error budget de disponibilidade restante"
+            description: >-
+              Politica de error budget: congelar deploys nao criticos do
+              donation-service. Hotfix e self-heal continuam liberados.
+              Ver docs/03-sre/error-budget.md
+
+        - alert: OrcamentoErroEsgotado
+          expr: slo:donation_disponibilidade:error_budget_restante <= 0
+          for: 5m
+          labels:
+            severity: page
+            service: donation-service
+          annotations:
+            summary: "SLO de disponibilidade VIOLADO — orcamento de erro esgotado"
+            description: >-
+              Congelamento total de mudancas no donation-service ate o
+              post-mortem ser concluido. Ver docs/03-sre/error-budget.md
+
+        - alert: FilaDeDoacoesAtrasada
+          expr: slo:donation_frescor_erro:ratio_rate1h > (6 * 0.005)
+          for: 10m
+          labels:
+            severity: ticket
+            service: volunteer-worker
+            slo: frescor_da_fila
+          annotations:
+            summary: "Eventos de doacao demorando mais de 60s para serem processados"
+            description: >-
+              O hot path continua saudavel — a doacao e confirmada antes do
+              consumo da fila. O impacto e que voluntarios nao estao sendo
+              correlacionados as campanhas.
+            servico_afetado: "volunteer-worker"

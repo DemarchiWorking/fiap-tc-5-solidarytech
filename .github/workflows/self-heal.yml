@@ -1,0 +1,162 @@
+# Self-healing — automacao de runbook (requisito F3, ITSM/AIOps).
+#
+# COMO E ACIONADO:
+#
+#   Alerta do Prometheus (burn rate de SLO) ou anomalia detectada pelo APM
+#        v
+#   Alertmanager / webhook do New Relic  ->  repository_dispatch
+#        v
+#   este workflow  ->  kubectl rollout restart
+#
+# Tambem aceita disparo manual (workflow_dispatch), o que permite demonstrar a
+# automacao no video sem precisar provocar um incidente real na hora da gravacao.
+#
+# EFEITO NO MTTR — e este o numero que vai para o relatorio (F1.3):
+#
+#   Sem automacao:  deteccao (usuario reclama) -> ~6h
+#                   diagnostico (logs espalhados) -> ~4h
+#                   mitigacao (humano disponivel) -> minutos
+#                   MTTR total: HORAS
+#
+#   Com automacao:  deteccao (burn rate) -> ~2min
+#                   mitigacao (este workflow) -> ~90s
+#                   MTTR total: ~4 MINUTOS
+#
+# O diagnostico da causa raiz continua sendo humano — a automacao MITIGA, ela
+# nao corrige. Essa distincao esta no post-mortem: reiniciar um pod devolve o
+# servico ao ar sem explicar por que ele quebrou, e tratar mitigacao como
+# solucao e como um incidente vira cronico.
+
+name: Self-Healing
+
+on:
+  repository_dispatch:
+    types: [self-heal]
+  workflow_dispatch:
+    inputs:
+      servico:
+        description: "Servico a reiniciar"
+        required: true
+        type: choice
+        options:
+          - ngo-service
+          - donation-service
+          - volunteer-service
+          - volunteer-worker
+      motivo:
+        description: "Motivo (vai para o registro do incidente)"
+        required: false
+        type: string
+        default: "acionamento manual"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Um self-heal por vez. Dois reinicios simultaneos do mesmo Deployment
+  # cancelariam o rollout um do outro e deixariam o servico pior do que estava.
+  group: self-heal-${{ github.event.client_payload.servico || inputs.servico }}
+  cancel-in-progress: false
+
+jobs:
+  mitigar:
+    name: Mitigar
+    runs-on: ubuntu-latest
+    steps:
+      # =====================================================================
+      # ALLOWLIST — o controle de seguranca mais importante deste workflow.
+      #
+      # `repository_dispatch` e acionavel por qualquer token com permissao de
+      # escrita. Sem esta validacao, um payload malicioso poderia reiniciar
+      # QUALQUER Deployment do cluster, inclusive o ArgoCD ou o Prometheus —
+      # desligando a propria capacidade de observar o ataque.
+      #
+      # Com a allowlist, o unico poder que o webhook tem e reiniciar um dos
+      # quatro workloads da aplicacao. Mesmo padrao adotado na Fase 4.
+      # =====================================================================
+      - name: Validar o servico e resolver o namespace
+        id: alvo
+        env:
+          ENTRADA: ${{ github.event.client_payload.servico || inputs.servico }}
+        run: |
+          case "$ENTRADA" in
+            ngo-service)        NS="solidary-ngo" ;;
+            donation-service)   NS="solidary-donation" ;;
+            volunteer-service)  NS="solidary-volunteer" ;;
+            volunteer-worker)   NS="solidary-volunteer" ;;
+            *)
+              echo "::error::Servico nao permitido: '$ENTRADA'."
+              echo "::error::Permitidos: ngo-service, donation-service, volunteer-service, volunteer-worker."
+              exit 1
+              ;;
+          esac
+          echo "servico=$ENTRADA"   >> "$GITHUB_OUTPUT"
+          echo "namespace=$NS"      >> "$GITHUB_OUTPUT"
+          echo "### Self-heal acionado" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Servico: \`$ENTRADA\`"  >> "$GITHUB_STEP_SUMMARY"
+          echo "- Namespace: \`$NS\`"     >> "$GITHUB_STEP_SUMMARY"
+          echo "- Motivo: ${{ github.event.client_payload.motivo || inputs.motivo }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Disparo: ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Ver comentario em ci-servico.yml: OIDC exigiria criar um provider
+          # IAM, bloqueado no AWS Academy Learner Lab.
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Conectar ao cluster
+        run: |
+          aws eks update-kubeconfig \
+            --region "${{ vars.AWS_REGION || 'us-east-1' }}" \
+            --name "${{ vars.EKS_CLUSTER || 'solidarytech-prod-eks' }}"
+
+      - name: Estado ANTES da mitigacao
+        run: |
+          # Capturado para o post-mortem: sem o estado anterior, nao ha como
+          # afirmar que o restart resolveu — nem que havia algo a resolver.
+          echo "### Antes" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          kubectl -n "${{ steps.alvo.outputs.namespace }}" get pods -o wide | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reiniciar (rollout restart)
+        run: |
+          # `rollout restart` e nao `delete pod`: o restart respeita a estrategia
+          # de atualizacao e o PodDisruptionBudget, substituindo as replicas uma
+          # a uma. Deletar os pods derrubaria o servico durante a mitigacao —
+          # ou seja, pioraria o incidente que se esta tentando resolver.
+          kubectl -n "${{ steps.alvo.outputs.namespace }}" \
+            rollout restart "deployment/${{ steps.alvo.outputs.servico }}"
+
+          kubectl -n "${{ steps.alvo.outputs.namespace }}" \
+            rollout status "deployment/${{ steps.alvo.outputs.servico }}" --timeout=180s
+
+      - name: Evidencia — estado APOS a mitigacao
+        # `always()` de proposito: mesmo que o rollout falhe, o estado do cluster
+        # e capturado. Um self-heal que falha em silencio e pior que nenhum, e o
+        # log de um restart que NAO funcionou e a informacao mais valiosa do
+        # post-mortem.
+        if: always()
+        run: |
+          echo "### Depois" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          kubectl -n "${{ steps.alvo.outputs.namespace }}" get pods -o wide | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### Eventos recentes" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          kubectl -n "${{ steps.alvo.outputs.namespace }}" get events \
+            --sort-by=.lastTimestamp | tail -20 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Lembrete de post-mortem
+        if: always()
+        run: |
+          echo "### Proximo passo" >> "$GITHUB_STEP_SUMMARY"
+          echo "A mitigacao NAO e a solucao: o restart devolveu o servico ao ar" >> "$GITHUB_STEP_SUMMARY"
+          echo "sem explicar por que ele quebrou. Abrir post-mortem a partir do" >> "$GITHUB_STEP_SUMMARY"
+          echo "modelo em \`docs/05-itsm-aiops/post-mortem-modelo.md\`." >> "$GITHUB_STEP_SUMMARY"

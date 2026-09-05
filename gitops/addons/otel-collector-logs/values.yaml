@@ -1,0 +1,90 @@
+# OTel Collector — coletor de logs (DaemonSet)
+#
+# Topologia dual, herdada da Fase 4 e mantida porque resolve dois problemas
+# diferentes:
+#
+#   * o GATEWAY (Deployment) recebe telemetria que as aplicacoes ENVIAM
+#     ativamente por OTLP — traces, metricas e logs instrumentados;
+#   * este DAEMONSET LE o stdout de TODOS os containers do no, inclusive os que
+#     nao sao nossos: ArgoCD, ingress-nginx, CoreDNS, kube-proxy.
+#
+# Sem o DaemonSet, um incidente no ingress-nginx ou um erro de sync do ArgoCD
+# seria invisivel no Grafana — e sao justamente esses os componentes que
+# derrubam a plataforma inteira quando falham.
+
+mode: daemonset
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+# Um pod por no. Enxuto de proposito: com 3 nos t3.medium, cada 50m de CPU aqui
+# sai do orcamento das aplicacoes.
+resources:
+  requests:
+    cpu: 50m
+    memory: 100Mi
+  limits:
+    cpu: 200m
+    memory: 200Mi
+
+presets:
+  logsCollection:
+    enabled: true
+    # includeCollectorLogs: false evita o laco em que o Collector coleta o
+    # proprio log, gera log sobre isso e coleta de novo.
+    includeCollectorLogs: false
+  kubernetesAttributes:
+    enabled: true
+    extractAllPodLabels: true
+
+config:
+  receivers:
+    # Nao expoe OTLP: este Collector so LE arquivo de log. Quem recebe OTLP e o
+    # gateway. Manter as portas fechadas reduz a superficie de cada no.
+    otlp: null
+
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    batch:
+      timeout: 10s
+      send_batch_size: 1024
+
+  exporters:
+    otlphttp/loki:
+      endpoint: http://loki-gateway.monitoring.svc.cluster.local/otlp
+      tls:
+        insecure: true
+
+  service:
+    pipelines:
+      logs:
+        receivers: [filelog]
+        processors: [memory_limiter, k8sattributes, batch]
+        exporters: [otlphttp/loki]
+      # Sem pipeline de traces nem de metricas: eles pertencem ao gateway.
+      traces: null
+      metrics: null
+
+ports:
+  otlp:
+    enabled: false
+  otlp-http:
+    enabled: false
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+  metrics:
+    enabled: true
+
+# Tolera qualquer taint: se um no for marcado como dedicado a algum workload, os
+# logs dele ainda precisam ser coletados. Um no sem coleta e um ponto cego.
+tolerations:
+  - operator: Exists

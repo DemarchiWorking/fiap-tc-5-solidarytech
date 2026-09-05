@@ -1,0 +1,322 @@
+# Pipeline reutilizavel dos microsservicos — requisito F0.3 (CI/CD e DevSecOps).
+#
+# Um unico workflow para os tres servicos. Duplicar isso em tres arquivos quase
+# iguais garantiria que eles divergissem: alguem melhora o scan em um e esquece
+# dos outros, e a diferenca so aparece quando uma CVE passa pelo pipeline que
+# ficou para tras.
+#
+# DAG dos jobs (mesma forma validada na Fase 4):
+#
+#     lint  ──┐
+#             ├──▶  sast          (SonarCloud)
+#     test  ──┤
+#             └──▶  build-scan-push  ──▶  update-gitops
+#
+# lint e test rodam EM PARALELO: nao dependem um do outro e falhar cedo economiza
+# minutos de runner. Os dois jobs seguintes dependem dos dois, entao um erro de
+# lint ou um teste vermelho impede qualquer imagem de ser construida.
+
+on:
+  workflow_call:
+    inputs:
+      servico:
+        description: "Nome do servico (ex.: donation-service)"
+        required: true
+        type: string
+      linguagem:
+        description: "go ou python"
+        required: true
+        type: string
+      caminho:
+        description: "Diretorio do servico"
+        required: true
+        type: string
+      overlay:
+        description: "Caminho do overlay no GitOps"
+        required: true
+        type: string
+
+env:
+  REGISTRY_REPO: solidarytech
+  AWS_REGION: us-east-1
+
+permissions:
+  contents: write     # o job update-gitops faz commit
+  security-events: write
+
+jobs:
+  # =========================================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Go — golangci-lint
+        if: inputs.linguagem == 'go'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: ${{ inputs.caminho }}
+
+      - name: Go — go.mod e go.sum consistentes
+        if: inputs.linguagem == 'go'
+        working-directory: ${{ inputs.caminho }}
+        run: |
+          # `go mod tidy` seguido de diff detecta dependencia declarada e nao
+          # usada, ou usada e nao declarada. E tambem uma defesa de supply
+          # chain: um go.sum divergente do go.mod indica que alguem mexeu nas
+          # somas de verificacao.
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Python — ruff
+        if: inputs.linguagem == 'python'
+        working-directory: ${{ inputs.caminho }}
+        run: |
+          pip install --quiet ruff
+          ruff check .
+
+  # =========================================================================
+  test:
+    name: Testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Go — testes com deteccao de corrida
+        if: inputs.linguagem == 'go'
+        working-directory: ${{ inputs.caminho }}
+        run: |
+          # -race e obrigatorio aqui: o donation-service publica em SQS dentro
+          # de uma goroutine, e corrida de dados nesse caminho corromperia o
+          # evento de doacao em producao sem estourar erro nenhum.
+          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out | tail -1
+
+      - name: Python — pytest com cobertura
+        if: inputs.linguagem == 'python'
+        working-directory: ${{ inputs.caminho }}
+        run: |
+          pip install --quiet -r requirements.txt -r requirements-dev.txt
+          python -m pytest -v --cov=. --cov-report=xml --cov-report=term
+
+      - name: Publicar a cobertura
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-${{ inputs.servico }}
+          path: |
+            ${{ inputs.caminho }}/coverage.out
+            ${{ inputs.caminho }}/coverage.xml
+          if-no-files-found: warn
+
+  # =========================================================================
+  sast:
+    name: SAST (SonarCloud)
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    # Sem SONAR_TOKEN configurado, o job e pulado em vez de falhar: um fork sem
+    # a integracao ainda consegue rodar o resto da pipeline.
+    if: ${{ !cancelled() }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fetch-depth 0: o Sonar precisa do historico para atribuir cada
+          # problema ao commit que o introduziu (analise de "new code").
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cobertura-${{ inputs.servico }}
+          path: ${{ inputs.caminho }}
+        continue-on-error: true
+
+      - name: SonarCloud
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: ${{ inputs.caminho }}
+          args: >
+            -Dsonar.projectKey=solidarytech-${{ inputs.servico }}
+            -Dsonar.organization=${{ vars.SONAR_ORG }}
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/*_test.go,**/test_*.py,**/conftest.py
+            -Dsonar.go.coverage.reportPaths=coverage.out
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+
+  # =========================================================================
+  build-scan-push:
+    name: Build, scan e push
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------
+      # CAMADA 1 de seguranca — SCA no codigo-fonte, ANTES do build.
+      #
+      # Analisa go.mod/go.sum e requirements.txt. Pega vulnerabilidade de
+      # DEPENDENCIA sem precisar construir a imagem: falha em ~20s em vez de
+      # depois de um build de varios minutos.
+      # ---------------------------------------------------------------
+      - name: Trivy — dependencias (SCA)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.caminho }}
+          severity: CRITICAL,HIGH
+          # Apenas CRITICAL bloqueia. HIGH aparece no relatorio mas nao trava a
+          # entrega: com HIGH bloqueando, qualquer CVE nova em dependencia
+          # transitiva pararia o time, e a reacao previsivel seria desligar o
+          # scan — que e pior do que ter um scan que so barra o que e critico.
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      # ---------------------------------------------------------------
+      - name: Build da imagem
+        run: |
+          docker build \
+            --target runtime \
+            --build-arg VERSION=${{ github.sha }} \
+            -t ${{ inputs.servico }}:${{ github.sha }} \
+            ${{ inputs.caminho }}
+
+      - name: Rodar a suite dentro da imagem
+        # Estagio `test` do Dockerfile. Garante que os testes passem no MESMO
+        # ambiente da imagem final — versao de runtime, libs de sistema e locale
+        # incluidos. Teste que so passa no runner e teste que mente.
+        run: docker build --target test ${{ inputs.caminho }}
+
+      # ---------------------------------------------------------------
+      # CAMADA 2 de seguranca — scan da IMAGEM construida.
+      #
+      # Complementa a camada 1: aqui entram os pacotes do sistema operacional
+      # base (Debian/Alpine), que o scan de filesystem nao enxerga.
+      # ---------------------------------------------------------------
+      - name: Trivy — imagem
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ inputs.servico }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Trivy — relatorio SARIF para o GitHub Security
+        uses: aquasecurity/trivy-action@0.28.0
+        if: always()
+        with:
+          image-ref: ${{ inputs.servico }}:${{ github.sha }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+
+      - name: Enviar ao GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-${{ inputs.servico }}
+        continue-on-error: true
+
+      # ---------------------------------------------------------------
+      - name: SBOM (CycloneDX)
+        # Inventario assinavel de tudo que existe na imagem. Quando a proxima
+        # Log4Shell aparecer, a pergunta "estamos expostos?" se responde
+        # consultando o SBOM, e nao reconstruindo imagem por imagem.
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ inputs.servico }}:${{ github.sha }}
+          format: cyclonedx-json
+          artifact-name: sbom-${{ inputs.servico }}.json
+
+      # ---------------------------------------------------------------
+      # PUSH — so a partir da main, e nunca em pull request.
+      # ---------------------------------------------------------------
+      - name: Credenciais AWS
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # SEM OIDC. A federacao OIDC seria o caminho correto (nenhum segredo
+          # armazenado), mas exige criar um aws_iam_openid_connect_provider —
+          # bloqueado no AWS Academy Learner Lab.
+          #
+          # Restam as credenciais da sessao, que JA SAO temporarias e expiram em
+          # ~4h junto com o lab. Renovadas por `make sync-creds` a cada sessao.
+          # A limitacao e a mitigacao estao documentadas em docs/06-dr-pcn/.
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGEM="${REGISTRY}/${REGISTRY_REPO}/${{ inputs.servico }}"
+          docker tag ${{ inputs.servico }}:${{ github.sha }} "${IMAGEM}:${{ github.sha }}"
+          # Apenas a tag com SHA. O repositorio ECR e IMMUTABLE, entao um
+          # `:latest` movel seria rejeitado — e e justamente esse o ponto: a tag
+          # implantada corresponde SEMPRE ao codigo daquele commit, o que
+          # sustenta a premissa do GitOps.
+          docker push "${IMAGEM}:${{ github.sha }}"
+          echo "Publicado: ${IMAGEM}:${{ github.sha }}"
+
+  # =========================================================================
+  update-gitops:
+    name: Atualizar o GitOps
+    needs: build-scan-push
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # Uma pipeline por vez alterando o repositorio GitOps: dois jobs commitando
+    # em paralelo causariam rejeicao de push por non-fast-forward.
+    concurrency:
+      group: gitops-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Instalar o kustomize
+        run: |
+          curl -sfLo kustomize.tar.gz \
+            https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.5.0/kustomize_v5.5.0_linux_amd64.tar.gz
+          tar -xzf kustomize.tar.gz && sudo mv kustomize /usr/local/bin/
+
+      - name: Fixar a tag da imagem
+        working-directory: ${{ inputs.overlay }}
+        run: |
+          # Le o newName ja configurado (registry real da conta) e troca apenas
+          # a tag. Assim `make configurar-repo` roda uma vez e a pipeline nunca
+          # precisa saber o ID da conta AWS.
+          ATUAL=$(kustomize cfg grep "kind=Kustomization" . 2>/dev/null || true)
+          kustomize edit set image \
+            ${{ inputs.servico }}=$(grep -A1 "name: ${{ inputs.servico }}" kustomization.yaml | grep newName | awk '{print $2}'):${{ github.sha }}
+
+      - name: Commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ inputs.overlay }}
+          if git diff --staged --quiet; then
+            echo "Nenhuma mudanca — a imagem ja estava nesta versao."
+            exit 0
+          fi
+          git commit -m "deploy(${{ inputs.servico }}): ${{ github.sha }}
+
+          Atualizacao automatica da tag da imagem pela pipeline de CI.
+          O ArgoCD sincroniza a partir deste commit.
+
+          Origem: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+          # Rebase antes do push: outra pipeline pode ter commitado no intervalo.
+          git pull --rebase origin main
+          git push

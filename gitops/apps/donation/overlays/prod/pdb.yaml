@@ -1,0 +1,14 @@
+# PodDisruptionBudget — ausente na Fase 4, e a falta custou caro.
+#
+# Sem ele, um `kubectl drain` (upgrade de no, rightsizing, manutencao do EKS)
+# pode despejar TODAS as replicas ao mesmo tempo e derrubar o servico durante
+# uma operacao planejada. Com minAvailable=1, o drain espera.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: donation-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: donation-service

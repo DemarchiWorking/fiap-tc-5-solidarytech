@@ -1,0 +1,148 @@
+# donation-service — o Hot Path da SolidaryTech.
+#
+# Todo valor de recurso aqui e resultado de medicao, nao de chute. A tabela
+# antes/depois esta em docs/04-finops/rightsizing.md (requisito F2.2).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: donation-service
+  labels:
+    app: donation-service
+    app.kubernetes.io/name: donation-service
+    app.kubernetes.io/component: hot-path
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: donation-service
+  template:
+    metadata:
+      labels:
+        app: donation-service
+        app.kubernetes.io/name: donation-service
+    spec:
+      # Sem IRSA (ADR-001), a ServiceAccount nao carrega credencial AWS: ela vem
+      # do IMDS do no. Declarada assim mesmo para deixar explicito qual
+      # identidade o pod usa, e para permitir a troca por IRSA numa conta AWS
+      # normal sem alterar mais nada.
+      serviceAccountName: donation-service
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Espalha as replicas entre nos. Com as duas no mesmo no, perder aquele no
+      # derruba o caminho critico inteiro — e derrubar o hot path e exatamente o
+      # que o SLO de disponibilidade existe para impedir.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: donation-service
+
+      containers:
+        - name: donation-service
+          # Sobrescrito pelo overlay com o SHA de 40 caracteres do commit,
+          # escrito pela pipeline via `kustomize edit set image`.
+          image: donation-service:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8082
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          env:
+            - name: PORT
+              value: "8082"
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: "prod"
+
+            # Endpoints da infraestrutura. O ConfigMap solidary-infra e gerado a
+            # partir dos OUTPUTS DO TERRAFORM pelo script de bootstrap: ninguem
+            # digita um endpoint na mao, o que elimina a classe de erro que so
+            # aparece como CrashLoopBackOff meia hora depois.
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef: { name: solidary-infra, key: aws_region }
+            - name: AWS_SQS_URL
+              valueFrom:
+                configMapKeyRef: { name: solidary-infra, key: sqs_url }
+
+            # Credencial do banco: vem de Secret criado pelo bootstrap a partir
+            # do AWS Secrets Manager. NUNCA versionada. A Fase 4 mantinha a
+            # senha do Postgres em texto puro dentro do repositorio GitOps.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: donation-db, key: database-url }
+
+            # OpenTelemetry. O donation-service e Go e usa OTLP sobre gRPC.
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4317"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+            - name: OTEL_SERVICE_NAME
+              value: "donation-service"
+
+          # Tres probes, com papeis distintos:
+          #
+          #  startup   — protege a inicializacao. Sem ela, a liveness comecaria a
+          #              contar durante o startup e mataria um pod que so estava
+          #              conectando ao banco. Ausente na Fase 4.
+          #  liveness  — "o processo travou?". NAO consulta o banco: uma liveness
+          #              que depende do RDS transforma uma queda do banco em
+          #              reinicio em massa de pods.
+          #  readiness — "posso receber trafego?". ESTA verifica banco e fila.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 3
+            failureThreshold: 20
+
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              # Sem limite de CPU seria melhor para latencia (evita throttling),
+              # mas num cluster de 6 vCPU compartilhado com a stack de
+              # observabilidade, um pod sem teto pode matar o Prometheus por
+              # inanicao. O teto e 5x o request: absorve pico sem monopolizar.
+              cpu: 500m
+              memory: 256Mi
+
+          volumeMounts:
+            # readOnlyRootFilesystem exige volume graavel para /tmp.
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+
+      # Tempo para drenar conexoes em voo apos o SIGTERM. O binario trata
+      # SIGTERM e faz shutdown gracioso (ver services/donation-service/main.go);
+      # sem essa folga, o Kubernetes mataria o processo no meio de uma doacao.
+      terminationGracePeriodSeconds: 30

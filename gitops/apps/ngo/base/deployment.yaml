@@ -1,0 +1,124 @@
+# ngo-service
+#
+# Gerado a partir da definicao unica em scripts de manutencao: os tres servicos
+# compartilham a mesma forma para que nenhum acabe sem probe, sem PDB ou sem
+# limite de recurso por descuito de copia e cola.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ngo-service
+  labels:
+    app: ngo-service
+    app.kubernetes.io/name: ngo-service
+    app.kubernetes.io/component: cadastro-de-ongs
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ngo-service
+  template:
+    metadata:
+      labels:
+        app: ngo-service
+        app.kubernetes.io/name: ngo-service
+    spec:
+      serviceAccountName: ngo-service
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Espalha as replicas entre nos: com as duas no mesmo no, perder aquele no
+      # derruba o servico inteiro.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: ngo-service
+
+      containers:
+        - name: ngo-service
+          # Sobrescrito pelo overlay com o SHA de 40 caracteres do commit,
+          # escrito pela pipeline via `kustomize edit set image`.
+          image: ngo-service:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8081
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          env:
+            - name: PORT
+              value: "8081"
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: "prod"
+
+            # Endpoints vindos dos OUTPUTS DO TERRAFORM, materializados pelo
+            # script de bootstrap. Ninguem digita endpoint na mao.
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef: { name: solidary-infra, key: aws_region }
+
+            # Credencial do banco: Secret criado pelo bootstrap a partir do AWS
+            # Secrets Manager. NUNCA versionada — a Fase 4 mantinha a senha do
+            # Postgres em texto puro dentro do repositorio GitOps.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: ngo-db, key: database-url }
+
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "ngo-service"
+
+          # startup protege a inicializacao (sem ela a liveness mataria um pod
+          # que so estava conectando ao banco); liveness NAO toca dependencia
+          # externa; readiness verifica banco/fila/tabela.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 3
+            failureThreshold: 20
+
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 96Mi
+            limits:
+              cpu: 400m
+              memory: 256Mi
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+
+      terminationGracePeriodSeconds: 30

@@ -1,0 +1,145 @@
+# OTel Collector — gateway (Deployment)
+#
+# Peca central da observabilidade: TODA a telemetria das aplicacoes entra aqui e
+# e distribuida para tres destinos. Trocar de APM (New Relic <-> Datadog) e
+# mudar este arquivo, sem tocar em uma linha de codigo de aplicacao — que e o
+# beneficio concreto de instrumentar com OpenTelemetry puro em vez de SDK
+# proprietario (ADR-004).
+
+mode: deployment
+replicaCount: 1
+
+# NOME FIXO E OBRIGATORIO. Os tres servicos apontam
+# OTEL_EXPORTER_OTLP_ENDPOINT para "otel-collector.monitoring.svc.cluster.local".
+# Sem o override, o chart geraria "otel-collector-opentelemetry-collector" e
+# toda a telemetria seria descartada em silencio — bug real vivido na Fase 4.
+fullnameOverride: otel-collector
+
+image:
+  # A distribuicao "contrib" e obrigatoria: os exporters de New Relic (via
+  # otlphttp), Datadog e prometheusremotewrite nao existem na distribuicao core.
+  repository: otel/opentelemetry-collector-contrib
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+  limits:
+    cpu: 400m
+    memory: 400Mi
+
+presets:
+  # Enriquece cada span, metrica e log com namespace, pod, node, deployment e
+  # labels. E o que permite filtrar por servico no Grafana sem que a aplicacao
+  # precise saber que roda em Kubernetes.
+  kubernetesAttributes:
+    enabled: true
+    extractAllPodLabels: true
+
+extraEnvsFrom:
+  # Chave do New Relic. Secret criado pelo bootstrap a partir de variavel de
+  # ambiente — nunca versionado. A Fase 4 tinha a DD_API_KEY em texto puro no
+  # values.yaml deste mesmo componente.
+  - secretRef:
+      name: apm-credentials
+      optional: true
+
+service:
+  type: ClusterIP
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317   # usado pelo donation-service (Go)
+        http:
+          endpoint: 0.0.0.0:4318   # usado pelos servicos Python
+
+  processors:
+    # memory_limiter PRIMEIRO no pipeline, sempre. Ele descarta dados sob
+    # pressao de memoria em vez de deixar o Collector morrer por OOM — perder
+    # amostra e ruim, perder o Collector inteiro durante um pico e pior, porque
+    # e exatamente quando a telemetria mais importa.
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+
+    batch:
+      timeout: 10s
+      send_batch_size: 1024
+
+    # Marca a origem da telemetria. Util quando a regiao de DR estiver no ar ao
+    # mesmo tempo que a primaria e for preciso saber de qual cluster veio o dado.
+    resource:
+      attributes:
+        - key: cloud.provider
+          value: aws
+          action: upsert
+        - key: k8s.cluster.name
+          value: solidarytech-prod-eks
+          action: upsert
+
+  exporters:
+    # 1) Metricas -> Prometheus. E por aqui que o histograma
+    #    solidary_http_server_duration_seconds chega ao Prometheus e viabiliza o
+    #    calculo do SLO de latencia (F1.1a).
+    prometheusremotewrite:
+      endpoint: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
+      # Converte atributos de resource (service.name, k8s.namespace.name) em
+      # labels da metrica. Sem isto nao ha como filtrar por servico no PromQL.
+      resource_to_telemetry_conversion:
+        enabled: true
+
+    # 2) Logs -> Loki, via endpoint OTLP nativo.
+    otlphttp/loki:
+      endpoint: http://loki-gateway.monitoring.svc.cluster.local/otlp
+      tls:
+        insecure: true
+
+    # 3) Traces -> APM SaaS (New Relic). Endpoint OTLP nativo: nenhum agente
+    #    proprietario roda no cluster.
+    otlphttp/newrelic:
+      endpoint: https://otlp.nr-data.net
+      headers:
+        api-key: ${env:NEW_RELIC_LICENSE_KEY}
+
+    # Alternativa Datadog, mantida versionada e COMENTADA (ADR-004). Trocar de
+    # APM e descomentar este bloco e ajustar o pipeline de traces — zero
+    # mudanca em codigo de aplicacao.
+    # datadog:
+    #   api:
+    #     key: ${env:DD_API_KEY}
+    #     site: us5.datadoghq.com
+
+    debug:
+      verbosity: basic
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [otlphttp/newrelic]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [prometheusremotewrite]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [otlphttp/loki]
+
+    telemetry:
+      metrics:
+        # O proprio Collector expoe metricas: fila cheia, dado descartado, erro
+        # de exportacao. Sem observar o observador, uma falha de telemetria e
+        # invisivel — parece simplesmente que "nao houve trafego".
+        address: 0.0.0.0:8888
+
+# ServiceMonitor para o Prometheus raspar as metricas do proprio Collector.
+serviceMonitor:
+  enabled: true
+  extraLabels:
+    release: kube-prometheus-stack

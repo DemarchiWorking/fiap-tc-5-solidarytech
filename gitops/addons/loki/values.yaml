@@ -1,0 +1,124 @@
+# Loki — logs centralizados, com backend em S3.
+#
+# DUAS DECISOES IMPORTANTES:
+#
+# 1. object_store: s3, e nao filesystem em PVC (que foi o que a Fase 4 usou).
+#    Motivos, em ordem de peso:
+#      * nao depende do EBS CSI driver, cujo funcionamento SEM IRSA e o maior
+#        risco tecnico deste projeto. Se o PVC nao provisionar, o Loki continua
+#        de pe e a evidencia de logs do relatorio esta salva;
+#      * S3 e ~5x mais barato por GB que EBS gp3;
+#      * o log sobrevive a perda do no, e nao ha PVC orfao cobrando depois de
+#        um `make lab-down`.
+#
+# 2. NENHUMA credencial de S3 e configurada. Sem access key, sem secret key,
+#    sem Secret no Kubernetes. O SDK da AWS cai na cadeia padrao ate o IMDSv2
+#    do no e assume a LabRole (ADR-001). E a mesma decisao que elimina segredo
+#    de nuvem do repositorio.
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: s3
+    bucketNames:
+      chunks: __LOKI_BUCKET__
+      ruler: __LOKI_BUCKET__
+      admin: __LOKI_BUCKET__
+    s3:
+      region: __AWS_REGION__
+      # s3ForcePathStyle e endpoint ficam vazios: o cliente resolve o endpoint
+      # padrao da AWS sozinho.
+      #
+      # accessKeyId / secretAccessKey INTENCIONALMENTE AUSENTES — ver cabecalho.
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  limits_config:
+    retention_period: 336h
+    # 16 MB/s de ingestao com burst de 32. O teste de carga k6 gera picos
+    # curtos; sem burst, o Loki descarta linha justamente durante o incidente
+    # que se quer investigar.
+    ingestion_rate_mb: 16
+    ingestion_burst_size_mb: 32
+    # Metadados estruturados: e o que permite consultar por trace_id sem
+    # varrer o texto da linha.
+    allow_structured_metadata: true
+    volume_enabled: true
+
+  compactor:
+    working_directory: /var/loki/compactor
+    retention_enabled: true
+    delete_request_store: s3
+
+singleBinary:
+  replicas: 1
+  # Sem PVC: os chunks vao para o S3 e o disco local so guarda WAL e cache
+  # temporario, que sao descartaveis por definicao.
+  persistence:
+    enabled: false
+  extraVolumes:
+    - name: temporario
+      emptyDir:
+        sizeLimit: 2Gi
+  extraVolumeMounts:
+    - name: temporario
+      mountPath: /var/loki
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# O gateway (nginx) e o endereco unico que o Grafana e o OTel Collector usam.
+gateway:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+# chunksCache pede ~9,6 GiB de memoria no padrao do chart — mais do que um no
+# t3.medium inteiro tem. Deixar ligado prende o pod em Pending para sempre.
+# Mesmo problema enfrentado na Fase 4 com os nos Standard_B2s.
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# Componentes do modo distribuido, desnecessarios em SingleBinary.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+monitoring:
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false

@@ -1,0 +1,125 @@
+# Alertas de plataforma — o que NAO e SLO.
+#
+# Distincao metodologica que vale a pena declarar: os alertas de SLO
+# (slo-rules.yaml) medem SINTOMA — o usuario esta sendo afetado? Estes aqui
+# medem CAUSA — algo esta quebrado que provavelmente vai virar sintoma.
+#
+# Por isso quase nenhum deles tem severity=page. Um pod reiniciando enquanto o
+# error budget esta intacto nao justifica acordar ninguem: o Kubernetes ja esta
+# lidando com o problema. Confundir os dois e a origem da fadiga de alerta, que
+# e o que faz um time parar de olhar para o alerta que realmente importava.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: solidarytech-plataforma
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: solidarytech.aplicacao
+      rules:
+        - alert: PodEmCrashLoop
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace=~"solidary-.*"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "Pod {{ $labels.pod }} reiniciando repetidamente"
+            description: "{{ $value | printf \"%.0f\" }} reinicios em 15 minutos no namespace {{ $labels.namespace }}."
+
+        - alert: DeploymentSemReplicaDisponivel
+          # ESTE tem severity=page: zero replica disponivel significa que o
+          # servico esta fora do ar. E o alerta que o chaos drill da F1.3
+          # dispara ao escalar o donation-service para 0.
+          expr: |
+            kube_deployment_status_replicas_available{namespace=~"solidary-.*"} == 0
+            and
+            kube_deployment_spec_replicas{namespace=~"solidary-.*"} > 0
+          for: 2m
+          labels:
+            severity: page
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} sem nenhuma replica disponivel"
+            description: "O servico esta indisponivel. Namespace: {{ $labels.namespace }}."
+            servico_afetado: "{{ $labels.deployment }}"
+
+        - alert: HPANoLimiteMaximo
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace=~"solidary-.*"}
+            >= kube_horizontalpodautoscaler_spec_max_replicas{namespace=~"solidary-.*"}
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "HPA de {{ $labels.horizontalpodautoscaler }} saturado no maximo"
+            description: >-
+              Nao ha mais para onde escalar. Ou o maxReplicas esta baixo demais,
+              ou existe um gargalo fora do pod (banco, fila) que escalar nao
+              resolve — foi exatamente o cenario do enunciado da Fase 4, em que o
+              HPA escalava sem tratar a causa raiz.
+
+        - alert: MensagensNaDLQ
+          # Mensagem na DLQ significa evento de doacao que falhou 3 vezes.
+          # Nunca e normal: sempre exige investigacao humana.
+          expr: |
+            increase(solidary_donation_events_processed_total{status="erro"}[1h]) > 5
+          for: 10m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "Eventos de doacao falhando no processamento"
+            description: "Verificar a DLQ e o runbook docs/05-itsm-aiops/runbooks/fila-de-doacoes.md"
+
+    - name: solidarytech.infraestrutura
+      rules:
+        - alert: NoComPoucaMemoria
+          expr: |
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.90
+          for: 10m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "No {{ $labels.instance }} acima de 90% de memoria"
+            description: >-
+              Com 3 nos t3.medium, perder um no por pressao de memoria tira 1/3
+              da capacidade e pode disparar uma cascata de reagendamento.
+
+        - alert: DiscoDoPrometheusEnchendo
+          expr: |
+            predict_linear(kubelet_volume_stats_available_bytes{persistentvolumeclaim=~".*prometheus.*"}[6h], 24*3600) < 0
+          for: 30m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "PVC do Prometheus deve encher nas proximas 24h"
+            description: >-
+              Prometheus sem espaco para de gravar metrica, e sem metrica NAO HA
+              calculo de SLO — o painel de SRE fica cego justamente quando mais
+              se precisa dele.
+
+        - alert: ArgoCDApplicationDegradada
+          expr: |
+            argocd_app_info{health_status!="Healthy",health_status!="Progressing"} == 1
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "Application {{ $labels.name }} em estado {{ $labels.health_status }}"
+            description: >-
+              O GitOps parou de convergir: o cluster nao reflete mais o Git, e a
+              premissa de "o repositorio e a fonte de verdade" deixou de valer.
+
+        - alert: BackupDoVeleroAtrasado
+          # Backup que falha em silencio e pior que nao ter backup: da falsa
+          # seguranca. Enquanto este alerta estiver ativo, o RPO declarado no PCN
+          # nao esta sendo cumprido.
+          expr: |
+            (time() - velero_backup_last_successful_timestamp{schedule="horario-aplicacoes"}) > 7200
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "Nenhum backup horario bem-sucedido nas ultimas 2 horas"
+            description: "Ver docs/06-dr-pcn/runbook-dr.md"

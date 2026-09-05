@@ -1,0 +1,49 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+.terraformrc
+terraform.rc
+terraform.tfvars
+*.auto.tfvars
+
+# Credenciais e segredos — NUNCA versionar
+# (a Fase 4 versionou secrets.yaml em texto puro; aqui isso e bloqueado por politica)
+*secrets.yaml
+*secret.yaml
+.env
+.env.*
+!.env.example
+credentials
+*.pem
+*.key
+kubeconfig*
+
+# Build / deps
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+coverage.out
+coverage.xml
+.coverage
+*.test
+
+# Evidencias binarias grandes (ficam fora do git; referenciadas no relatorio)
+docs/07-evidencias/**/*.mp4
+docs/07-evidencias/**/*.mov
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

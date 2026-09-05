@@ -1,0 +1,151 @@
+Hackathon Página 1 de 8
+Hackathon Página 2 de 8
+HACKATHON
+Hackathon é o projeto que englobará os conhecimentos obtidos em todas
+as disciplinas de todas as fases. Esta é uma atividade que, em princípio, deve
+ser desenvolvida em grupo. Importante atentar-se ao prazo de entrega, pois
+trata-se de uma atividade obrigatória, uma vez que vale 90% da nota de todas
+as disciplinas da fase 5.
+Importante: Projeto Novo
+Chegamos à reta final. O Tech Challenge da Fase 5 será um Hackathon
+de 2 meses corridos. O objetivo não é apenas entregar código, mas provar a
+maturidade operacional, financeira e de resiliência de um ambiente em nuvem
+utilizando as práticas de SRE, FinOps, Segurança e ITSM/AIOps.
+DESAFIO
+Sua equipe deve construir, orquestrar, monitorar, otimizar financeiramente
+e criar a estratégia de resiliência para o novo ecossistema de microsserviços
+da SolidaryTech.
+Os novos microsserviços (código-fonte será fornecido nesse repositório:
+https://github.com/dougls/hackathon-DCLT) são:
+1. ngo-service: cadastro e gestão de ONGs parceiras.
+2. donation-service: processamento das doações (Caminho Crítico /
+Hot Path).
+3. volunteer-service: match entre voluntários e campanhas.
+REGRA DE OURO (PROJETO EVOLUTIVO): Para que este cenário seja
+realista e válido para avaliação, é obrigatório que toda a base tecnológica
+aprendida nas Fases 1, 2, 3 e 4 seja aplicada a este novo ecossistema. Não
+haverá deploy manual via kubectl, não haverá infraestrutura "clicada" no console
+e não haverá voo cego sem monitoramento profundo.
+Hackathon Página 3 de 8
+PROPOSTA
+A SolidaryTech é uma iniciativa sem fins lucrativos que conecta ONGs a
+doadores e voluntários em todo o Brasil. Recentemente, a plataforma ganhou
+destaque em rede nacional, o que gerou picos de acesso imprevisíveis.
+A diretoria da SolidaryTech percebeu que, além de ter um deploy
+automatizado, a plataforma precisa de garantias empresariais rígidas:
+• Se a nuvem cair (Disaster Recovery), as doações não podem parar.
+• Os custos com infraestrutura (FinOps) estão fora de controle e
+precisam ser tagueados e justificados.
+• O tempo de resposta a incidentes precisa ser preditivo (AIOps), não
+apenas reativo.
+• Precisamos de acordos de nível de serviço (SLO/SLA) claros com as
+ONGs parceiras.
+Requisitos técnicos
+Sua entrega será avaliada em 5 frentes de requisitos.
+0. A Fundação DevOps (Fases 1 a 4) - Requisito Obrigatório
+Antes de aplicar as práticas da Fase 5, seu projeto deve comprovar a
+utilização de todas as disciplinas anteriores:
+• Docker e Kubernetes: criação de Dockerfiles otimizados para os 3
+novos serviços e implantação no Kubernetes (EKS, AKS ou GKE).
+• Infraestrutura como Código (IaC): provisionamento de todo o
+ambiente (Cluster, Bancos de Dados, Mensageria, Rede) via
+Terraform.
+• CI/CD e DevSecOps: pipelines automatizados (ex: GitHub Actions)
+contemplando testes, scans de segurança (SAST/SCA com
+ferramentas como Trivy/Sonar) e construção da imagem.
+• GitOps: entrega contínua configurada através de ferramentas como
+ArgoCD ou FluxCD.
+Hackathon Página 4 de 8
+• Observabilidade e APM: stack completa rodando (Prometheus,
+Grafana, Loki e/ou OpenTelemetry) e instrumentação dos códigos no
+APM (Datadog ou New Relic) com Distributed Tracing.
+1. SRE: Confiabilidade e Golden Metrics
+A engenharia de confiabilidade deve ser a prioridade.
+• Definição de SLOs e SLIs: para o donation-service, defina e
+documente, no mínimo, dois SLIs (Service Level Indicators) baseados
+nas Golden Metrics (ex: Latência e Taxa de Erros). Estabeleça o SLO
+(Service Level Objective) para cada um (ex: 99.9% de sucesso).
+• Dashboard SRE: crie um painel específico no Grafana ou na
+ferramenta de APM focado exclusivamente nos SLOs e no consumo
+do Error Budget da plataforma.
+• MTTR: evidencie no relatório como a stack de observabilidade e as
+automações de resposta a incidentes ajudam a reduzir ativamente o
+MTTR (Mean Time To Recovery).
+2. FinOps: Otimização Financeira e Tagueamento
+Como o orçamento da ONG é limitado, cada centavo conta.
+• Estratégia de Tagging (IaC): implemente uma política de tags
+rigorosa diretamente no seu código Terraform. Todos os recursos de
+nuvem devem conter tags obrigatórias como Project=SolidaryTech,
+Environment=Production e CostCenter=NGO-Core.
+• Rightsizing: analise as métricas de CPU/Memória do Kubernetes e
+ajuste os requests e limits dos Pods nos manifestos YAML (via GitOps)
+para evitar desperdício de recursos.
+• Relatório de Forecast: crie uma projeção (Forecast) de custos
+mensais da arquitetura. Indique pelo menos uma recomendação
+prática de otimização nativa de nuvem.
+Hackathon Página 5 de 8
+3. ITSM e AIOps: Gestão Preditiva
+Incidentes devem ser previstos antes de afetarem o doador.
+• Configuração de AIOps: ative as funcionalidades de Inteligência
+Artificial da sua ferramenta de APM (ex: Watchdog no Datadog ou
+Applied Intelligence no New Relic) para detectar anomalias
+comportamentais automáticas.
+• Gestão de Incidentes (ITSM): desenhe o fluxo de vida de um
+incidente da SolidaryTech (da detecção via AIOps/Alerta até o PostMortem e comunicação aos stakeholders).
+4. Multicloud, Segurança e Disaster Recovery (DR)
+Se o cluster principal cair, a SolidaryTech precisa sobreviver.
+• Plano de Continuidade de Negócios (PCN): escreva um documento
+executivo de PCN. Defina os valores críticos de RTO (Recovery Time
+Objective) e RPO (Recovery Point Objective) para os dados das
+doações.
+• Estratégia de DR Prática: Implemente e evidencie uma estratégia de
+backup/DR.
+o Opção A (Multicloud/Cross-Region Backup): configure o Velero no
+Kubernetes para fazer backup do estado do cluster (manifestos e
+volumes) para um bucket externo.
+o Opção B (Infraestrutura Ativo-Passivo): utilize seu Terraform para
+modularizar a infraestrutura e ser capaz de levantar um ambiente
+"espelho" (Warm Standby) em outra região com 1 comando.
+Hackathon Página 6 de 8
+ENTREGÁVEIS DA FASE 4
+REGRA DE AVALIAÇÃO: É obrigatório evidenciar o funcionamento de
+todas as métricas, configurações e requisitos solicitados abaixo. Qualquer
+requisito que não for claramente demonstrado no vídeo ou documentado no
+relatório sofrerá dedução direta de pontos. Não basta configurar; é preciso
+mostrar operando na prática.
+Código Fonte no Repositório:
+• Código IaC completo (Terraform) com tags FinOps.
+• Manifestos YAML configurados com limits/requests (Rightsizing).
+• Arquivos de pipeline (GitHub Actions/GitLab CI) contemplando
+DevSecOps.
+Vídeo de Demonstração (até 20 min):
+• O Pitch Executivo (15 a 20 min): apresente a arquitetura, o PCN e
+as estratégias financeiras como se estivesse vendendo a viabilidade
+do projeto para a diretoria da ONG.
+• A Demo Tech (Fundação + Hackathon):
+o Mostre os pipelines CI/CD rodando e o deploy no cluster via
+ArgoCD.
+o Exiba o Terraform rodando (ou evidencie a criação de recursos
+baseada em tags).
+o Mostre a rastreabilidade no APM (Traces) e os alertas
+configurados.
+o Mostre o Dashboard SRE com as Golden Metrics e os SLOs
+calculados.
+o Demonstre o sistema de Backup/DR em ação (ex: mostrando o
+Velero ou os módulos do Terraform prontos para a região
+secundária).
+Hackathon Página 7 de 8
+Relatório de Entrega (.PDF):
+• Nomes, RMs e usernames.
+• Links do repositório de código e do vídeo.
+• Evidências Visuais (Obrigatório):
+o Seção SRE: definição formal de SLI, SLO e SLA do serviço de
+doações.
+o Seção FinOps: análise de custos mensais (Forecast) e evidências
+das tags aplicadas.
+o Seção Segurança e DR: documento de PCN (com RPO e RTO) e
+explicação da estratégia de Disaster Recovery.
+o Seção ITSM/AIOps: desenho do ciclo de vida de incidentes.
+Lembrando que qualquer dúvida, podem nos chamar no Discord.
+Boa sorte!
+Hackathon Página 8 de 8

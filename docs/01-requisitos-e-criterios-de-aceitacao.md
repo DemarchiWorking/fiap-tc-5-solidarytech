@@ -31,15 +31,15 @@
 
 | ID | Requisito | Critério de aceitação (o que prova que está pronto) | Artefato no repo | Evidência | Vídeo | Risco | Status |
 |---|---|---|---|---|---|---|---|
-| **F0.1a** | Dockerfiles **otimizados** para os 3 serviços | Build multi-stage; imagem final **sem toolchain**; usuário **não-root**; `HEALTHCHECK`; tamanho registrado antes/depois | `services/*/Dockerfile` | `docs/07-evidencias/f1-imagens-tamanho.md` (saída de `docker images`) | Demo Tech | 🟠 | ⬜ |
+| **F0.1a** | Dockerfiles **otimizados** para os 3 serviços | Build multi-stage; imagem final **sem toolchain**; usuário **não-root**; `HEALTHCHECK`; tamanho registrado antes/depois | `services/*/Dockerfile` | `docs/07-evidencias/f1-imagens-tamanho.md` (saída de `docker images`) | Demo Tech | 🟠 | 🟨 |
 | **F0.1b** | Implantação em **Kubernetes gerenciado** | Cluster **EKS** provisionado por IaC; os 3 serviços `Running` e `Ready` | `infra/modules/eks/` | `kubectl get pods -A` + console EKS | Demo Tech | 🔴 | ⬜ |
 | **F0.2** | **IaC com Terraform** cobrindo **todo** o ambiente | Cluster **+ Bancos + Mensageria + Rede** provisionados 100% por Terraform. **Zero** recurso criado no console | `infra/` completo | `terraform plan` limpo + `terraform state list` | Demo Tech (item 2) | 🔴 | ⬜ |
-| **F0.3a** | Pipeline com **testes automatizados** | Job `test` roda e publica cobertura; falha de teste **quebra** o pipeline | `.github/workflows/ci-*.yml` | Run verde no Actions | Demo Tech (item 1) | 🔴 | ⬜ |
+| **F0.3a** | Pipeline com **testes automatizados** | Job `test` roda e publica cobertura; falha de teste **quebra** o pipeline | `.github/workflows/ci-*.yml` | Run verde no Actions | Demo Tech (item 1) | 🔴 | 🟨 |
 | **F0.3b** | **SCA/SAST** com Trivy e Sonar | **Trivy em 2 camadas** (filesystem + imagem), `CRITICAL` bloqueia o push; **SonarCloud** recebe código + cobertura | `.github/workflows/ci-*.yml` | Print do PR **bloqueado** por CVE plantado + dashboard Sonar | Demo Tech (item 1) | 🔴 | ⬜ |
 | **F0.3c** | **Construção da imagem** e push ao registry | Imagem taggeada com **SHA de 40 chars** publicada no ECR | `.github/workflows/ci-*.yml` | `aws ecr describe-images` | Demo Tech (item 1) | 🟠 | ⬜ |
 | **F0.4** | **GitOps** com ArgoCD | Todo deploy nasce de **commit no Git**; App-of-Apps sincroniza; **nenhum `kubectl apply` manual** de aplicação | `gitops/` completo | `kubectl get applications -n argocd` todas `Synced/Healthy` | Demo Tech (item 1) | 🔴 | ⬜ |
 | **F0.5a** | Stack **Prometheus + Grafana + Loki + OTel** | Os 4 componentes rodando e **recebendo dado real** dos 3 serviços | `gitops/addons/` | Query PromQL + LogQL com resultado | Demo Tech | 🔴 | ⬜ |
-| **F0.5b** | **APM com Distributed Tracing** | Trace **ponta a ponta** `ngo → donation → SQS → volunteer` visível no APM, com `trace_id` correlacionável ao log no Loki | `gitops/addons/otel-collector-gateway/` | Print do trace + service map | Demo Tech (item 3) | 🔴 | ⬜ |
+| **F0.5b** | **APM com Distributed Tracing** | Trace **ponta a ponta** `ngo → donation → SQS → volunteer` visível no APM, com `trace_id` correlacionável ao log no Loki | `gitops/addons/otel-collector-gateway/` | Print do trace + service map | Demo Tech (item 3) | 🔴 | 🟨 |
 
 ---
 
@@ -123,12 +123,21 @@
 
 | Frente | Requisitos | 🔴 Alto risco | Status |
 |---|---|---|---|
-| F0 — Fundação | 9 | 6 | 0/9 |
+| F0 — Fundação | 9 | 6 | 0/9 ✅ · 3/9 🟨 |
 | F1 — SRE | 6 | 5 | 0/6 |
 | F2 — FinOps | 5 | 4 | 0/5 |
 | F3 — ITSM/AIOps | 4 | 2 | 0/4 |
 | F4 — Segurança/DR | 4 | 3 | 0/4 |
 | Entregáveis | 12 | 12 | 0/12 |
-| **Total** | **40** | **32** | **0/40** |
+| **Total** | **40** | **32** | **0/40 ✅ · 3/40 🟨** |
 
 > Atualizar esta tabela ao fim de cada fase, junto com `docs/PROGRESSO.md`.
+
+---
+
+## Registro de atualizações
+
+| Data | Fase | O que mudou |
+|---|---|---|
+| 2026-09-05 | F0 | Matriz criada — 40 requisitos mapeados |
+| 2026-09-05 | F1 | F0.1a, F0.3a e F0.5b passam a 🟨: artefato pronto (Dockerfiles multi-stage, 62 testes, instrumentação OTel com trace atravessando o SQS), evidência de execução ainda pendente |

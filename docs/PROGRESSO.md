@@ -7,10 +7,10 @@
 
 | Campo | Valor |
 |---|---|
-| Fase corrente | **F0 — Requisitos e rastreabilidade** |
-| Status | ✅ Concluída |
-| Próxima fase | **F1 — Serviços e containers** |
-| Cobertura da matriz | 0/40 requisitos com evidência (esperado: a F0 não produz evidência de execução) |
+| Fase corrente | **F1 — Serviços e containers** |
+| Status | 🟨 Código pronto e testado; gate de container **pendente do Docker Desktop** |
+| Próxima fase | **F2 — Terraform / IaC** |
+| Cobertura da matriz | 0/40 com evidência de execução (F0 e F1 produzem artefato; a evidência vem quando a stack subir) |
 | Crédito AWS consumido | **US$ 0,00** — nenhuma infraestrutura provisionada até aqui |
 
 ## Parâmetros fixados
@@ -22,7 +22,8 @@
 | Cluster | EKS, managed node group `t3.medium` × 3 |
 | IAM | **`LabRole`** por `data source` — nunca `resource` |
 | APM | New Relic (Datadog atrás de flag — ADR-004) |
-| Código-fonte dos serviços | `https://github.com/dougls/hackathon-DCLT` — **commit a fixar na F1** |
+| Código-fonte dos serviços | `dougls/hackathon-DCLT` @ **`79f5c20de1f039ae9c43c3ef4c09ad89362f5f1a`** (fixado) |
+| Toolchain local | Python 3.11 ✅ · Docker 29.5.2 instalado (daemon parado) · Go/Terraform/AWS CLI **ausentes** → gates rodam em container |
 | Repositório de referência (Fase 4) | `../../challenge-etapa-4/fiap-tc-3-gitops` (somente leitura) |
 
 ## Histórico por fase
@@ -57,13 +58,47 @@
 
 ---
 
-### F1 — Serviços e containers ⬜
+### F1 — Serviços e containers 🟨
 
-**Objetivo:** importar os 3 serviços, containerizar com multi-stage, instrumentar com
-OpenTelemetry (**incluindo histograma de duração**), adicionar `/health` e `/ready`, testes com
-cobertura e `docker-compose` com Postgres + LocalStack para validar tudo **sem consumir crédito**.
+**Entregue:**
+- Os 3 serviços importados e reescritos em `services/`, com **22 defeitos corrigidos** — tabela
+  completa em [`services/README.md`](../services/README.md).
+- Instrumentação **OpenTelemetry** nos 3, com o histograma `solidary.http.server.duration` de
+  **nome, unidade e buckets idênticos em Go e Python** — a lacuna que a Fase 4 admitia.
+- `traceparent` W3C atravessando o **SQS**, costurando produtor e consumidor em **um único trace**.
+- **`volunteer-worker`**: consumidor da fila, acrescentado ao projeto (o código original publicava
+  em SQS e nada consumia). Mesma imagem do `volunteer-service`, apenas com `command` diferente.
+- Dockerfiles multi-stage com estágio de teste, usuário não-root e `HEALTHCHECK`
+  (Go em **distroless**; Python sem compilador na imagem final).
+- `docker-compose.yml` + LocalStack replicando a topologia AWS (fila **com DLQ**, tabela DynamoDB,
+  um Postgres com dois databases conforme ADR-006) e `smoke-local.sh` cobrindo o fluxo de negócio.
 
-**Gate:** `docker compose up` sobe os 3 serviços e o fluxo doação → SQS → DynamoDB funciona local.
+**Gates executados:**
+
+| Gate | Resultado |
+|---|---|
+| `pytest` ngo-service | ✅ **25 passed**, cobertura **91 %** |
+| `pytest` volunteer-service | ✅ **37 passed**, cobertura **90 %** |
+| `docker compose config` | ✅ válido |
+| `go vet` + `go test` (donation-service) | ⏳ **bloqueado** — Docker Desktop parado e Go não instalado |
+| `docker build` das 3 imagens | ⏳ **bloqueado** — Docker Desktop parado |
+| `./smoke-local.sh` | ⏳ **bloqueado** — Docker Desktop parado |
+
+**Dois bugs encontrados pelos próprios testes durante esta fase** (corrigidos no código, não no teste):
+1. `validar_ngo` rejeitava e-mail com espaços em volta, porque validava **antes** de normalizar —
+   e formulário web envia espaço em volta o tempo todo.
+2. O fixture de teste do worker dependia do `TracerProvider` **global** do OTel, que só aceita ser
+   definido uma vez por processo: passava isolado e falhava na suíte completa, conforme a ordem de
+   coleta do pytest. Tracer passou a ser injetado.
+
+**Pendência para fechar a F1:** iniciar o **Docker Desktop** e rodar
+`docker build --target test ./donation-service` e `docker compose up -d --build && ./smoke-local.sh`.
+
+**Ponto em aberto levado para a F2:** o `README` do repositório oficial lista **ElastiCache** entre
+os recursos a provisionar, mas nenhum dos 3 serviços usa cache, e o enunciado avaliado pede apenas
+*"Cluster, Bancos de Dados, Mensageria, Rede"*. Decisão proposta: escrever o módulo Terraform de
+ElastiCache com `enable_elasticache = false` por padrão — o código existe e liga com uma variável,
+sem queimar ~US$ 12/mês de crédito por um recurso que ninguém consome.
 
 ---
 

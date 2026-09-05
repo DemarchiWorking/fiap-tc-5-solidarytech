@@ -1,0 +1,20 @@
+# ngo-service — dependencias de runtime
+#
+# Versoes elevadas em relacao ao codigo original (Flask 2.2.2 / gunicorn 20.1.0
+# / psycopg2 2.9.5), que carregavam CVEs conhecidas e fariam o gate de
+# CRITICAL do Trivy barrar o push da imagem.
+Flask==3.1.0
+gunicorn==23.0.0
+psycopg2-binary==2.9.10
+
+# Log estruturado em JSON para consumo direto por LogQL no Loki.
+python-json-logger==3.2.1
+
+# --- OpenTelemetry ---------------------------------------------------------
+# Instrumentacao vendor-neutral: trocar o APM (New Relic <-> Datadog) e mudar o
+# exporter do Collector, sem tocar em nenhuma linha de aplicacao (ver ADR-004).
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-http==1.29.0
+opentelemetry-instrumentation-flask==0.50b0
+opentelemetry-instrumentation-psycopg2==0.50b0

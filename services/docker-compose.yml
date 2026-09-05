@@ -1,0 +1,120 @@
+# Ambiente de desenvolvimento local completo da SolidaryTech.
+#
+# Sobe PostgreSQL e LocalStack (SQS + DynamoDB) e os tres microsservicos, sem
+# tocar na AWS. Isso nao e conveniencia: com sessao de 4 horas e credito finito
+# no Learner Lab, todo trabalho que pode ser feito fora da nuvem DEVE ser feito
+# fora da nuvem. E a primeira recomendacao de FinOps do projeto, aplicada ao
+# proprio processo de desenvolvimento.
+#
+#   docker compose up -d --build
+#   ./smoke-local.sh
+#   docker compose down -v
+
+name: solidarytech
+
+x-aws-local: &aws-local
+  # Credenciais falsas: o LocalStack aceita qualquer valor. NAO ha, e nao pode
+  # haver, credencial real neste arquivo — na AWS a autenticacao vem do IMDS do
+  # no via LabRole (ADR-001).
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_REGION: us-east-1
+  AWS_ENDPOINT_URL: http://localstack:4566
+
+x-otel: &otel
+  # Sem Collector no compose por padrao: OTEL_EXPORTER_OTLP_ENDPOINT vazio faz
+  # os servicos usarem os providers no-op e subirem normalmente. Para exercitar
+  # a telemetria localmente, suba o perfil `observabilidade`.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  DEPLOYMENT_ENVIRONMENT: local
+  SERVICE_VERSION: local-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solidary
+      POSTGRES_PASSWORD: solidary_local_only
+      # Cria apenas ngo_db; donation_db e criado pelo script de init abaixo.
+      # Espelha o ADR-006: UMA instancia, DOIS databases.
+      POSTGRES_DB: ngo_db
+    ports: ["5432:5432"]
+    volumes:
+      - ./ngo-service/db/init.sql:/docker-entrypoint-initdb.d/10-ngo.sql:ro
+      - ./donation-service/db/init.sql:/docker-entrypoint-initdb.d/30-donation.sql:ro
+      - ./local/00-cria-donation-db.sh:/docker-entrypoint-initdb.d/20-cria-donation-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solidary -d ngo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: sqs,dynamodb
+      DEBUG: "0"
+      AWS_DEFAULT_REGION: us-east-1
+    ports: ["4566:4566"]
+    volumes:
+      - ./local/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+    healthcheck:
+      # O endpoint /_localstack/init informa quando os scripts de ready.d
+      # terminaram. Esperar so pela porta 4566 subiria os servicos antes de a
+      # fila e a tabela existirem — corrida que gera falha intermitente.
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/init/ready.d | grep -q '\"state\": \"SUCCESSFUL\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ngo-service:
+    build:
+      context: ./ngo-service
+      target: runtime
+    environment:
+      <<: *otel
+      PORT: "8081"
+      DATABASE_URL: postgres://solidary:solidary_local_only@postgres:5432/ngo_db
+    ports: ["8081:8081"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  donation-service:
+    build:
+      context: ./donation-service
+      target: runtime
+    environment:
+      <<: [*otel, *aws-local]
+      PORT: "8082"
+      DATABASE_URL: postgres://solidary:solidary_local_only@postgres:5432/donation_db
+      AWS_SQS_URL: http://localstack:4566/000000000000/donation-events
+    ports: ["8082:8082"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  volunteer-service:
+    build:
+      context: ./volunteer-service
+      target: runtime
+    environment:
+      <<: [*otel, *aws-local]
+      PORT: "8083"
+      AWS_DYNAMODB_TABLE: SolidaryTechVolunteers
+    ports: ["8083:8083"]
+    depends_on:
+      localstack: { condition: service_healthy }
+
+  volunteer-worker:
+    # Mesma imagem do volunteer-service, command diferente. E o que fecha o
+    # trace ponta a ponta: donation -> SQS -> worker.
+    build:
+      context: ./volunteer-service
+      target: runtime
+    command: ["python", "worker.py"]
+    environment:
+      <<: [*otel, *aws-local]
+      AWS_DYNAMODB_TABLE: SolidaryTechVolunteers
+      AWS_SQS_URL: http://localstack:4566/000000000000/donation-events
+    depends_on:
+      localstack: { condition: service_healthy }

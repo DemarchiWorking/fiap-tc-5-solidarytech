@@ -1,0 +1,17 @@
+# Contexto de build minimo: acelera o build e evita levar arquivo local
+# para dentro da imagem.
+.git
+.gitignore
+*.md
+Dockerfile
+.dockerignore
+.env
+.env.*
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+coverage.xml
+db/

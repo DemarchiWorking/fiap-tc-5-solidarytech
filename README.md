@@ -23,8 +23,9 @@ provisionada 100% por **Terraform** e entregue por **GitOps (ArgoCD)**.
 ativa com as credenciais em `~/.aws/credentials`.
 
 ```bash
-# 0. Confirme que a sessão do lab está viva
-make whoami
+# 0. Pré-voo: valida ferramentas, credenciais e código em 40s
+make setup      # 1x por máquina
+make pre-voo    # veredito GO / NO-GO
 
 # 1. Uma vez por conta — cria o bucket de state do Terraform
 make bootstrap
@@ -116,6 +117,7 @@ na fila** — nenhuma doação se perde.
 | [Enunciado transcrito](docs/00-enunciado/README.md) | — |
 | [**Matriz de requisitos × evidências**](docs/01-requisitos-e-criterios-de-aceitacao.md) | checklist de nota |
 | [Arquitetura](docs/02-arquitetura/README.md) e [ADRs 001–007](docs/02-arquitetura/adr/README.md) | — |
+| [**Evolução v3 → v4 → v5**](docs/02-arquitetura/evolucao-v3-v4-v5.md) | Regra de Ouro |
 | [**SLI, SLO, SLA e Error Budget**](docs/03-sre/sli-slo-sla.md) · [Chaos drill / MTTR](docs/03-sre/mttr-chaos-drill.md) | **F1** |
 | [**FinOps** — tags, rightsizing, forecast](docs/04-finops/README.md) | **F2** |
 | [**ITSM e AIOps**](docs/05-itsm-aiops/README.md) · [runbooks](docs/05-itsm-aiops/runbooks/) · [post-mortem](docs/05-itsm-aiops/post-mortem-modelo.md) | **F3** |

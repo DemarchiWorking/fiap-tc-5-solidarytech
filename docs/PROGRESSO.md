@@ -11,7 +11,18 @@
 | Pendente | **Evidência de execução** — depende de uma sessão do Learner Lab |
 | Cobertura da matriz | **39/40** requisitos com artefato · 0/40 com evidência |
 | Crédito AWS consumido | **US$ 0,00** — nada provisionado até aqui |
-| Commits | 5 locais · **nenhum push** |
+| Commits | 6 locais · **nenhum push** |
+
+### Amanhã, comece por aqui
+
+```bash
+make setup      # 1x por máquina — instala as deps dos gates
+make pre-voo    # 40s — veredito GO / NO-GO
+```
+
+O **pré-voo** verifica ferramentas, Docker de fato rodando, credencial com os
+três campos, `LabRole`, região, remote do Git, chave do New Relic e todos os
+gates de código — **sem tocar na nuvem e sem gastar nada**. Só siga com **GO**.
 
 ### O que falta, exatamente
 
@@ -173,6 +184,13 @@ requisito→minuto, e relatório com as 4 seções de evidência obrigatórias.
   antes de commitar não sobrevive a prazo apertado.
 - `dr-drill.yml` — drill de DR que **captura a própria evidência** no summary,
   resolvendo o problema real de "fizemos o teste, mas ninguém tirou print".
+- `scripts/pre-voo.sh` — troca 20 minutos de `terraform apply` fracassado por 40
+  segundos de verificação. **Já encontrou um problema real:** o `aws` CLI não
+  estava instalado nesta máquina — e ele **não pode ser containerizado**, porque
+  o kubeconfig gerado pelo `aws eks update-kubeconfig` chama `aws eks get-token`
+  a cada comando do `kubectl`.
+- `docs/02-arquitetura/evolucao-v3-v4-v5.md` — o que foi herdado, corrigido e
+  criado nas três entregas, com evidência em arquivo. Material do Pitch.
 - **Bug corrigido:** o teste de carga era um `Job` com `suspend: true` disparado
   por `kubectl patch`. Não funcionaria: o ArgoCD tem `selfHeal` e reverteria o
   patch em segundos. Virou `CronJob` suspenso, e `make carga` cria um Job novo —

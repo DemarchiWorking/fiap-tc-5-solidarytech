@@ -1,0 +1,9 @@
+# Dependências dos gates locais (scripts/verificar-*.py).
+#
+# Ficam separadas das dependências dos serviços de propósito: estas rodam na
+# máquina do desenvolvedor e no runner do CI, nunca dentro de uma imagem.
+#
+#     pip install -r scripts/requirements-tools.txt
+#     # ou simplesmente:  make setup
+
+PyYAML==6.0.2

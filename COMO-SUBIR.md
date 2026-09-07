@@ -204,6 +204,9 @@ dobra a vida útil do crédito.
 
 ## Resumo — o que você precisa ter em mãos
 
+> **Atalho:** depois de reunir os itens abaixo, rode `make pre-voo` — ele confere
+> todos de uma vez e diz o que ainda falta.
+
 | # | Item | Obrigatório? | Onde consegue |
 |---|---|---|---|
 | A1 | Credenciais AWS Academy (3 campos) | 🔴 **Sim** | AWS Details → AWS CLI → Show |
@@ -221,20 +224,61 @@ dobra a vida útil do crédito.
 > Todos os comandos rodam a partir de
 > `C:\Users\demarchi\Desktop\fiap\challenge-etapa-5\fiap-tc-5-solidarytech`.
 >
-> **Pré-requisitos na máquina:** Docker Desktop **rodando**, `aws` CLI,
-> `kubectl` e `git`. O Terraform roda em container — não precisa instalar.
+### Pré-requisitos na máquina
+
+| Ferramenta | Obrigatória? | Observação |
+|---|---|---|
+| **Docker Desktop** | 🔴 Sim, e **rodando** | Terraform, kustomize e os builds rodam em container |
+| **`aws` CLI** | 🔴 Sim — **não dá para containerizar** | ver abaixo |
+| **`kubectl`** | 🔴 Sim | |
+| **`git`** | 🔴 Sim | |
+| **`python`** | 🔴 Sim | roda os gates |
+| `gh` (GitHub CLI) | 🟡 Recomendado | habilita o `make sync-creds` |
+| Terraform | ❌ Não | roda em container |
+
+> **Por que o `aws` CLI não pode rodar só em container.** O
+> `aws eks update-kubeconfig` gera um kubeconfig com um bloco `exec` que chama
+> `aws eks get-token` **a cada comando do kubectl**. Ou seja: o binário precisa
+> estar no `PATH` da sua máquina, senão o `kubectl` falha na autenticação com uma
+> mensagem obscura sobre plugin de credencial. É o único item desta lista que não
+> dá para embrulhar em Docker.
+
+Instalação única das dependências dos gates:
+
+```bash
+make setup
+```
 
 ---
 
-## Passo 0 — Validar sem gastar nada (2 min)
+## Passo 0 — Pré-voo (40 segundos) ⭐
 
 ```bash
-make check
-make test-local
+make pre-voo
 ```
 
-Se algo falhar aqui, **pare**: subir infraestrutura com o código quebrado só
-gasta crédito para descobrir o mesmo erro 20 minutos depois.
+**Este é o passo mais importante da lista.** Sem tocar na nuvem e sem gastar
+nada, ele verifica: ferramentas instaladas, Docker de fato **rodando**,
+credenciais válidas com os **três** campos, `LabRole` existindo, região liberada,
+remote do Git configurado, chave do New Relic, secrets do GitHub, e todos os
+gates de código.
+
+Termina com um veredito **GO** ou **NO-GO** — e o NO-GO diz exatamente o que
+corrigir.
+
+> O modo de falhar mais caro deste projeto é descobrir um problema trivial —
+> Docker parado, `aws_session_token` esquecido, remote não configurado — **vinte
+> minutos depois** que o `terraform apply` começou. A sessão dura ~4 h e o crédito
+> é finito: um ciclo perdido custa uma tarde. O pré-voo troca esses 20 minutos por
+> 40 segundos.
+
+Se der **NO-GO**, corrija e rode de novo. **Só siga com GO.**
+
+Para conferir também o que depende de Docker (builds e testes das imagens):
+
+```bash
+make check && make test-local
+```
 
 ---
 

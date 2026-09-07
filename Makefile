@@ -47,6 +47,15 @@ help: ## Lista os alvos disponiveis
 # Gates — rodam sem nuvem, sem credencial e sem gastar nada
 # ---------------------------------------------------------------------------
 
+.PHONY: setup
+setup: ## Instala as dependencias dos gates locais (1x por maquina)
+	@python -m pip install --quiet -r scripts/requirements-tools.txt
+	@echo "Dependencias dos gates instaladas."
+
+.PHONY: pre-voo
+pre-voo: ## VERIFIQUE ANTES DE SUBIR — valida ferramentas, credenciais e codigo
+	@./scripts/pre-voo.sh
+
 .PHONY: check
 check: check-academy check-observabilidade fmt-check validate check-manifestos ## Roda todos os gates locais
 

@@ -39,6 +39,10 @@
 
 ### 1.2 Arquitetura (2 min) — `docs/02-arquitetura/README.md`
 
+> Material de apoio para esta parte e para o fechamento:
+> [`evolucao-v3-v4-v5.md`](02-arquitetura/evolucao-v3-v4-v5.md) — o que foi
+> herdado, o que foi corrigido e o que é novo, com evidência em arquivo.
+
 Mostrar o diagrama macro. Falar de **negócio**, não de YAML:
 
 - Três serviços, com o de **doações** tratado como caminho crítico.

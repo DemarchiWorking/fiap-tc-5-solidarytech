@@ -62,6 +62,9 @@ Nenhuma restrição foi escondida.
 | **F0.4** | GitOps | **ArgoCD** com App-of-Apps → ApplicationSet. `selfHeal` e `prune` ligados. Um único `kubectl apply` em todo o projeto |
 | **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **New Relic** com Distributed Tracing atravessando o SQS |
 
+Comparativo completo das três entregas:
+[`docs/02-arquitetura/evolucao-v3-v4-v5.md`](../02-arquitetura/evolucao-v3-v4-v5.md)
+
 ### Melhorias sobre a entrega da Fase 4
 
 | Lacuna da Fase 4 | Correção nesta entrega |

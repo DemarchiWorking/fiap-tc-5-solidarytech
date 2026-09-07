@@ -14,39 +14,41 @@ provisionada 100% por **Terraform** e entregue por **GitOps (ArgoCD)**.
 
 ## Subir o ambiente
 
-> 📋 **Primeira vez?** Comece pelo **[COMO-SUBIR.md](COMO-SUBIR.md)** — ele traz o
-> checklist de pré-voo com **todas as perguntas** que você precisa responder
-> antes (credencial do AWS Academy, repositório Git, chave do New Relic, RMs do
-> grupo) e o passo a passo completo com troubleshooting.
-
-**Pré-requisitos:** Docker, `aws` CLI, `kubectl`, `git`, sessão do AWS Academy
-ativa com as credenciais em `~/.aws/credentials`.
+### Um comando
 
 ```bash
-# 0. Pré-voo: valida ferramentas, credenciais e código em 40s
-make setup      # 1x por máquina
-make pre-voo    # veredito GO / NO-GO
-
-# 1. Uma vez por conta — cria o bucket de state do Terraform
-make bootstrap
-cp infra/environments/prod-use1/backend.hcl.example infra/environments/prod-use1/backend.hcl
-#    preencha com a saída do passo anterior
-
-# 2. Infraestrutura (~20 min): VPC, EKS, RDS, DynamoDB, SQS, ECR, S3
-make lab-up
-
-# 3. Ajusta o GitOps para a SUA conta (registry, buckets, URL do repo)
-make configurar-repo
-git add gitops .github && git commit -m "chore: configura GitOps" && git push
-
-# 4. ArgoCD assume e sincroniza addons e aplicações
-make deploy
-
-# 5. Gera tráfego — sem ele os painéis de SLO ficam vazios
-make carga
+./comecar.sh
 ```
 
-`make deploy` imprime as URLs ao final. `make senhas` mostra as credenciais.
+O **console de primeira execução** pergunta apenas o que só você tem —
+credenciais do AWS Academy, repositório Git, chave do New Relic, nomes e RMs do
+grupo —, **valida cada resposta na hora** e, ao final, oferece subir o ambiente
+inteiro em 5 etapas (~35 min).
+
+Rode-o também no **início de cada sessão**: as credenciais do Learner Lab expiram
+em ~4 h, e ele detecta isso em segundos — em vez de o `terraform apply` falhar 20
+minutos depois.
+
+**Pré-requisitos:** Docker Desktop **rodando**, `aws` CLI, `kubectl`, `git`,
+`python`. O Terraform roda em container.
+
+> O `aws` CLI é o único que **não** dá para containerizar: o kubeconfig gerado
+> pelo `aws eks update-kubeconfig` chama `aws eks get-token` a cada comando do
+> `kubectl`.
+
+### Ou passo a passo
+
+```bash
+make pre-voo          # 40s — veredito GO / NO-GO, sem tocar na nuvem
+make bootstrap        # 1x por conta — bucket de state
+make lab-up           # infraestrutura (~20 min)
+make configurar-repo  # ajusta o GitOps + git commit && git push
+make deploy           # ArgoCD assume (~8 min)
+make carga            # gera tráfego — sem ele os painéis ficam vazios
+```
+
+`make deploy` imprime as URLs. `make senhas` mostra as credenciais.
+Detalhes e troubleshooting: **[COMO-SUBIR.md](COMO-SUBIR.md)**.
 
 ### ⚠️ Ao terminar a sessão
 
@@ -113,7 +115,8 @@ na fila** — nenhuma doação se perde.
 
 | Documento | Requisito |
 |---|---|
-| [**Como subir — checklist de pré-voo**](COMO-SUBIR.md) | operação |
+| [**`./comecar.sh`** — console de primeira execução](comecar.sh) | **comece aqui** |
+| [Como subir — checklist e troubleshooting](COMO-SUBIR.md) | operação |
 | [Enunciado transcrito](docs/00-enunciado/README.md) | — |
 | [**Matriz de requisitos × evidências**](docs/01-requisitos-e-criterios-de-aceitacao.md) | checklist de nota |
 | [Arquitetura](docs/02-arquitetura/README.md) e [ADRs 001–007](docs/02-arquitetura/adr/README.md) | — |

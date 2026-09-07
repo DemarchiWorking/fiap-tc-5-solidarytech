@@ -1,10 +1,28 @@
 # Como subir tudo — checklist de pré-voo
 
-> Antes de rodar qualquer comando, **responda as perguntas da Parte 1**. Cada
-> uma corresponde a um valor que o ambiente precisa e que só você tem.
->
-> Depois siga a Parte 2 na ordem. Tempo total: **~40 minutos**, dos quais ~20 são
-> o Terraform criando o cluster.
+## ⚡ Atalho: o console faz tudo isto por você
+
+```bash
+./comecar.sh
+```
+
+O console de primeira execução **faz as perguntas da Parte 1 uma a uma**, valida
+cada resposta na hora, grava nos lugares certos e ao final executa a Parte 2
+inteira. É o caminho recomendado.
+
+Este documento continua útil para dois casos: **entender o porquê** de cada
+pergunta antes de responder, e **resolver problema** quando algo falha — a tabela
+de troubleshooting está no fim.
+
+> Rode `./comecar.sh` também no início de **cada sessão do lab**: as credenciais
+> do Academy expiram em ~4 h e ele detecta isso em segundos.
+
+---
+
+> Se preferir o caminho manual: **responda as perguntas da Parte 1**, cada uma
+> correspondendo a um valor que o ambiente precisa e que só você tem. Depois siga
+> a Parte 2 na ordem. Tempo total: **~40 minutos**, dos quais ~20 são o Terraform
+> criando o cluster.
 
 ---
 

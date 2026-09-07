@@ -47,6 +47,10 @@ help: ## Lista os alvos disponiveis
 # Gates — rodam sem nuvem, sem credencial e sem gastar nada
 # ---------------------------------------------------------------------------
 
+.PHONY: comecar
+comecar: ## COMECE AQUI — console de configuracao (credenciais, repo, grupo)
+	@./comecar.sh
+
 .PHONY: setup
 setup: ## Instala as dependencias dos gates locais (1x por maquina)
 	@python -m pip install --quiet -r scripts/requirements-tools.txt

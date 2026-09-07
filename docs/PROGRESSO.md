@@ -11,18 +11,21 @@
 | Pendente | **Evidência de execução** — depende de uma sessão do Learner Lab |
 | Cobertura da matriz | **39/40** requisitos com artefato · 0/40 com evidência |
 | Crédito AWS consumido | **US$ 0,00** — nada provisionado até aqui |
-| Commits | 6 locais · **nenhum push** |
+| Commits | 7 locais · **nenhum push** |
 
 ### Amanhã, comece por aqui
 
 ```bash
-make setup      # 1x por máquina — instala as deps dos gates
-make pre-voo    # 40s — veredito GO / NO-GO
+./comecar.sh
 ```
 
-O **pré-voo** verifica ferramentas, Docker de fato rodando, credencial com os
-três campos, `LabRole`, região, remote do Git, chave do New Relic e todos os
-gates de código — **sem tocar na nuvem e sem gastar nada**. Só siga com **GO**.
+O console de primeira execução pergunta credenciais do Academy, repositório Git,
+chave do New Relic e identificação do grupo — **validando cada resposta na
+hora** — e ao final sobe o ambiente inteiro. Rode-o no início de **cada sessão**:
+as credenciais do lab expiram em ~4 h.
+
+Alternativa manual: `make pre-voo` (veredito GO/NO-GO em 40 s) seguido dos alvos
+do Makefile.
 
 ### O que falta, exatamente
 

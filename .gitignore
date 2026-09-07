@@ -31,6 +31,11 @@ credentials
 *.key
 kubeconfig*
 
+# Gerados por ./comecar.sh — contem credenciais e identificacao.
+# .env.local guarda a License Key do New Relic e o token do SonarCloud.
+.solidarytech.conf
+.env.local
+
 # Build / deps
 node_modules/
 __pycache__/

@@ -83,9 +83,22 @@ printf "   Nada sensível vai para o Git.\n"
 titulo "1 de 6 · Ferramentas na máquina"
 
 FALTANDO=0
-for FERRAMENTA in git python kubectl; do
+# `make` e pre-requisito deste proprio script: as etapas 1 a 5 abaixo chamam
+# `make bootstrap`, `make lab-up`, `make configurar-repo` e `make deploy`. Sem
+# ele o console valida tudo, grava a configuracao e so entao morre com
+# "make: command not found" — o pior momento para descobrir.
+for FERRAMENTA in git python kubectl make; do
   if command -v "$FERRAMENTA" >/dev/null 2>&1; then ok "$FERRAMENTA"
-  else erro "$FERRAMENTA não encontrado"; FALTANDO=1; fi
+  else
+    erro "$FERRAMENTA não encontrado"; FALTANDO=1
+    if [[ "$FERRAMENTA" == "make" ]]; then
+    printf "      Todo o projeto e dirigido pelo Makefile — sem ele nenhum\n"
+    printf "      comando deste guia funciona.\n"
+    printf "      Windows:  winget search make   (instale GnuWin32.Make ou ezwinports.make)\n"
+    printf "      WSL/Linux: sudo apt install make\n"
+    printf "      macOS:     ja vem com as Command Line Tools do Xcode\n"
+    fi
+  fi
 done
 
 if command -v aws >/dev/null 2>&1; then
@@ -430,6 +443,20 @@ else
     sed -i "s|bucket         = .*|bucket         = \"$BUCKET\"|" infra/environments/prod-use1/backend.hcl
     sed -i "s|region         = .*|region         = \"$AWS_REGIAO\"|" infra/environments/prod-use1/backend.hcl
     ok "backend.hcl preenchido automaticamente — bucket $BUCKET"
+
+    # O ambiente de DR tambem precisa do seu backend, e antes ninguem o criava:
+    # `make dr-plan` e `make dr-up` — a evidencia do requisito F4.2b — morriam
+    # com "Falta infra/environments/dr-usw2/backend.hcl". Mesmo bucket, chave
+    # diferente: o state do standby nao pode colidir com o de producao.
+    #
+    # O bucket fica na regiao primaria de proposito. Se ele vivesse na regiao
+    # secundaria, uma falha regional levaria junto o state necessario para
+    # levantar o proprio standby.
+    cp -n infra/environments/dr-usw2/backend.hcl.example \
+          infra/environments/dr-usw2/backend.hcl 2>/dev/null || true
+    sed -i "s|bucket         = .*|bucket         = \"$BUCKET\"|" infra/environments/dr-usw2/backend.hcl
+    sed -i "s|region         = .*|region         = \"$AWS_REGIAO\"|" infra/environments/dr-usw2/backend.hcl
+    ok "backend.hcl do DR preenchido — mesmo bucket, key dr-usw2/"
   else
     aviso "preencha infra/environments/prod-use1/backend.hcl à mão e rode de novo"
     exit 1

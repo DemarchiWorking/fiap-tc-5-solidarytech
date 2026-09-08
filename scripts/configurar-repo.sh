@@ -121,7 +121,20 @@ troca = {
 }
 
 alterados = 0
-for pasta in ("gitops", ".github"):
+# APENAS gitops/. O .github/ estava nesta lista e isso QUEBRAVA a pipeline:
+# `ci-servico.yml` contem o nome do placeholder dentro do proprio guard que
+# verifica se o placeholder ainda existe. A substituicao trocava esse literal
+# pelo host real do ECR, e a condicao `[[ "$REGISTRY" == *<host>* ]]` passava a
+# ser SEMPRE verdadeira — o job `update-gitops` abortava em 100% das execucoes,
+# nos tres servicos, e a ponte CI->CD (requisito F0.4) nunca acontecia.
+#
+# Pior: a conferencia no fim deste script passava, porque de fato nao sobrava
+# placeholder nenhum. O sintoma so aparecia no primeiro push para a main.
+#
+# Nenhum arquivo de .github/ precisa de substituicao: os workflows leem o
+# registry do kustomization.yaml em tempo de execucao, justamente para nao
+# depender do ID da conta AWS.
+for pasta in ("gitops",):
     base = os.path.join(raiz, pasta)
     if not os.path.isdir(base):
         continue
@@ -148,10 +161,10 @@ PY
 
 echo
 echo "==> Conferindo se sobrou algum placeholder"
-RESTANTES=$(grep -rlo "__[A-Z_]*__" "$RAIZ/gitops" "$RAIZ/.github" 2>/dev/null || true)
+RESTANTES=$(grep -rlo "__[A-Z_]*__" "$RAIZ/gitops" 2>/dev/null || true)
 if [[ -n "$RESTANTES" ]]; then
   vermelho "Ainda ha placeholders nao substituidos:"
-  grep -rn "__[A-Z_]*__" "$RAIZ/gitops" "$RAIZ/.github" 2>/dev/null | head -20
+  grep -rn "__[A-Z_]*__" "$RAIZ/gitops" 2>/dev/null | head -20
   exit 1
 fi
 verde "Nenhum placeholder restante."

@@ -220,6 +220,21 @@ dobra a vida útil do crédito.
 
 ---
 
+## Ferramentas obrigatórias na máquina
+
+| Ferramenta | Por quê | Se faltar |
+|---|---|---|
+| `git` | o ArgoCD lê do GitHub, não do seu disco | — |
+| `make` | **todo** comando deste guia passa por ele, inclusive o `./comecar.sh` | `winget search make` no Windows · `sudo apt install make` no WSL |
+| `python` | os gates de validação | — |
+| `docker` | Terraform e AWS CLI rodam em container | Docker Desktop precisa estar **rodando**, não só instalado |
+| `kubectl` | conferir o cluster | — |
+| `aws` | **não pode ser containerizado**: o kubeconfig chama `aws eks get-token` a cada comando do `kubectl` | instalar nativamente |
+
+`make pre-voo` confere todas de uma vez e diz o que falta.
+
+---
+
 ## Resumo — o que você precisa ter em mãos
 
 > **Atalho:** depois de reunir os itens abaixo, rode `make pre-voo` — ele confere
@@ -358,6 +373,36 @@ git push
 > **Por que não patchar direto no cluster?** Porque o ArgoCD tem `selfHeal`
 > ligado e reverteria o patch em segundos. A configuração acontece onde ela
 > pertence: no Git.
+
+---
+
+## Passo 3.5 — Publicar as imagens (~6 min) ⭐
+
+```bash
+make publicar-imagens
+```
+
+**Este passo não é opcional, e é fácil de não perceber que falta.**
+
+Os overlays nascem com `newTag: latest`, e o repositório ECR é `IMMUTABLE`: a
+pipeline publica **apenas** a tag com o SHA do commit, nunca `latest`. Some-se a
+isso que os workflows de CI disparam por `paths: services/**` — e o commit do
+Passo 3 mexe só em `gitops/`. Resultado: sem este passo **nenhuma imagem chega
+ao ECR**, e no Passo 6 os três pods ficam em `ImagePullBackOff` esperando uma tag
+que ninguém jamais vai publicar.
+
+O comando dispara os três workflows por `workflow_dispatch`. Cada um constrói a
+imagem, roda a suíte dentro dela, escaneia com o Trivy, publica no ECR e
+**commita a nova tag no GitOps**. Acompanhe com `gh run list`.
+
+Quando as três terminarem, traga os commits que elas criaram:
+
+```bash
+git pull
+```
+
+> Sem o `gh` instalado, dá para disparar pela interface: **Actions → cada
+> workflow → Run workflow**. O efeito é o mesmo.
 
 ---
 

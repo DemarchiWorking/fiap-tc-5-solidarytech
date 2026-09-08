@@ -36,11 +36,23 @@ printf "%s\n" "$(date '+%Y-%m-%d %H:%M')"
 # ===========================================================================
 secao "1. Ferramentas na máquina"
 
-for FERRAMENTA in git python; do
+# `make` entra na lista porque TODO comando deste projeto passa por ele —
+# inclusive o proprio ./comecar.sh, que chama `make bootstrap` na primeira
+# etapa. Ele nao vem no Git for Windows nem na imagem padrao do WSL, entao a
+# ausencia e comum e o sintoma e opaco: "make: command not found" no meio de um
+# console que ja tinha validado credencial e regiao.
+for FERRAMENTA in git python make; do
   if command -v "$FERRAMENTA" >/dev/null 2>&1; then
     ok "$FERRAMENTA"
   else
     falha "$FERRAMENTA não encontrado"
+    if [[ "$FERRAMENTA" == "make" ]]; then
+    printf "      Todo o projeto e dirigido pelo Makefile — sem ele nenhum\n"
+    printf "      comando deste guia funciona.\n"
+    printf "      Windows:  winget search make   (instale GnuWin32.Make ou ezwinports.make)\n"
+    printf "      WSL/Linux: sudo apt install make\n"
+    printf "      macOS:     ja vem com as Command Line Tools do Xcode\n"
+    fi
   fi
 done
 

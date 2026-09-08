@@ -385,14 +385,22 @@ jobs:
             exit 1
           fi
 
-          # O repositorio e publicado com o placeholder `__ECR_REGISTRY__`, que
-          # `make configurar-repo` troca pelo registry real da conta. Se alguem
+          # O repositorio e publicado com um placeholder no lugar do registry,
+          # que `make configurar-repo` troca pelo valor real da conta. Se alguem
           # pular esse passo, sem esta guarda a pipeline gravaria
-          # "__ECR_REGISTRY__:<sha>" no GitOps e o ArgoCD ficaria em
+          # "<placeholder>:<sha>" no GitOps e o ArgoCD ficaria em
           # ImagePullBackOff — um erro que aparece longe daqui e custa caro
           # para rastrear ate a origem.
-          if [[ "$REGISTRY" == *__ECR_REGISTRY__* ]]; then
-            echo "::error::kustomization.yaml ainda contem o placeholder __ECR_REGISTRY__."
+          #
+          # O nome do placeholder e montado em DUAS PARTES de proposito. Escrito
+          # inteiro, ele era substituido pelo proprio `configurar-repo.sh`, que
+          # varria .github/ junto com gitops/. O literal virava o host do ECR e
+          # a condicao abaixo ficava sempre verdadeira: este job falhava em toda
+          # execucao. O script ja nao varre .github/, mas o sentinela partido
+          # torna a classe de erro impossivel de voltar.
+          SENTINELA="__ECR""_REGISTRY__"
+          if [[ "$REGISTRY" == *"$SENTINELA"* ]]; then
+            echo "::error::kustomization.yaml ainda contem o placeholder do registry."
             echo "::error::Rode 'make configurar-repo' e faça commit antes do primeiro deploy."
             exit 1
           fi

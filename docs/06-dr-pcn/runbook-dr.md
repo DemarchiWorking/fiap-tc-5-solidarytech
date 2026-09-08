@@ -157,7 +157,7 @@ aws rds copy-db-snapshot \
   --source-region us-east-1 --region us-west-2
 
 # 2. Subir o warm standby, restaurando desse snapshot (~20 min)
-make dr-up AMBIENTE=dr-usw2 TF_VAR_snapshot_rds=solidarytech-dr-restore
+TF_VAR_snapshot_rds=solidarytech-dr-restore make dr-up AMBIENTE=dr-usw2
 
 # 3. Entregar o cluster ao ArgoCD
 AMBIENTE=dr-usw2 ./scripts/bootstrap-cluster.sh

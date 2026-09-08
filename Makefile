@@ -19,10 +19,25 @@ DIR_AMBIENTE := infra/environments/$(AMBIENTE)
 
 # ~/.aws montado somente leitura: o container usa a credencial da sessao do lab
 # sem poder altera-la.
+# Repassa QUALQUER TF_VAR_* definida no ambiente ou na linha de comando.
+#
+# Sem isto, `make dr-up TF_VAR_snapshot_rds=solidarytech-dr-restore` — que e
+# exatamente o comando do runbook de DR — nao tinha efeito nenhum: a variavel
+# ficava do lado de fora do container, `var.snapshot_rds` continuava null e o
+# modulo criava uma instancia RDS VAZIA. O passo anterior do runbook, que copia
+# o snapshot para a regiao secundaria, virava trabalho perdido, e o "failover"
+# entregava um donation_db sem uma unica doacao — falhando o RPO de 15 min
+# prometido no PCN, justamente no cenario que o PCN existe para cobrir.
+#
+# `origin` filtra para as que vieram do ambiente ou da linha de comando: sem
+# isso, variaveis internas do make entrariam na lista.
+TF_VAR_FLAGS := $(foreach v,$(filter TF_VAR_%,$(.VARIABLES)),\
+	$(if $(filter environment command line,$(origin $(v))),-e $(v)="$($(v))"))
+
 DOCKER_BASE := docker run --rm -it \
 	-v "$(RAIZ)":/wk -w /wk \
 	-v "$(HOME)/.aws":/root/.aws:ro \
-	-e AWS_PROFILE -e AWS_REGION -e AWS_DEFAULT_REGION
+	-e AWS_PROFILE -e AWS_REGION -e AWS_DEFAULT_REGION $(TF_VAR_FLAGS)
 
 TF  := $(DOCKER_BASE) hashicorp/terraform:$(VERSAO_TERRAFORM)
 AWS := $(DOCKER_BASE) amazon/aws-cli:$(VERSAO_AWSCLI)
@@ -95,6 +110,29 @@ validate: ## terraform validate nos dois ambientes
 		$(TF) -chdir=infra/environments/$$amb validate || exit 1; \
 	done
 
+.PHONY: publicar-imagens
+publicar-imagens: ## (1x, apos configurar-repo) Dispara a CI que constroi e publica as 3 imagens
+	@command -v gh >/dev/null 2>&1 || { \
+		echo "GitHub CLI (gh) nao encontrado."; \
+		echo ""; \
+		echo "Sem ele, dispare pela interface web: Actions > cada workflow > Run workflow"; \
+		echo "  CI - donation-service"; \
+		echo "  CI - ngo-service"; \
+		echo "  CI - volunteer-service"; \
+		exit 1; }
+	@for w in ci-donation.yml ci-ngo.yml ci-volunteer.yml; do \
+		echo "disparando $$w..."; \
+		gh workflow run "$$w" || exit 1; \
+	done
+	@echo ""
+	@echo "As tres pipelines foram disparadas. Acompanhe com:  gh run list"
+	@echo ""
+	@echo "Cada uma constroi a imagem, publica no ECR com a tag do commit e"
+	@echo "commita a nova tag no GitOps. Ao terminar, traga esses commits:"
+	@echo "    git pull"
+	@echo ""
+	@echo "So depois disso o ArgoCD tem uma imagem real para baixar."
+
 .PHONY: relatorio
 relatorio: ## Gera o PDF do relatorio de entrega (entregavel E3)
 	@python scripts/gerar-relatorio.py
@@ -147,6 +185,13 @@ init: ## terraform init do ambiente (exige backend.hcl preenchido)
 
 .PHONY: plan
 plan: check-academy ## Plano do ambiente (nao cria nada)
+	@# `init` antes do `plan`, e nao so dentro do `lab-up`.
+	@#
+	@# `make dr-plan` e a evidencia do requisito F4.2b no roteiro do video, e
+	@# falhava com "Backend initialization required": o ambiente dr-usw2 nunca
+	@# tinha passado por um init. O init e idempotente, entao custa segundos
+	@# quando ja foi feito.
+	@$(MAKE) init AMBIENTE=$(AMBIENTE)
 	@$(TF) -chdir=$(DIR_AMBIENTE) plan -out=tfplan
 
 .PHONY: apply

@@ -15,6 +15,17 @@ metadata:
   name: gp3
   annotations:
     storageclass.kubernetes.io/is-default-class: "true"
+    # Onda -2: antes de TUDO, inclusive do kube-prometheus-stack (onda -1).
+    #
+    # Prometheus, Alertmanager e Grafana pedem PVC com storageClassName: gp3.
+    # Na pratica a ordenacao por tipo do ArgoCD ja aplica StorageClass antes de
+    # Application, entao funcionaria — mas depender de ordenacao implicita num
+    # pre-requisito e fragil. Declarada, a garantia fica no arquivo.
+    #
+    # Sem a classe existindo antes, os tres PVCs ficam Pending e a stack de
+    # observabilidade inteira nao sobe: sem ela nao ha evidencia de F0.5, F1
+    # nem F3.
+    argocd.argoproj.io/sync-wave: "-2"
 provisioner: ebs.csi.aws.com
 parameters:
   type: gp3

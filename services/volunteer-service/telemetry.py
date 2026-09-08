@@ -134,11 +134,42 @@ def setup_telemetry(service_name: str, version: str, env: str):
         )
         metrics.set_meter_provider(meter_provider)
 
+        _instrumentar_botocore()
+
     return metrics.get_meter(service_name).create_histogram(
         name=DURATION_METRIC_NAME,
         description="Duracao das requisicoes HTTP servidas, em segundos",
         unit="s",
     )
+
+
+def _instrumentar_botocore() -> None:
+    """Liga a instrumentacao automatica do boto3/botocore.
+
+    A dependencia `opentelemetry-instrumentation-botocore` ja estava no
+    requirements.txt, mas o instrumentador nunca era chamado. Duas perdas:
+
+      * as chamadas ao SQS e ao DynamoDB nao viravam span, entao o trace do
+        worker mostrava so o processamento — nao o tempo gasto conversando com
+        a AWS, que e onde a lentidao costuma estar;
+      * o `traceparent` que o donation-service injeta no MessageAttribute
+        continuava sendo costurado a mao (`extract` em worker.py:88) sem
+        nenhum span de cliente por baixo.
+
+    Chamado apenas quando ha Collector configurado, pelo mesmo motivo do
+    servico de ONGs: sem provider os spans nao vao a lugar nenhum.
+    """
+    try:
+        from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+    except ImportError:  # pragma: no cover - dependencia opcional
+        logging.getLogger(__name__).warning(
+            "instrumentacao botocore indisponivel; sem spans de AWS"
+        )
+        return
+
+    instrumentor = BotocoreInstrumentor()
+    if not instrumentor.is_instrumented_by_opentelemetry:
+        instrumentor.instrument(skip_dep_check=True)
 
 
 def _status_class(code: int) -> str:

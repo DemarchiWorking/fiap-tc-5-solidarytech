@@ -10,6 +10,22 @@
 # Dois modos:
 #   verificar  — só confere que existe backup recente. Não destrói nada.
 #   restaurar  — apaga um namespace e o traz de volta pelo Velero. É o drill.
+#
+# DOIS JOBS, e não um só com `environment` condicional:
+#
+#     inspecionar  ──▶  restaurar   (environment: prod-use1, exige aprovação)
+#
+# A versão anterior tinha um único job com
+# `environment: ${{ inputs.modo == 'restaurar' && 'prod-use1' || '' }}`.
+# O GitHub não aceita nome de environment vazio: no modo `verificar` a
+# expressão resolvia para "" e a execução falhava antes do primeiro passo, com
+# "Value cannot be null. (Parameter 'name')". Ou seja, o modo seguro — o único
+# que dá para rodar à vontade para gerar evidência — era justamente o que não
+# funcionava.
+#
+# Separando, cada job declara só o que precisa: `inspecionar` roda sempre e sem
+# aprovação; `restaurar` carrega o environment protegido, que é a barreira
+# entre "quero testar" e "apaguei um namespace por engano".
 
 name: DR Drill
 
@@ -41,12 +57,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  drill:
-    name: Drill (${{ inputs.modo }})
+  # =========================================================================
+  # Fase 1 — leitura. Não destrói nada, não exige aprovação.
+  # =========================================================================
+  inspecionar:
+    name: Inspecionar backups
     runs-on: ubuntu-latest
-    # `restaurar` exige aprovação: o environment com proteção é a barreira entre
-    # "quero testar" e "apaguei um namespace por engano".
-    environment: ${{ inputs.modo == 'restaurar' && 'prod-use1' || '' }}
+    outputs:
+      # Repassado ao job de restauração: `steps.<id>.outputs` não atravessa a
+      # fronteira entre jobs, só `jobs.<id>.outputs`.
+      ultimo_backup: ${{ steps.backups.outputs.ultimo }}
     steps:
       - uses: actions/checkout@v4
 
@@ -79,8 +99,11 @@ jobs:
           velero backup get | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+          # python3, e não `python`: nas imagens ubuntu-24.04 do runner o alias
+          # `python` só existe depois de um actions/setup-python, e este job
+          # não usa nenhum.
           ULTIMO=$(velero backup get -o json \
-            | python -c "
+            | python3 -c "
           import json, sys
           dados = json.load(sys.stdin)
           itens = [b for b in dados.get('items', [])
@@ -101,10 +124,55 @@ jobs:
           kubectl -n ${{ inputs.namespace }} get all 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Veredito do modo verificar
+        if: inputs.modo == 'verificar'
+        run: |
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Modo \`verificar\`: existe backup concluído e o namespace responde." >> "$GITHUB_STEP_SUMMARY"
+          echo "Nada foi destruído. Para medir o RTO de verdade, rode no modo \`restaurar\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Depois do drill" >> "$GITHUB_STEP_SUMMARY"
+          echo "Preencher o post-mortem a partir de \`docs/05-itsm-aiops/post-mortem-modelo.md\`." >> "$GITHUB_STEP_SUMMARY"
+
+  # =========================================================================
+  # Fase 2 — destrutiva. Environment protegido: exige aprovação humana.
+  # =========================================================================
+  restaurar:
+    name: Apagar e restaurar
+    needs: inspecionar
+    if: inputs.modo == 'restaurar'
+    runs-on: ubuntu-latest
+    # `restaurar` exige aprovação: o environment com proteção é a barreira
+    # entre "quero testar" e "apaguei um namespace por engano".
+    environment: prod-use1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Conectar ao cluster
+        run: |
+          aws eks update-kubeconfig \
+            --region "${{ vars.AWS_REGION || 'us-east-1' }}" \
+            --name "${{ vars.EKS_CLUSTER || 'solidarytech-prod-eks' }}"
+
+      - name: Instalar o CLI do Velero
+        run: |
+          curl -sfL https://github.com/vmware-tanzu/velero/releases/download/v1.15.0/velero-v1.15.0-linux-amd64.tar.gz | tar -xz
+          sudo mv velero-v1.15.0-linux-amd64/velero /usr/local/bin/
+
       # =====================================================================
       - name: Apagar o namespace (drill)
-        if: inputs.modo == 'restaurar'
         run: |
+          echo "## Drill de DR — restaurar" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Backup de origem: \`${{ needs.inspecionar.outputs.ultimo_backup }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "### Falha provocada" >> "$GITHUB_STEP_SUMMARY"
 
           # Remover o Application do ArgoCD ANTES: com selfHeal ligado, ele
@@ -119,14 +187,13 @@ jobs:
           echo "Namespace \`${{ inputs.namespace }}\` apagado às $(date -u +%H:%M:%SZ)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Restaurar pelo Velero
-        if: inputs.modo == 'restaurar'
         id: restore
         run: |
           INICIO=$(date +%s)
           NOME="drill-$(date +%s)"
 
           velero restore create "$NOME" \
-            --from-backup "${{ steps.backups.outputs.ultimo }}" \
+            --from-backup "${{ needs.inspecionar.outputs.ultimo_backup }}" \
             --include-namespaces ${{ inputs.namespace }} \
             --wait
 
@@ -140,7 +207,6 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Estado DEPOIS
-        if: inputs.modo == 'restaurar'
         run: |
           kubectl -n ${{ inputs.namespace }} wait --for=condition=available \
             deployment --all --timeout=300s || true
@@ -160,7 +226,7 @@ jobs:
         # serviço. Deixar um Application sem sincronização automática depois de
         # um drill é a forma clássica de o próximo deploy "não funcionar" sem
         # ninguém entender por quê.
-        if: always() && inputs.modo == 'restaurar'
+        if: always()
         run: |
           SERVICO=$(echo "${{ inputs.namespace }}" | sed 's/solidary-//')
           kubectl -n argocd patch application "app-${SERVICO}" --type merge \

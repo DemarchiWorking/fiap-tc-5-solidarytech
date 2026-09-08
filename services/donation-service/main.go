@@ -193,11 +193,17 @@ func envInt(key string, fallback int) int {
 }
 
 // otlpEndpoint informa se ha um Collector configurado.
+//
+// So considera OTEL_EXPORTER_OTLP_ENDPOINT, de proposito. A versao anterior
+// caia para OTEL_EXPORTER_OTLP_TRACES_ENDPOINT — e ai o exporter de METRICAS,
+// que nao le essa variavel, apontava para o localhost:4317 padrao e falhava em
+// silencio. O histograma que sustenta o SLO de latencia nunca chegaria ao
+// Prometheus, sem nenhum erro visivel.
+//
+// Um endpoint so, valendo para traces e metricas: e o que o Deployment define
+// e o que o Collector expoe.
 func otlpEndpoint() string {
-	if v := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); v != "" {
-		return v
-	}
-	return os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+	return os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 }
 
 // healthcheck bate no proprio /health e traduz o resultado em codigo de saida.

@@ -170,8 +170,10 @@ resource "aws_db_subnet_group" "principal" {
 }
 
 resource "aws_db_parameter_group" "principal" {
-  name   = "${var.prefixo}-pg${var.versao_engine}"
-  family = "postgres${var.versao_engine}"
+  # name_prefix pelo mesmo motivo do Security Group: `create_before_destroy`
+  # com nome fixo colide na substituicao.
+  name_prefix = "${var.prefixo}-pg${var.versao_engine}-"
+  family      = "postgres${var.versao_engine}"
 
   parameter {
     # Registra toda consulta acima de 1s. Alimenta a investigacao de causa raiz
@@ -257,7 +259,15 @@ resource "aws_db_instance" "principal" {
   # Snapshot final ao destruir: e ele que permite reconstruir o ambiente no dia
   # seguinte com os dados da sessao anterior, em vez de comecar do zero.
   skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.identificador}-final-${formatdate("YYYYMMDD-hhmmss", timestamp())}"
+  # plantimestamp(), e nao timestamp(): timestamp() e reavaliado entre o plan e
+  # o apply, e com `apply -auto-approve` — que e o que `make lab-up` usa — isso
+  # aborta com "Provider produced inconsistent final plan". plantimestamp() e
+  # avaliado uma vez e congelado no plano.
+  #
+  # HH, e nao hh: `hh` e relogio de 12 horas, entao um destroy as 13:00 geraria
+  # o mesmo identificador de um as 01:00 -> DBSnapshotAlreadyExists no segundo
+  # `lab-down` do dia.
+  final_snapshot_identifier = "${var.identificador}-final-${formatdate("YYYYMMDD-HHmmss", plantimestamp())}"
 
   tags = merge(var.tags, { Name = var.identificador })
 
@@ -290,6 +300,16 @@ resource "aws_secretsmanager_secret" "banco" {
 }
 
 resource "aws_secretsmanager_secret_version" "banco" {
+  # SO no caminho de criacao. Ao restaurar de snapshot, o banco usa a credencial
+  # que veio DENTRO do snapshot; gravar aqui uma senha nova e aleatoria faria o
+  # Kubernetes Secret apontar para uma credencial que nao abre o banco, e todos
+  # os pods entrariam em CrashLoopBackOff com "password authentication failed"
+  # — durante um failover, que e o pior momento possivel.
+  #
+  # No cenario de DR, a credencial vem do segredo da regiao primaria (o runbook
+  # documenta a copia).
+  count = var.snapshot_identifier == null ? 1 : 0
+
   secret_id = aws_secretsmanager_secret.banco.id
 
   secret_string = jsonencode({

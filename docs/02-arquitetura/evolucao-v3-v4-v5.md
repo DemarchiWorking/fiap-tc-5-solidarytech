@@ -186,6 +186,7 @@ teste, mas ninguém tirou print"*.
 |---|---|
 | `verificar-academy.py` | Recurso bloqueado pelo Learner Lab, região inválida, instância acima do teto, **escape HCL inválido**, segredo literal |
 | `verificar-observabilidade.py` | JSON dos dashboards, regra de SLO referenciada mas inexistente, **divergência de buckets entre Go e Python** |
+| `verificar-workflows.py` | `if:` lendo `env` fora de escopo, `environment` que vira string vazia, caller sem `permissions`, rebase em clone raso, action em `latest` |
 | `verificar-manifestos.sh` | `kustomize build`, `kubeconform`, e política: todo Deployment com requests/limits, probes, PDB e contexto de segurança |
 | `pre-voo.sh` | Ferramentas, Docker de fato rodando, credencial com os 3 campos, `LabRole`, região, remote do Git |
 

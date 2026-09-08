@@ -8,9 +8,16 @@ kind: Ingress
 metadata:
   name: volunteer-service
   annotations:
-    # Remove o prefixo antes de repassar ao servico: o app responde em
-    # /donations, nao em /donations/donations.
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # SEM rewrite-target aqui, de proposito.
+    #
+    # A versao anterior usava `rewrite-target: /$2` com path
+    # `/volunteers(/|$)(.*)`. Como o prefixo do ingress e IGUAL a rota que a
+    # aplicacao serve, o rewrite removia exatamente o que a app espera:
+    # `POST /volunteers` chegava como `POST /` e devolvia 404. O teste de carga
+    # k6 falhava inteiro e os paineis de SLO ficavam sem hot path.
+    #
+    # (O ngo-service funcionava por acidente: o prefixo dele e /ngo e a rota
+    # e /ngos — diferentes, entao o rewrite acertava.)
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
 spec:
@@ -18,8 +25,8 @@ spec:
   rules:
     - http:
         paths:
-          - path: /volunteers(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /volunteers
+            pathType: Prefix
             backend:
               service:
                 name: volunteer-service

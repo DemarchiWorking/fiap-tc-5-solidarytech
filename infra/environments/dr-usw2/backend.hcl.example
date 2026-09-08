@@ -1,0 +1,15 @@
+# Copie para backend.hcl e preencha com a saida de `make bootstrap`.
+# backend.hcl fica fora do Git (ver .gitignore).
+#
+# MESMO bucket da producao, com outra `key`: um unico local para o state de
+# todos os ambientes, sem risco de um sobrescrever o outro.
+#
+# A `region` e a do BUCKET (us-east-1, onde o bootstrap roda), e nao a do
+# ambiente de DR. Confundir as duas faz o init procurar o state numa regiao
+# onde ele nao existe.
+
+bucket         = "solidarytech-tfstate-SUFIXO"
+key            = "dr-usw2/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "SolidaryTech-tfstate-lock"
+encrypt        = true

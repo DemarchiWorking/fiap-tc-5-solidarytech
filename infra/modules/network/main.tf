@@ -21,12 +21,21 @@ locals {
   # 2 AZs e o minimo que o EKS exige para o control plane.
   azs = slice(data.aws_availability_zones.disponiveis.names, 0, 2)
 
-  # /20 = 4091 IPs uteis por subnet. Generoso de proposito: o VPC CNI da AWS
-  # atribui um IP da VPC a CADA POD, entao o dimensionamento de subnet no EKS
-  # segue a contagem de pods, nao a de nos. Subnet apertada aqui aparece la na
-  # frente como pod preso em ContainerCreating por falta de IP.
-  subnets_publicas  = ["10.0.0.0/20", "10.0.16.0/20"]
-  subnets_privadas  = ["10.0.32.0/20", "10.0.48.0/20"]
+  # Subnets DERIVADAS da VPC, e nao constantes.
+  #
+  # A versao anterior fixava 10.0.x aqui. Em producao (VPC 10.0.0.0/16)
+  # funcionava por coincidencia; no ambiente de DR (VPC 10.10.0.0/16) as
+  # subnets ficavam FORA da VPC e o apply morria no primeiro aws_subnet com
+  # InvalidSubnet.Range — depois de ja ter criado VPC, IGW e route tables.
+  # Ou seja: `make dr-up`, que e a evidencia do requisito F4.2b, nunca subiu.
+  #
+  # cidrsubnet(/16, 4, i) produz /20. Os indices 0..3 geram exatamente os
+  # mesmos valores de antes para producao — portanto sem diff no state.
+  #
+  # /20 = 4091 IPs uteis. Generoso de proposito: o VPC CNI atribui um IP da VPC
+  # a CADA POD, entao o dimensionamento segue a contagem de pods, nao a de nos.
+  subnets_publicas = [for i in range(2) : cidrsubnet(var.cidr_vpc, 4, i)]
+  subnets_privadas = [for i in range(2) : cidrsubnet(var.cidr_vpc, 4, i + 2)]
 
   # Onde os nos do EKS vao rodar, conforme o toggle do ADR-003.
   subnets_dos_nos = var.enable_nat_gateway ? aws_subnet.privada[*].id : aws_subnet.publica[*].id
@@ -207,7 +216,10 @@ resource "aws_vpc_endpoint" "dynamodb" {
 ###############################################################################
 
 resource "aws_security_group" "rds" {
-  name        = "${var.prefixo}-rds"
+  # name_prefix, e nao name: com `create_before_destroy` e nome fixo, qualquer
+  # substituicao tenta criar o novo SG antes de destruir o antigo e falha com
+  # InvalidGroup.Duplicate.
+  name_prefix = "${var.prefixo}-rds-"
   description = "PostgreSQL acessivel somente a partir dos nos do EKS"
   vpc_id      = aws_vpc.principal.id
 
@@ -221,7 +233,7 @@ resource "aws_security_group" "rds" {
 resource "aws_security_group" "elasticache" {
   count = var.criar_sg_elasticache ? 1 : 0
 
-  name        = "${var.prefixo}-elasticache"
+  name_prefix = "${var.prefixo}-elasticache-"
   description = "Redis acessivel somente a partir dos nos do EKS"
   vpc_id      = aws_vpc.principal.id
 

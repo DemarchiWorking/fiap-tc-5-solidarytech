@@ -265,6 +265,138 @@ def main() -> int:
                 falhas.append(f"{rel(a)}:{linha_de(corpo, m.start())}: {motivo}")
     print("   ok\n" if len(falhas) == antes else "")
 
+    # 8. CIDR de subrede fixo -----------------------------------------------
+    #
+    # O bug mais caro que a auditoria encontrou. O modulo de rede criava a VPC
+    # com `var.cidr_vpc`, mas as subredes vinham de uma lista LITERAL
+    # ["10.0.0.0/20", ...]. Em producao a VPC tambem e 10.0.0.0/16, entao
+    # funcionava por coincidencia. No ambiente de DR, com VPC 10.10.0.0/16, as
+    # subredes ficavam FORA da VPC e o apply morria no primeiro aws_subnet com
+    # InvalidSubnet.Range — depois de ja ter criado VPC, IGW e route tables.
+    #
+    # Resultado pratico: `make dr-up`, que e a evidencia do requisito F4.2b,
+    # nunca subiu uma unica vez.
+    print("8. CIDR de subrede derivado da VPC")
+    antes = len(falhas)
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        if "var.cidr_vpc" not in corpo and "var.vpc_cidr" not in corpo:
+            continue
+        # Um /16 literal e o CIDR da VPC (default de variavel, por exemplo) e
+        # legitimo. O que nao pode e uma subrede literal onde deveria haver
+        # cidrsubnet() sobre a variavel da VPC.
+        for m in re.finditer(r'"(\d{1,3}(?:\.\d{1,3}){3}/(\d{1,2}))"', corpo):
+            if int(m.group(2)) <= 16:
+                continue
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: CIDR de subrede fixo "
+                f"{m.group(1)} num modulo que recebe o CIDR da VPC por variavel. "
+                f"Em outra regiao a VPC muda e a subrede fica fora dela "
+                f"(InvalidSubnet.Range). Use cidrsubnet(var.cidr_vpc, ...)."
+            )
+    print("   ok\n" if len(falhas) == antes else "")
+
+    # 9. timestamp() e formato de hora ---------------------------------------
+    #
+    # `timestamp()` e reavaliado ENTRE o plan e o apply. Com `-auto-approve`,
+    # que e o que `make lab-up` usa, o valor muda no meio e o Terraform aborta
+    # com "Provider produced inconsistent final plan". `plantimestamp()` congela
+    # o valor no momento do plano.
+    #
+    # E `hh` no formatdate e relogio de 12 HORAS: dois `lab-down` no mesmo dia,
+    # um as 9h e outro as 21h, geram o mesmo identificador de snapshot final e o
+    # segundo falha por nome duplicado. O correto e `HH`.
+    print("9. timestamp() em identificador de recurso")
+    antes = len(falhas)
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        for m in re.finditer(r"(?<!plan)\btimestamp\(\)", corpo):
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: timestamp() e reavaliado "
+                f"entre plan e apply; com -auto-approve o apply falha com "
+                f"'Provider produced inconsistent final plan'. Use plantimestamp()."
+            )
+        for m in re.finditer(r'formatdate\(\s*"[^"]*hh[^"]*"', corpo):
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: formatdate com 'hh' "
+                f"(relogio de 12 horas). Duas execucoes no mesmo dia, uma de "
+                f"manha e outra a noite, geram o mesmo nome. Use 'HH'."
+            )
+    print("   ok\n" if len(falhas) == antes else "")
+
+    # 10. Versionamento de bucket -------------------------------------------
+    #
+    # "Suspended" so e valido para um bucket que JA esteve versionado. Num
+    # bucket novo a AWS devolve "Disabled", e o Terraform passa a mostrar um
+    # diff a cada plan, para sempre — ruido que treina o time a ignorar plano.
+    print("10. Versionamento de bucket S3")
+    antes = len(falhas)
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        for m in re.finditer(r'status\s*=\s*[^\n]*"Suspended"', corpo):
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: versionamento "
+                f"'Suspended' num bucket novo gera diff perpetuo — a AWS "
+                f"reporta 'Disabled'. Use 'Disabled'."
+            )
+    print("   ok\n" if len(falhas) == antes else "")
+
+    # 11. create_before_destroy com nome fixo -------------------------------
+    #
+    # Com create_before_destroy, o Terraform cria o recurso NOVO antes de
+    # destruir o velho. Se o nome for fixo, os dois coexistem por um instante
+    # com o mesmo nome e a AWS recusa: InvalidGroup.Duplicate (security group),
+    # ou o equivalente em parameter group. `name_prefix` deixa a AWS sortear o
+    # sufixo e a substituicao passa a funcionar.
+    print("11. create_before_destroy com nome fixo")
+    antes = len(falhas)
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        for bloco in re.finditer(
+            r'resource\s+"(aws_security_group|aws_db_parameter_group|'
+            r'aws_launch_template|aws_iam_policy)"\s+"[^"]+"\s*\{',
+            corpo,
+        ):
+            # Recorte exato do corpo do recurso, contando chaves a partir da
+            # que abre o bloco. Um recorte por tamanho fixo pegaria o recurso
+            # seguinte junto.
+            inicio = bloco.end()
+            profundidade = 1
+            i = inicio
+            while i < len(corpo) and profundidade > 0:
+                if corpo[i] == "{":
+                    profundidade += 1
+                elif corpo[i] == "}":
+                    profundidade -= 1
+                i += 1
+            trecho = corpo[inicio : i - 1]
+
+            if "create_before_destroy" not in trecho:
+                continue
+
+            # `name =` de PRIMEIRO NIVEL apenas. Um `aws_db_parameter_group`
+            # tem varios blocos `parameter { name = "..." }` aninhados, e
+            # procurar o texto solto acusava o recurso mesmo quando ele ja
+            # usava name_prefix corretamente — o falso positivo que esta versao
+            # elimina. `lifecycle`, `tags`, `timeouts` etc. tambem entram como
+            # blocos aninhados e sao pulados do mesmo jeito.
+            nivel = 0
+            nome_no_topo = False
+            for linha in trecho.splitlines():
+                if nivel == 0 and re.match(r"\s*name\s*=", linha):
+                    nome_no_topo = True
+                    break
+                nivel += linha.count("{") - linha.count("}")
+
+            if nome_no_topo:
+                falhas.append(
+                    f"{rel(a)}:{linha_de(corpo, bloco.start())}: "
+                    f"{bloco.group(1)} com create_before_destroy e `name` fixo. "
+                    f"O novo recurso nasce antes de o velho morrer e a AWS "
+                    f"recusa o nome duplicado. Use `name_prefix`."
+                )
+    print("   ok\n" if len(falhas) == antes else "")
+
     # Resultado --------------------------------------------------------------
     if falhas:
         print(f"== {len(falhas)} FALHA(S) ==")

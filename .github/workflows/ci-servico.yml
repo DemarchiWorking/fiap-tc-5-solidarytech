@@ -52,11 +52,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A versao do Go/Python do runner muda sem aviso quando a imagem
+      # ubuntu-latest e atualizada. Fixar aqui e o que impede a pipeline de
+      # comecar a falhar sozinha num dia em que ninguem tocou no codigo.
+      - uses: actions/setup-go@v5
+        if: inputs.linguagem == 'go'
+        with:
+          go-version: "1.23"
+          cache-dependency-path: ${{ inputs.caminho }}/go.sum
+
+      - uses: actions/setup-python@v5
+        if: inputs.linguagem == 'python'
+        with:
+          python-version: "3.12"
+
       - name: Go — golangci-lint
         if: inputs.linguagem == 'go'
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          # Versao fixa, nao `latest`: cada release do golangci-lint liga
+          # analisadores novos, e com `latest` a pipeline passa a reprovar
+          # codigo que ninguem mudou. Atualizar vira uma decisao, com PR proprio.
+          version: v1.62.2
           working-directory: ${{ inputs.caminho }}
 
       - name: Go — go.mod e go.sum consistentes
@@ -68,6 +85,14 @@ jobs:
           # chain: um go.sum divergente do go.mod indica que alguem mexeu nas
           # somas de verificacao.
           go mod tidy
+          # `git diff` so compara arquivos RASTREADOS. Enquanto o go.sum nao
+          # estiver commitado (ver `make gerar-gosum`), o tidy o cria como
+          # arquivo novo e o diff passaria sem sequer olhar para ele. O
+          # ls-files abaixo transforma essa ausencia em erro explicito.
+          if ! git ls-files --error-unmatch go.sum >/dev/null 2>&1; then
+            echo "::error::go.sum nao esta versionado. Rode 'make gerar-gosum' e commite go.mod e go.sum."
+            exit 1
+          fi
           git diff --exit-code go.mod go.sum
 
       - name: Python — ruff
@@ -83,6 +108,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        if: inputs.linguagem == 'go'
+        with:
+          go-version: "1.23"
+          cache-dependency-path: ${{ inputs.caminho }}/go.sum
+
+      - uses: actions/setup-python@v5
+        if: inputs.linguagem == 'python'
+        with:
+          python-version: "3.12"
+          cache: pip
 
       - name: Go — testes com deteccao de corrida
         if: inputs.linguagem == 'go'
@@ -115,9 +152,27 @@ jobs:
     name: SAST (SonarCloud)
     needs: [lint, test]
     runs-on: ubuntu-latest
-    # Sem SONAR_TOKEN configurado, o job e pulado em vez de falhar: um fork sem
-    # a integracao ainda consegue rodar o resto da pipeline.
-    if: ${{ !cancelled() }}
+
+    # SONAR_TOKEN no escopo do JOB, e nao no do step.
+    #
+    # Antes o `if: env.SONAR_TOKEN != ''` estava no proprio step que declarava
+    # `env: SONAR_TOKEN`. O `if` de um step e avaliado ANTES do `env` daquele
+    # step existir, entao a expressao lia uma variavel vazia e dava sempre
+    # falso: o SonarCloud NUNCA rodou, e mesmo assim o job aparecia verde no
+    # painel. Metade da evidencia do requisito F0.3b (SAST) nao existia.
+    #
+    # Declarado aqui, o valor entra no contexto `env` do job e o `if` do step
+    # passa a enxerga-lo — mantendo o comportamento pretendido de PULAR (e nao
+    # falhar) quando um fork nao tem o segredo configurado. Continua sendo um
+    # `if` de step, e nao de job, porque o contexto `secrets` nao esta
+    # disponivel em `jobs.<id>.if`.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    # `if: !cancelled()` foi REMOVIDO: com ele o SAST rodava mesmo apos lint ou
+    # teste vermelhos, gastando runner para analisar codigo que ja se sabia
+    # quebrado. O comportamento padrao de `needs` — so roda se as dependencias
+    # passarem — e o correto aqui.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -161,16 +216,30 @@ jobs:
       # DEPENDENCIA sem precisar construir a imagem: falha em ~20s em vez de
       # depois de um build de varios minutos.
       # ---------------------------------------------------------------
-      - name: Trivy — dependencias (SCA)
+      # O comentario original dizia "apenas CRITICAL bloqueia", mas a
+      # configuracao era `severity: CRITICAL,HIGH` com `exit-code: 1` — ou
+      # seja, HIGH tambem barrava. A politica descrita e a implementada eram
+      # diferentes, e a implementada e a que para a entrega na vespera da
+      # apresentacao. Separado em dois passos, cada um fazendo o que o nome diz.
+      - name: Trivy — dependencias (SCA) — relatorio HIGH
         uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs
           scan-ref: ${{ inputs.caminho }}
-          severity: CRITICAL,HIGH
-          # Apenas CRITICAL bloqueia. HIGH aparece no relatorio mas nao trava a
-          # entrega: com HIGH bloqueando, qualquer CVE nova em dependencia
-          # transitiva pararia o time, e a reacao previsivel seria desligar o
-          # scan — que e pior do que ter um scan que so barra o que e critico.
+          severity: HIGH
+          exit-code: "0"          # informativo: aparece no log, nao trava
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+      - name: Trivy — dependencias (SCA) — gate CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.caminho }}
+          severity: CRITICAL
+          # So CRITICAL barra. Com HIGH bloqueando, qualquer CVE nova em
+          # dependencia transitiva pararia o time, e a reacao previsivel seria
+          # desligar o scan — pior do que um scan que so barra o critico.
           exit-code: "1"
           ignore-unfixed: true
           trivyignores: .trivyignore
@@ -196,11 +265,14 @@ jobs:
       # Complementa a camada 1: aqui entram os pacotes do sistema operacional
       # base (Debian/Alpine), que o scan de filesystem nao enxerga.
       # ---------------------------------------------------------------
-      - name: Trivy — imagem
+      - name: Trivy — imagem (gate CRITICAL)
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ inputs.servico }}:${{ github.sha }}
-          severity: CRITICAL,HIGH
+          # Mesma politica do scan de dependencias, pelo mesmo motivo. O HIGH
+          # nao se perde: o SARIF do passo seguinte leva CRITICAL, HIGH e
+          # MEDIUM para a aba Security do GitHub.
+          severity: CRITICAL
           exit-code: "1"
           ignore-unfixed: true
 
@@ -285,6 +357,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # fetch-depth: 0 por causa do `git pull --rebase origin main` mais
+          # abaixo: num clone raso (o padrao, depth 1) o rebase nao encontra
+          # ancestral comum e falha — justamente quando duas pipelines correm
+          # juntas, que e o unico cenario em que aquele rebase importa.
+          fetch-depth: 0
 
       - name: Instalar o kustomize
         run: |
@@ -304,6 +381,18 @@ jobs:
 
           if [[ -z "$REGISTRY" ]]; then
             echo "::error::newName não encontrado em kustomization.yaml."
+            echo "::error::Rode 'make configurar-repo' e faça commit antes do primeiro deploy."
+            exit 1
+          fi
+
+          # O repositorio e publicado com o placeholder `__ECR_REGISTRY__`, que
+          # `make configurar-repo` troca pelo registry real da conta. Se alguem
+          # pular esse passo, sem esta guarda a pipeline gravaria
+          # "__ECR_REGISTRY__:<sha>" no GitOps e o ArgoCD ficaria em
+          # ImagePullBackOff — um erro que aparece longe daqui e custa caro
+          # para rastrear ate a origem.
+          if [[ "$REGISTRY" == *__ECR_REGISTRY__* ]]; then
+            echo "::error::kustomization.yaml ainda contem o placeholder __ECR_REGISTRY__."
             echo "::error::Rode 'make configurar-repo' e faça commit antes do primeiro deploy."
             exit 1
           fi

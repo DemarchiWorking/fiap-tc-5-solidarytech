@@ -26,9 +26,16 @@ controller:
       service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/healthz"
       service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "10254"
 
-  # Preserva o IP real do cliente. Sem isso, todo log e toda metrica de origem
-  # mostrariam o IP do no, inutilizando qualquer analise de trafego.
-  service.externalTrafficPolicy: Local
+    # Preserva o IP real do cliente. DENTRO do mapa `service` — na versao
+    # anterior estava como `service.externalTrafficPolicy`, uma chave literal
+    # com ponto, irma de `service` em vez de filha. O chart nao tem
+    # values.schema.json, entao a chave era ignorada em silencio e o NLB ficava
+    # em `Cluster`: todo $remote_addr do log virava IP de no.
+    #
+    # `Local` exige que o health check do NLB acerte um no COM controller. Com
+    # 2 replicas em 3 nos, o NLB marca o terceiro como unhealthy e para de
+    # mandar trafego para ele — que e o comportamento correto, nao um problema.
+    externalTrafficPolicy: Local
 
   ingressClassResource:
     name: nginx

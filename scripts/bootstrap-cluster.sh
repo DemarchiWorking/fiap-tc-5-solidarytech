@@ -160,6 +160,18 @@ else
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 fi
 
+# solidary-endpoints com PLACEHOLDER, criado agora e nao no passo 8.
+#
+# O Grafana le GF_SERVER_ROOT_URL deste ConfigMap. Se ele so existisse depois do
+# app-of-apps, o Grafana subiria em CreateContainerConfigError — e, no caminho
+# em que o NLB demora a aparecer, o script saia com codigo 0 ANTES de cria-lo,
+# deixando o Grafana quebrado permanentemente com aparencia de sucesso.
+#
+# O valor real e atualizado no passo 8, quando o hostname do NLB e conhecido.
+if ! kubectl -n monitoring get configmap solidary-endpoints >/dev/null 2>&1; then
+  kubectl -n monitoring create configmap solidary-endpoints     --from-literal=nlb_hostname="aguardando-nlb"     --from-literal=grafana_root_url="http://localhost/grafana/" >/dev/null
+fi
+
 verde "Secrets e ConfigMaps aplicados"
 
 # ---------------------------------------------------------------------------
@@ -232,9 +244,17 @@ for _ in $(seq 1 60); do
 done
 
 if [[ -z "$NLB" ]]; then
-  amarelo "O NLB ainda nao tem hostname. O ingress-nginx pode nao ter sincronizado."
-  echo "  Acompanhe:  kubectl -n argocd get applications"
-  exit 0
+  vermelho "O NLB nao recebeu hostname em 10 minutos."
+  echo
+  echo "  Sem ele nao ha endereco publico: nem aplicacao, nem Grafana, nem ArgoCD."
+  echo "  Acompanhe:  kubectl -n argocd get application ingress-nginx"
+  echo "              kubectl -n ingress-nginx get svc,events"
+  echo
+  echo "  Causa comum: as subnets publicas sem a tag kubernetes.io/role/elb=1,"
+  echo "  ou o cloud-controller sem permissao para criar Load Balancer."
+  # exit 1, e nao 0: sair com sucesso aqui esconderia uma falha real e o
+  # usuario so descobriria ao tentar abrir a URL.
+  exit 1
 fi
 
 # O Grafana precisa da URL publica para montar os links dos paineis. E aqui que

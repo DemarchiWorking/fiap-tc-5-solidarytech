@@ -144,12 +144,7 @@ data "aws_iam_role" "lab" {
   name = "LabRole"
 }
 
-check "sessao_do_lab_ativa" {
-  assert {
-    condition     = data.aws_iam_role.lab.arn != ""
-    error_message = "LabRole nao encontrada. Confirme que a sessao do AWS Academy esta ativa e que as credenciais nao expiraram."
-  }
-}
+# Sem `check` sobre a LabRole — ver a justificativa em prod-use1/main.tf.
 
 ###############################################################################
 # Infraestrutura — os MESMOS modulos da producao

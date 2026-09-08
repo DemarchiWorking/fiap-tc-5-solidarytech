@@ -31,6 +31,9 @@ spec:
         app: db-init-donation
     spec:
       restartPolicy: OnFailure
+      # O Job nao chama a API do Kubernetes — so o PostgreSQL. Mesmo rigor
+      # aplicado as aplicacoes.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 70          # usuario postgres na imagem alpine
@@ -107,6 +110,17 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: sql-init-donation
+  annotations:
+    # HOOK TAMBEM, e numa onda ANTERIOR a do Job.
+    #
+    # Sem isto o sync do ArgoCD TRAVA PARA SEMPRE: o Job e PreSync e roda antes
+    # da onda normal, mas o ConfigMap que ele monta so seria criado na onda
+    # normal. O pod fica em CreateContainerConfigError, o kubelet retenta
+    # indefinidamente (nao e "Failed"), o hook nunca completa — e o retry do
+    # ApplicationSet nao ajuda, porque nada falha. Deadlock permanente.
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 data:
   init.sql: |
     CREATE TABLE IF NOT EXISTS donations (

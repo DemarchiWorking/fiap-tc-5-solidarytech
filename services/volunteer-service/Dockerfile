@@ -36,7 +36,18 @@ FROM python:3.12-slim-bookworm AS runtime
 # Instalar o que nao se usa e superficie de CVE de graca.
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin solidary
+    && groupadd --gid 10001 solidary \
+    && useradd --create-home --uid 10001 --gid 10001 \
+           --shell /usr/sbin/nologin solidary
+
+# groupadd explicito: `useradd --uid 10001` sozinho cria um grupo cujo GID e o
+# proximo livre do sistema (tipicamente 1000), e NAO 10001. O `USER 10001:10001`
+# logo abaixo fixa GID 10001 — um GID que entao nao existe em /etc/group. O
+# container sobe assim mesmo, mas os arquivos de `COPY --chown=solidary:solidary`
+# ficam com um grupo que o processo nao possui: qualquer arquivo que dependesse
+# de permissao de grupo viraria EACCES. Criando o grupo com GID fixo, o
+# --chown, o USER e o runAsUser/fsGroup do Kubernetes passam a falar do mesmo
+# numero.
 
 COPY --from=deps /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \

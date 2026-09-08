@@ -76,8 +76,9 @@ e o `smoke-local.sh`. Os gates que **não** dependem de Docker estão todos verd
 
 | Gate | Precisa de Docker? | Resultado |
 |---|---|---|
-| `scripts/verificar-academy.py` | não | ✅ 20 arquivos `.tf`, 7 verificações, **0 falhas** |
-| `scripts/verificar-observabilidade.py` | não | ✅ dashboards, regras de SLO e contrato de métrica coerentes |
+| `scripts/verificar-academy.py` | não | ✅ 20 arquivos `.tf`, **11 verificações**, 0 falhas |
+| `scripts/verificar-observabilidade.py` | não | ✅ **6 verificações** — dashboards, SLO, contrato de métrica, chaves de Helm, egress x banco |
+| `scripts/verificar-workflows.py` | não | ✅ **novo** — 8 workflows, 5 verificações, 0 falhas |
 | Sintaxe YAML (51 arquivos) | não | ✅ 0 erros |
 | Links markdown | não | ✅ 0 quebrados |
 | `pytest` ngo-service | não | ✅ 25 passed · 91% |
@@ -210,3 +211,69 @@ requisito→minuto, e relatório com as 4 seções de evidência obrigatórias.
 | GSI do DynamoDB | Criado, mas a app segue usando `Scan` **de propósito** | Vira medição antes/depois no FinOps |
 | Janela de SLO | **7 dias**, não 30 — limitada pela retenção do Prometheus | `03-sre/sli-slo-sla.md` §4 |
 | Spot | **Impossível** no lab (só On-Demand) | Recomendação para produção real |
+
+
+---
+
+## Rodada de auditoria — correções aplicadas
+
+Três revisores independentes leram o repositório procurando o que quebraria de
+fato, e não o que está bonito. Acharam **1 bloqueador, 4 bugs que impediam o
+deploy e 6 falhas silenciosas**. Todos corrigidos. O que segue é o registro do
+que estava errado — porque o valor está no motivo, não na lista.
+
+### O bloqueador
+
+`infra/modules/network/main.tf` criava a VPC com `var.cidr_vpc`, mas as
+sub-redes vinham de uma lista **literal** `["10.0.0.0/20", ...]`. Em produção a
+VPC também é `10.0.0.0/16`, então funcionava **por coincidência**. No ambiente
+de DR, com VPC `10.10.0.0/16`, as sub-redes ficavam fora da VPC e o `apply`
+morria no primeiro `aws_subnet` com `InvalidSubnet.Range` — depois de já ter
+criado VPC, IGW e route tables.
+
+Ou seja: `make dr-up`, que é a evidência do requisito **F4.2b**, nunca subiu uma
+única vez. Agora as sub-redes são derivadas com `cidrsubnet(var.cidr_vpc, 4, i)`,
+o que produz valores **idênticos** em produção — portanto sem diff no state.
+
+### As falhas que não quebravam nada (e por isso eram piores)
+
+| O que parecia | O que era |
+|---|---|
+| SAST verde no painel | `if: env.SONAR_TOKEN != ''` no mesmo step que declarava a variável. O `if` é avaliado **antes** do `env` do step existir: a condição era sempre falsa e **o SonarCloud nunca rodou** |
+| Tracing ponta a ponta implementado | Faltava o `otelhttp.NewHandler` no Go. Sem span de servidor, `logCtx` nunca anexava `trace_id`, o span do SQS virava span raiz e o `traceparent` propagado apontava para um trace que nunca começou |
+| NetworkPolicy protegendo os pods | O VPC CNI ignora NetworkPolicy por padrão. A mitigação do ADR-001 estava apenas **declarada** — e, quando ligada, o egress excluía a faixa onde vive o RDS: os pods perderiam o banco |
+| Pipeline publicando no GitOps | Os 3 callers não declaravam `permissions`. Num workflow reutilizável o bloco do chamado só **restringe** o do chamador: o `git push` levaria 403 depois de já ter publicado a imagem no ECR |
+| Drill de DR pronto | `environment: ${{ ... || '' }}` — o GitHub recusa nome de environment vazio, então o modo seguro (`verificar`) falhava antes do primeiro passo |
+| Imagem Go construindo | `go mod download` **não cria** um `go.sum` ausente, e o estágio seguinte fazia `COPY --from=deps /src/go.sum`. O build quebrava ali |
+| Gate de YAML cobrindo tudo | `if ".git" in d` — `.git` é substring de `.git**hub**`: o diretório de workflows inteiro escapava da validação |
+
+### Gates novos — para que nada disso volte
+
+Cada um desses bugs passou por revisão sem ser notado. A resposta não é "revisar
+melhor", é automatizar a detecção:
+
+- **`scripts/verificar-workflows.py`** (novo) — 5 verificações sobre os
+  workflows do Actions.
+- **`verificar-academy.py`** ganhou 4 verificações: CIDR de sub-rede fixo onde
+  há `var.cidr_vpc`, `timestamp()` em identificador (mais `hh` de 12 horas),
+  versionamento `Suspended` em bucket novo, e `create_before_destroy` com `name`
+  fixo.
+- **`verificar-observabilidade.py`** ganhou 2: chave de Helm com ponto no nome
+  dentro de bloco aninhado, e egress de NetworkPolicy que exclui a faixa do
+  banco sem regra dedicada para a 5432.
+
+Cada verificação nova foi testada **contra o bug original reintroduzido num
+fixture** — todas disparam nele e nenhuma dispara no código corrigido. Um gate
+que nunca viu o bug que diz pegar é só mais um arquivo verde.
+
+### Estado honesto
+
+Este repositório está **auditado e corrigido estaticamente**. A palavra
+*validado* só se aplica depois de:
+
+```bash
+make check                                  # inclui os gates novos
+docker build --target test services/donation-service   # prova que o Go compila
+make validate                               # terraform validate nos 2 ambientes
+make plan AMBIENTE=dr-usw2                  # prova a correção do CIDR
+```

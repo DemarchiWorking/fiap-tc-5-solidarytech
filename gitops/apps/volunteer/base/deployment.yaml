@@ -47,7 +47,12 @@ spec:
           # Sobrescrito pelo overlay com o SHA de 40 caracteres do commit,
           # escrito pela pipeline via `kustomize edit set image`.
           image: volunteer-service:latest
-          imagePullPolicy: IfNotPresent
+          # Always enquanto a tag base for `latest`. Com IfNotPresent, um no que
+          # ja tem `latest` em cache serve a imagem antiga indefinidamente. A
+          # pipeline reescreve a tag para o SHA do commit — a partir dai o
+          # IfNotPresent seria seguro, mas Always custa apenas uma consulta de
+          # manifesto e elimina a classe de erro por completo.
+          imagePullPolicy: Always
 
           ports:
             - name: http

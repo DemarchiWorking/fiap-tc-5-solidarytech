@@ -12,9 +12,8 @@
 data "aws_caller_identity" "atual" {}
 data "aws_region" "atual" {}
 
-# A role que o Learner Lab entrega pronta. Buscada aqui, no raiz, para que o
-# `check` abaixo possa falhar cedo e com uma mensagem util caso a sessao do lab
-# tenha expirado — que e o erro mais comum do dia a dia neste ambiente.
+# A role que o Learner Lab entrega pronta. Referenciada por data source —
+# NUNCA por resource, porque iam:CreateRole e negado no lab.
 data "aws_iam_role" "lab" {
   name = "LabRole"
 }
@@ -26,6 +25,14 @@ locals {
   sufixo_conta = substr(data.aws_caller_identity.atual.account_id, -6, 6)
 
   nome_cluster = "${var.prefixo}-eks"
+
+  # vCPU por tamanho de instancia, para o check de orcamento e para o output de
+  # conformidade. Cobre os tamanhos que o Learner Lab libera.
+  vcpu_por_tamanho = {
+    nano = 2, micro = 2, small = 2, medium = 2, large = 2
+  }
+  vcpu_do_no  = lookup(local.vcpu_por_tamanho, reverse(split(".", var.tipos_instancia_nos[0]))[0], 2)
+  vcpu_maximo = var.maximo_nos * local.vcpu_do_no
 }
 
 ###############################################################################
@@ -36,12 +43,11 @@ locals {
 # entrada invalida.
 ###############################################################################
 
-check "sessao_do_lab_ativa" {
-  assert {
-    condition     = data.aws_iam_role.lab.arn != ""
-    error_message = "A role LabRole nao foi encontrada. Em uma conta AWS Academy ela ja existe: confirme que a sessao do lab esta ATIVA e que as credenciais em ~/.aws/credentials sao as da sessao atual (elas expiram junto com a sessao, em ~4h)."
-  }
-}
+# Nao ha `check` sobre a LabRole: se a credencial expirou ou a role nao existe,
+# a LEITURA do data source acima falha primeiro, com o erro do provider — o
+# check nunca chegaria a rodar, e `arn != ""` nunca poderia ser falso. Era
+# codigo decorativo. A verificacao real vive em scripts/pre-voo.sh, que roda
+# antes e sem tocar na nuvem.
 
 check "regiao_liberada" {
   assert {
@@ -52,9 +58,12 @@ check "regiao_liberada" {
 
 check "orcamento_de_vcpu" {
   assert {
-    # O lab limita 32 vCPU e 9 instancias por regiao. Um t3.medium usa 2 vCPU.
-    condition     = var.maximo_nos * 2 <= 32 && var.maximo_nos <= 9
-    error_message = "Com maximo_nos=${var.maximo_nos} o node group pode estourar o teto do Learner Lab (32 vCPU / 9 instancias por regiao) e as instancias excedentes seriam terminadas."
+    # vCPU DERIVADO do tipo escolhido, e nao fixado em 2. A versao anterior
+    # assumia t3.medium: trocar para t3.large (4 vCPU, permitido pelo lab)
+    # faria a conta errar em silencio — e o output de conformidade, que vai para
+    # o relatorio como evidencia, passaria a mentir.
+    condition     = local.vcpu_maximo <= 32 && var.maximo_nos <= 9
+    error_message = "Com maximo_nos=${var.maximo_nos} de ${join(",", var.tipos_instancia_nos)} o node group chega a ${local.vcpu_maximo} vCPU e estoura o teto do Learner Lab (32 vCPU / 9 instancias por regiao). As instancias excedentes seriam terminadas."
   }
 }
 

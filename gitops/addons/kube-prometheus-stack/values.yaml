@@ -23,7 +23,9 @@ prometheus:
     # disco; a diferenca esta declarada em docs/03-sre/sli-slo-sla.md, junto com
     # o valor canonico de 30 dias usado na conversa de SLA.
     retention: 10d
-    retentionSize: 9GB
+    # 7GB num PVC de 10Gi (=10,7 GB). Nao 9GB: o compactor do TSDB precisa de
+    # espaco temporario, e a 84% de ocupacao ele nao teria.
+    retentionSize: 7GB
 
     # ESSENCIAL: habilita o endpoint /api/v1/write. E por ele que o OTel
     # Collector entrega as metricas das aplicacoes (remote write). Sem isto, o
@@ -96,19 +98,39 @@ alertmanager:
           repeat_interval: 1h
         - matchers: ['severity = "ticket"']
           receiver: "chatops"
+    # RECEIVERS SEM INTEGRACAO EXTERNA — e isto e deliberado, nao um esquecimento.
+    #
+    # A versao anterior apontava para um `alertmanager-webhook-proxy` que NAO
+    # EXISTE em lugar nenhum do repositorio. O Alertmanager validava a config
+    # (a URL era sintaticamente valida), subia saudavel, e falhava em cada
+    # notificacao com erro de DNS: o alerta de burn rate critico nunca chegaria
+    # a ninguem. Falha silenciosa exatamente na peca cuja funcao e nao falhar em
+    # silencio.
+    #
+    # Como fica agora: os alertas DISPARAM e ficam visiveis no Prometheus e no
+    # Alertmanager — que e a evidencia que o requisito F3 pede. O caminho de
+    # notificacao externa e uma decisao de quem opera, e as URLs de PagerDuty e
+    # ChatOps sao credenciais que nao entram no Git.
+    #
+    # Para ligar, sem tocar em mais nada:
+    #
+    #   receivers:
+    #     - name: "paginacao"
+    #       pagerduty_configs:
+    #         - routing_key_file: /etc/alertmanager/secrets/pagerduty/key
+    #     - name: "chatops"
+    #       webhook_configs:
+    #         - url_file: /etc/alertmanager/secrets/chatops/url
+    #
+    # com `alertmanagerSpec.secrets: [pagerduty, chatops]`, que monta os Secrets
+    # em /etc/alertmanager/secrets/. O `_file` mantem o segredo fora do values.
+    #
+    # O self-healing NAO depende disto: ele e acionado por repository_dispatch a
+    # partir do webhook do APM, nao do Alertmanager.
     receivers:
       - name: "padrao"
       - name: "paginacao"
-        webhook_configs:
-          # O proxy le as URLs reais do Secret alertmanager-webhooks, criado
-          # pelo bootstrap a partir de variavel de ambiente. URL de webhook e
-          # credencial: nunca entram no Git.
-          - url: "http://alertmanager-webhook-proxy.monitoring.svc.cluster.local:8080/page"
-            send_resolved: true
       - name: "chatops"
-        webhook_configs:
-          - url: "http://alertmanager-webhook-proxy.monitoring.svc.cluster.local:8080/chat"
-            send_resolved: true
 
 grafana:
   adminUser: admin
@@ -138,9 +160,26 @@ grafana:
       cpu: 400m
       memory: 512Mi
 
+  # SEM ISTO O GRAFANA NAO TEM ENDERECO.
+  #
+  # O bootstrap anuncia http://<NLB>/grafana/ e o `serve_from_sub_path` abaixo
+  # prepara o Grafana para servir sob prefixo — mas nao existia Ingress nenhum
+  # apontando para ele. A URL devolvia 404 do nginx, e com
+  # `defaultBackend.enabled: false` nem uma pagina de erro amigavel aparecia.
+  #
+  # Sem o Grafana acessivel nao ha dashboard de SRE nem de FinOps — ou seja, os
+  # requisitos F1.2 e F2.3 ficam sem evidencia.
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    path: /grafana
+    pathType: Prefix
+
   grafana.ini:
     server:
-      # Servido em /grafana atras do ingress compartilhado.
+      # Servido em /grafana atras do ingress compartilhado. Combina com o
+      # `path: /grafana` acima: o Grafana reescreve os links internos com o
+      # prefixo, entao NAO se usa rewrite-target aqui.
       serve_from_sub_path: true
     analytics:
       reporting_enabled: false

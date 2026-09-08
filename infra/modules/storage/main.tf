@@ -117,7 +117,10 @@ resource "aws_s3_bucket_versioning" "principal" {
   bucket = aws_s3_bucket.principal.id
 
   versioning_configuration {
-    status = var.versionamento ? "Enabled" : "Suspended"
+    # "Disabled", e nao "Suspended": Suspended so e valido para bucket que JA
+    # esteve versionado. Num bucket novo, o GetBucketVersioning volta vazio
+    # contra um state que diz "Suspended" -> diff perpetuo a cada plan.
+    status = var.versionamento ? "Enabled" : "Disabled"
   }
 }
 

@@ -134,11 +134,45 @@ def setup_telemetry(service_name: str, version: str, env: str):
         )
         metrics.set_meter_provider(meter_provider)
 
+        _instrumentar_psycopg2()
+
     return metrics.get_meter(service_name).create_histogram(
         name=DURATION_METRIC_NAME,
         description="Duracao das requisicoes HTTP servidas, em segundos",
         unit="s",
     )
+
+
+def _instrumentar_psycopg2() -> None:
+    """Liga a instrumentacao automatica do driver do PostgreSQL.
+
+    A dependencia `opentelemetry-instrumentation-psycopg2` ja estava no
+    requirements.txt, mas NINGUEM chamava o instrumentador. O efeito era um
+    trace com um unico span — o do Flask — e nenhuma visibilidade de banco:
+    numa investigacao de latencia era impossivel distinguir "a query esta
+    lenta" de "o codigo Python esta lento", que e exatamente a pergunta que o
+    APM precisa responder para o MTTR do requisito F3.
+
+    Com ele, cada SELECT/INSERT vira um span filho com `db.statement`, e o
+    trace_id e o mesmo que aparece no log e no painel.
+
+    Chamado apenas quando ha Collector configurado: sem provider, o
+    instrumentador so acrescentaria overhead de patch em troca de spans que
+    ninguem coleta — inclusive na suite de testes.
+    """
+    try:
+        from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
+    except ImportError:  # pragma: no cover - dependencia opcional
+        logging.getLogger(__name__).warning(
+            "instrumentacao psycopg2 indisponivel; sem spans de banco"
+        )
+        return
+
+    # is_instrumented_by_opentelemetry evita o warning ruidoso de dupla
+    # instrumentacao quando o gunicorn cria varios workers no mesmo processo.
+    instrumentor = Psycopg2Instrumentor()
+    if not instrumentor.is_instrumented_by_opentelemetry:
+        instrumentor.instrument(skip_dep_check=True)
 
 
 def _status_class(code: int) -> str:

@@ -61,7 +61,7 @@ pre-voo: ## VERIFIQUE ANTES DE SUBIR — valida ferramentas, credenciais e codig
 	@./scripts/pre-voo.sh
 
 .PHONY: check
-check: check-academy check-observabilidade fmt-check validate check-manifestos ## Roda todos os gates locais
+check: check-academy check-observabilidade check-workflows fmt-check validate check-manifestos ## Roda todos os gates locais
 
 .PHONY: check-observabilidade
 check-observabilidade: ## Coerencia da observabilidade (dashboards, regras de SLO, contrato da metrica)
@@ -70,6 +70,10 @@ check-observabilidade: ## Coerencia da observabilidade (dashboards, regras de SL
 .PHONY: check-manifestos
 check-manifestos: ## Valida os manifestos Kubernetes (kustomize build + kubeconform)
 	@./scripts/verificar-manifestos.sh
+
+.PHONY: check-workflows
+check-workflows: ## Coerencia dos workflows do GitHub Actions (escopo de env, permissions, versoes)
+	@python scripts/verificar-workflows.py .
 
 .PHONY: check-academy
 check-academy: ## Verifica as restricoes do AWS Academy no codigo Terraform
@@ -90,6 +94,22 @@ validate: ## terraform validate nos dois ambientes
 		$(TF) -chdir=infra/environments/$$amb init -backend=false -input=false >/dev/null && \
 		$(TF) -chdir=infra/environments/$$amb validate || exit 1; \
 	done
+
+.PHONY: gerar-gosum
+gerar-gosum: ## Gera e versiona o go.sum do donation-service (1x, precisa de Docker)
+	@echo "Resolvendo o grafo de modulos dentro de um container Go..."
+	@docker run --rm \
+		-v "$(CURDIR)/services/donation-service:/src" \
+		-w /src golang:1.23-alpine \
+		sh -c "apk add --no-cache git >/dev/null && go mod tidy"
+	@echo ""
+	@echo "go.mod e go.sum atualizados. Faca commit dos dois:"
+	@echo "    git add services/donation-service/go.mod services/donation-service/go.sum"
+	@echo ""
+	@echo "Sem eles versionados a imagem ainda constroi — o estagio 'deps' do"
+	@echo "Dockerfile roda 'go mod tidy' — mas o build deixa de ser reproduzivel:"
+	@echo "cada build resolve as versoes de novo, e o job de lint da CI reprova"
+	@echo "enquanto o go.sum nao estiver rastreado pelo Git."
 
 .PHONY: test-local
 test-local: ## Testes unitarios dos servicos, sem infraestrutura

@@ -12,6 +12,10 @@ require (
 	// pgx v4 -> v5: v4 nao recebe mais correcoes de seguranca.
 	github.com/jackc/pgx/v5 v5.7.1
 
+	// otelhttp: middleware que cria o span de servidor HTTP. Sem ele nao ha
+	// trace ponta a ponta nem trace_id nos logs. A versao contrib e pareada com
+	// a do core (1.32.0 <-> 0.57.0).
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.57.0
 	go.opentelemetry.io/otel v1.32.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.32.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.32.0
@@ -22,3 +26,8 @@ require (
 )
 
 require github.com/aws/aws-sdk-go-v2 v1.32.6
+
+// NAO ha bloco `require (... // indirect)` aqui de proposito: ele e gerado por
+// `go mod tidy`, junto com o go.sum. Rode `make gerar-gosum` uma vez e commite
+// os dois arquivos — o Dockerfile funciona sem eles (roda `tidy` no estagio
+// deps), mas o build so fica reproduzivel com eles versionados.

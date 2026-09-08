@@ -243,6 +243,23 @@ def main() -> int:
             # queimaria cota de requisicao SQS (cobrada por chamada).
             log.error("falha ao ler a fila; nova tentativa em 5s", exc_info=True)
             time.sleep(5)
+        except Exception:
+            # Rede de seguranca. Antes so ClientError/BotoCoreError eram
+            # tratados, entao QUALQUER outro erro — um DynamoDB devolvendo um
+            # tipo inesperado, um payload que escapa da validacao, um bug no
+            # proprio handler — escapava do laco e derrubava o processo.
+            #
+            # O pod reiniciava, e a mensagem em voo voltava para a fila apos o
+            # visibility timeout... para ser processada de novo pelo mesmo
+            # codigo e falhar de novo: CrashLoopBackOff perpetuo causado por
+            # UMA mensagem ruim. A DLQ existe justamente para absorver isso,
+            # mas ela so entra em acao se o worker continuar vivo o suficiente
+            # para a mensagem esgotar o maxReceiveCount.
+            #
+            # KeyboardInterrupt e SystemExit nao sao capturados aqui: herdam de
+            # BaseException, entao o desligamento gracioso segue funcionando.
+            log.exception("erro nao previsto no ciclo; worker continua")
+            time.sleep(5)
 
     log.info("worker encerrado")
     return 0

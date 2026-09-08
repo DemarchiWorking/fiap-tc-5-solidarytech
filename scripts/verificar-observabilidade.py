@@ -136,6 +136,152 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     print()
+    # ------------------------------------------------------------------- 5
+    # Chave de Helm values com PONTO no nome.
+    #
+    # Escrever `service.externalTrafficPolicy: Local` dentro do bloco
+    # `controller:` cria uma chave chamada literalmente
+    # "service.externalTrafficPolicy". O Helm nao desdobra pontos em niveis: a
+    # chave simplesmente nao corresponde a nada no template, e o chart usa o
+    # valor padrao. Nenhum erro, nenhum aviso — a configuracao e ignorada em
+    # silencio.
+    #
+    # Foi o que aconteceu com o externalTrafficPolicy do ingress-nginx: o NLB
+    # continuou sem preservar o IP do cliente, e todo log de acesso passou a
+    # mostrar o IP do no em vez do IP de origem, inutilizando qualquer analise
+    # por origem de trafego.
+    print("\n== 5. Chaves de Helm values com ponto no nome ==")
+    antes = len(falhas)
+
+    # Chaves com ponto que sao LEGITIMAS: o proprio chart as espera com esse
+    # nome exato. `grafana.ini` e o caso classico — e o nome do arquivo de
+    # configuracao do Grafana, nao um caminho de valores.
+    CHAVES_LEGITIMAS = {"grafana.ini", "admin.password", "ldap.toml"}
+
+    # Blocos cujo conteudo e um mapa LIVRE repassado ao Kubernetes: rotulos,
+    # anotacoes e seletores tem ponto por definicao ("app.kubernetes.io/name",
+    # "topology.kubernetes.io/zone"). Nada abaixo deles e caminho de Helm.
+    MAPAS_LIVRES = {
+        "annotations", "labels", "nodeSelector", "podAnnotations", "podLabels",
+        "matchLabels", "selector", "selectorLabels", "commonLabels",
+        "extraLabels", "serviceAnnotations", "ingressAnnotations",
+        "serviceAccountAnnotations", "configmaps", "secrets", "files",
+        "dashboards", "datasources", "config", "extraConfig", "processors",
+        "receivers", "exporters", "extensions",
+    }
+
+    def varrer_chaves(no, caminho, arquivo, achados):
+        if isinstance(no, dict):
+            for chave, valor in no.items():
+                if isinstance(chave, str) and "." in chave and caminho:
+                    ignorar = (
+                        chave in CHAVES_LEGITIMAS
+                        # Sob um mapa livre, ponto e esperado.
+                        or bool(set(caminho) & MAPAS_LIVRES)
+                        # Nome de arquivo embutido (ConfigMap, dashboard JSON).
+                        or chave.endswith((".yaml", ".yml", ".json", ".tpl",
+                                           ".txt", ".ini", ".toml", ".conf"))
+                        # Chave de rotulo/anotacao do Kubernetes tem barra.
+                        or "/" in chave
+                    )
+                    if not ignorar:
+                        achados.append(
+                            f"{arquivo}: chave '{chave}' aninhada em "
+                            f"'{'.'.join(caminho)}'. O Helm nao desdobra pontos: "
+                            f"a chave nao casa com nada no template e o valor e "
+                            f"ignorado em silencio. Aninhe os niveis."
+                        )
+                varrer_chaves(valor, caminho + [str(chave)], arquivo, achados)
+        elif isinstance(no, list):
+            for item in no:
+                varrer_chaves(item, caminho, arquivo, achados)
+
+    addons = os.path.join(raiz, "gitops", "addons")
+    valores = []
+    for d, _, fs in os.walk(addons):
+        for f in fs:
+            if f == "values.yaml":
+                valores.append(os.path.join(d, f))
+
+    for caminho_arq in sorted(valores):
+        curto = os.path.relpath(caminho_arq, raiz).replace(os.sep, "/")
+        try:
+            with io.open(caminho_arq, encoding="utf-8") as fh:
+                doc = yaml.safe_load(fh) or {}
+        except yaml.YAMLError as exc:
+            falhas.append(f"{curto}: YAML invalido: {exc}")
+            continue
+        achados: list[str] = []
+        varrer_chaves(doc, [], curto, achados)
+        falhas += achados
+        # Estado DESTE arquivo. Comparar com `antes` (de antes do laco) marcava
+        # como suspeitos todos os arquivos processados depois do primeiro erro.
+        print(f"   ok  {curto}" if not achados else f"   FALHA  {curto}")
+
+    # ------------------------------------------------------------------- 6
+    # Egress de NetworkPolicy que exclui o CIDR das dependencias.
+    #
+    # O padrao "libere 0.0.0.0/0, exceto a rede privada" e a receita usual
+    # contra SSRF e movimentacao lateral. So que o RDS TAMBEM vive na rede
+    # privada: se o `except` cobrir a subrede do banco e nao houver uma regra
+    # dedicada para a porta 5432, a aplicacao perde o banco no instante em que
+    # a policy passa a ser aplicada de verdade.
+    #
+    # Enquanto o VPC CNI ignorava as NetworkPolicies isso nao aparecia. Ao
+    # ligar `enableNetworkPolicy`, viraria uma quebra imediata de producao —
+    # exatamente o tipo de armadilha que so se manifesta quando o controle de
+    # seguranca comeca a funcionar.
+    print("\n== 6. Egress de NetworkPolicy x porta do banco ==")
+    antes = len(falhas)
+    politicas = []
+    for d, _, fs in os.walk(os.path.join(raiz, "gitops", "apps")):
+        for f in fs:
+            if f == "networkpolicy.yaml":
+                politicas.append(os.path.join(d, f))
+
+    for caminho_arq in sorted(politicas):
+        curto = os.path.relpath(caminho_arq, raiz).replace(os.sep, "/")
+        with io.open(caminho_arq, encoding="utf-8") as fh:
+            docs = [x for x in yaml.safe_load_all(fh) if isinstance(x, dict)]
+
+        for doc in docs:
+            if doc.get("kind") != "NetworkPolicy":
+                continue
+            regras = (doc.get("spec") or {}).get("egress") or []
+
+            excecoes: list[str] = []
+            for regra in regras:
+                for destino in regra.get("to") or []:
+                    bloco = destino.get("ipBlock") or {}
+                    excecoes += list(bloco.get("except") or [])
+            if not excecoes:
+                continue
+
+            # Existe alguma regra que libere explicitamente a porta do Postgres?
+            libera_banco = False
+            for regra in regras:
+                portas = [pr.get("port") for pr in regra.get("ports") or []]
+                if 5432 not in portas:
+                    continue
+                for destino in regra.get("to") or []:
+                    if (destino.get("ipBlock") or {}).get("cidr"):
+                        libera_banco = True
+
+            nome = (doc.get("metadata") or {}).get("name", "?")
+            if not libera_banco:
+                falhas.append(
+                    f"{curto}: NetworkPolicy '{nome}' exclui {excecoes} do "
+                    f"egress e nao tem regra dedicada para a porta 5432. "
+                    f"O RDS vive nessa faixa: ao ligar a aplicacao da policy, "
+                    f"os pods perdem o banco."
+                )
+            else:
+                print(f"   ok  {curto}  ({nome}: 5432 liberado explicitamente)")
+
+    if len(falhas) == antes and not politicas:
+        print("   (nenhuma NetworkPolicy encontrada)")
+
+    print()
     if falhas:
         print(f"== {len(falhas)} FALHA(S) ==")
         for f in falhas:

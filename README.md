@@ -65,7 +65,7 @@ hackathon. É a recomendação de FinOps com maior impacto do projeto.
 ## Validar sem gastar nada
 
 ```bash
-make check          # 3 gates: Academy + Terraform + manifestos K8s
+make check          # 4 gates: Academy + observabilidade + workflows + manifestos
 make test-local     # testes unitários dos 3 serviços, em container
 make smoke          # Postgres + LocalStack + fluxo completo, sem AWS
 ```
@@ -74,7 +74,8 @@ make smoke          # Postgres + LocalStack + fluxo completo, sem AWS
 |---|---|
 | `scripts/verificar-academy.py` | Recurso bloqueado pelo Learner Lab, região inválida, instância acima do teto, escape HCL inválido, segredo literal |
 | `scripts/verificar-manifestos.sh` | `kustomize build`, `kubeconform`, e política: todo Deployment com requests/limits, probes, PDB e contexto de segurança |
-| `scripts/verificar-observabilidade.py` | JSON dos dashboards, regras de SLO referenciadas mas inexistentes, e **divergência de buckets entre Go e Python** |
+| `scripts/verificar-observabilidade.py` | JSON dos dashboards, regras de SLO referenciadas mas inexistentes, **divergência de buckets entre Go e Python**, chave de Helm com ponto no nome (ignorada em silêncio) e egress de NetworkPolicy que bloqueia o banco |
+| `scripts/verificar-workflows.py` | `if:` lendo `env` fora de escopo (condição sempre falsa), `environment` que resolve para string vazia, caller sem `permissions` para o workflow reutilizável, rebase em clone raso, action presa em `latest` |
 
 O último é o mais sutil: se os buckets do histograma divergirem entre as
 linguagens, o `histogram_quantile` mistura fronteiras diferentes e **o p95 do SLO

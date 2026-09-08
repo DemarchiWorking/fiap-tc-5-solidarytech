@@ -105,12 +105,11 @@ resource "aws_eks_cluster" "principal" {
 
   depends_on = [aws_cloudwatch_log_group.control_plane]
 
-  lifecycle {
-    precondition {
-      condition     = can(data.aws_iam_role.lab.arn)
-      error_message = "A role ${var.nome_role_lab} nao foi encontrada. Em uma conta AWS Academy ela ja existe; confirme que a sessao do lab esta ativa e que as credenciais sao da conta certa."
-    }
-  }
+  # Nao ha precondition sobre a LabRole aqui: se ela nao existir ou a sessao
+  # tiver expirado, a LEITURA do data source falha antes, com o erro do proprio
+  # provider. `can(data.aws_iam_role.lab.arn)` seria sempre true — codigo morto.
+  # A verificacao util acontece em scripts/pre-voo.sh, que roda antes e sem
+  # tocar na nuvem.
 }
 
 ###############################################################################
@@ -281,20 +280,51 @@ data "aws_eks_addon_version" "padrao" {
   most_recent        = true
 }
 
-resource "aws_eks_addon" "rede" {
-  for_each = toset(["vpc-cni", "kube-proxy"])
-
+# vpc-cni tem resource proprio (fora do for_each) porque precisa de
+# configuration_values, que kube-proxy nao aceita.
+resource "aws_eks_addon" "vpc_cni" {
   cluster_name  = aws_eks_cluster.principal.name
-  addon_name    = each.key
-  addon_version = data.aws_eks_addon_version.padrao[each.key].version
+  addon_name    = "vpc-cni"
+  addon_version = data.aws_eks_addon_version.padrao["vpc-cni"].version
+
+  # ISTO E O QUE FAZ AS NetworkPolicies EXISTIREM DE VERDADE.
+  #
+  # Por padrao o VPC CNI IGNORA objetos NetworkPolicy — eles ficam no cluster
+  # sem efeito nenhum. Sem esta linha, a "mitigacao pela camada de rede" que o
+  # ADR-001 declara para compensar a ausencia de IRSA seria ficcao: o PCN
+  # afirmaria um controle que nao existe.
+  #
+  # ENABLE_PREFIX_DELEGATION eleva o teto de pods por no de 17 para 110. Com 17,
+  # 3 nos comportam 51 pods e o cluster ja nasce com ~45 em repouso — o HPA no
+  # maximo estouraria o limite e os pods ficariam Pending com "Too many pods",
+  # sem alerta obvio.
+  configuration_values = jsonencode({
+    enableNetworkPolicy = "true"
+    env = {
+      ENABLE_PREFIX_DELEGATION = "true"
+      WARM_PREFIX_TARGET       = "1"
+    }
+  })
 
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  tags = { Name = "${var.nome_cluster}-${each.key}" }
+  tags = { Name = "${var.nome_cluster}-vpc-cni" }
 
-  # vpc-cni e kube-proxy precisam existir antes de qualquer pod agendar.
-  depends_on = [aws_eks_node_group.principal]
+  # SEM depends_on do node group: e o contrario — o no precisa da CNI para
+  # ficar Ready. A versao anterior invertia a ordem e so nao quebrava porque o
+  # provider mantem bootstrap_self_managed_addons por padrao.
+}
+
+resource "aws_eks_addon" "kube_proxy" {
+  cluster_name  = aws_eks_cluster.principal.name
+  addon_name    = "kube-proxy"
+  addon_version = data.aws_eks_addon_version.padrao["kube-proxy"].version
+
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  tags = { Name = "${var.nome_cluster}-kube-proxy" }
 }
 
 resource "aws_eks_addon" "coredns" {

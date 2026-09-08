@@ -1,0 +1,56 @@
+# Fim de linha — garantia que NAO depende da configuracao de cada maquina.
+#
+# Este repositorio e escrito no Windows e executado no Linux: em container, no
+# runner do GitHub Actions e dentro do cluster. Um arquivo que chegue la com
+# CRLF quebra de formas que custam caro para diagnosticar:
+#
+#   * `.sh`        -> "/usr/bin/env: 'bash\r': No such file or directory".
+#                     A mensagem cita um interpretador que ninguem escreveu.
+#   * `Dockerfile` -> o \r entra no valor de um ENV ou no argumento de um RUN.
+#   * `.tf`        -> heredoc (<<EOT ... EOT) nao fecha, porque o delimitador
+#                     de fechamento vira "EOT\r".
+#   * `.yaml`      -> passa no parser e falha na aplicacao, com o \r dentro de
+#                     um valor de ConfigMap.
+#
+# O `core.autocrlf` resolve isso na maquina de quem configurou — e so nela.
+# Num trabalho de grupo isso nao e garantia nenhuma: basta um integrante com a
+# configuracao padrao para o CRLF entrar no repositorio e quebrar a pipeline
+# para todo mundo. `.gitattributes` e versionado, entao vale para todos.
+
+# Padrao: o Git decide o que e texto e normaliza para LF no repositorio.
+* text=auto eol=lf
+
+# Sempre LF, inclusive na copia de trabalho no Windows — sao arquivos
+# executados por um interpretador Linux.
+*.sh            text eol=lf
+*.bash          text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+Makefile        text eol=lf
+*.tf            text eol=lf
+*.tfvars        text eol=lf
+*.hcl           text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.json          text eol=lf
+*.py            text eol=lf
+*.go            text eol=lf
+go.mod          text eol=lf
+go.sum          text eol=lf
+*.sql           text eol=lf
+*.md            text eol=lf
+
+# Arquivos .bat rodam no cmd.exe do Windows, que espera CRLF.
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# Binarios: nunca normalizar.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.gz            binary
+*.zip           binary
+*.tar           binary

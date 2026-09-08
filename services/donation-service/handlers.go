@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -213,6 +214,21 @@ func (a *App) logCtx(ctx context.Context) *slog.Logger {
 }
 
 // Routes monta o mux com a instrumentacao aplicada.
+//
+// O `otelhttp.NewHandler` que envolve o mux e a peca sem a qual NADA de tracing
+// funciona neste servico. Sem ele nao existe span de servidor, e a consequencia
+// se espalha:
+//
+//   * `trace.SpanContextFromContext(r.Context())` devolve um contexto invalido,
+//     entao `logCtx` nunca anexa trace_id nem span_id — os logs em JSON saem
+//     sem o campo que o Loki usa para correlacionar com o APM;
+//   * o span de publicacao no SQS vira um span RAIZ: o trace comeca na fila, e
+//     nao na requisicao do doador;
+//   * o `traceparent` propagado para o worker carrega um trace que nunca teve
+//     comeco.
+//
+// Ou seja: o requisito F0.5b (Distributed Tracing ponta a ponta) dependia
+// inteiramente desta linha, e ela nao existia.
 func (a *App) Routes() http.Handler {
 	mux := http.NewServeMux()
 
@@ -221,10 +237,22 @@ func (a *App) Routes() http.Handler {
 	mux.HandleFunc("GET /health", a.Health)
 	mux.HandleFunc("GET /ready", a.Ready)
 
-	mux.Handle("POST /donations", a.instrument("/donations", http.HandlerFunc(a.CreateDonation)))
-	mux.Handle("GET /donations", a.instrument("/donations", http.HandlerFunc(a.ListDonations)))
+	// WithRouteTag nomeia o span com o TEMPLATE da rota. Sem ele, o nome do span
+	// seria o caminho concreto e o APM criaria uma operacao distinta por
+	// requisicao — explosao de cardinalidade do lado do APM, o mesmo problema
+	// que `http.route` evita do lado do Prometheus.
+	mux.Handle("POST /donations",
+		otelhttp.WithRouteTag("/donations", a.instrument("/donations", http.HandlerFunc(a.CreateDonation))))
+	mux.Handle("GET /donations",
+		otelhttp.WithRouteTag("/donations", a.instrument("/donations", http.HandlerFunc(a.ListDonations))))
 
-	return mux
+	return otelhttp.NewHandler(mux, ServiceName,
+		// As probes nao geram span: o kubelet bate a cada 10s e encheria o APM
+		// de trace irrelevante, consumindo a cota do free tier.
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return r.URL.Path != "/health" && r.URL.Path != "/ready"
+		}),
+	)
 }
 
 // statusRecorder captura o status escrito para que a metrica possa rotula-lo.

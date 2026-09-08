@@ -41,6 +41,18 @@ spec:
         server: https://kubernetes.default.svc
         namespace: "solidary-{{ index .path.segments 2 }}"
 
+      # SEM isto o HPA nao funciona.
+      #
+      # `replicas: 2` esta declarado no Deployment base. Quando o HPA sobe para
+      # 8 replicas no pico, o ArgoCD ve drift em /spec/replicas e reaplica 2; o
+      # HPA sobe de novo, o ArgoCD derruba de novo. Flapping — e o maxReplicas
+      # de 10 nunca e atingido de forma estavel, entao o teste de carga nao
+      # produz a evidencia de rightsizing nem de SLO sob pico.
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jqPathExpressions: ["$.spec.replicas"]
+
       syncPolicy:
         automated:
           selfHeal: true

@@ -26,11 +26,16 @@ spec:
       ports:
         - protocol: TCP
           port: 8081
-    # E o Prometheus, para raspar metricas.
+    # Prometheus, restrito a porta do servico. Sem `ports` esta regra liberaria
+    # TODAS as portas para qualquer pod de monitoring — amplo demais para uma
+    # policy cuja razao de existir e limitar o alcance lateral.
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8081
 
   egress:
     # DNS: sem isto o pod nao resolve nem o proprio Service.
@@ -48,20 +53,34 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
-    # Servicos AWS (RDS, SQS, DynamoDB) e IMDS. Sao enderecos externos ao
-    # cluster; restringir por CIDR aqui exigiria fixar faixas da AWS, que mudam.
+    # RDS — vive DENTRO da VPC, nas subnets privadas.
+    #
+    # Esta regra e separada de proposito. A versao anterior tentava cobrir o
+    # banco com `0.0.0.0/0 except 10.0.0.0/16`, mas o RDS esta em 10.0.32.0/20:
+    # o proprio `except` anulava a permissao. O sintoma seria a readiness nunca
+    # ficar pronta, com o diagnostico confuso de "o banco esta la, a tabela esta
+    # la, e a app nao conecta" — porque os Jobs de init tem outro label e nao
+    # sao selecionados por esta policy, entao o schema e criado normalmente.
+    - to:
+        - ipBlock:
+            cidr: 10.0.32.0/20
+        - ipBlock:
+            cidr: 10.0.48.0/20
+      ports:
+        - protocol: TCP
+          port: 5432
+
+    # Servicos AWS fora do cluster (SQS, DynamoDB, APM). O `except` mantem o
+    # bloqueio de trafego lateral para dentro da VPC que nao tenha sido
+    # explicitamente permitido acima.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
             except:
-              # Bloqueia trafego lateral para a rede do cluster que nao tenha
-              # sido explicitamente permitido acima.
               - 10.0.0.0/16
       ports:
         - protocol: TCP
           port: 443
-        - protocol: TCP
-          port: 5432
     # IMDSv2 — unica fonte de credencial AWS dos pods (ADR-001).
     - to:
         - ipBlock:

@@ -53,7 +53,16 @@ jobs:
           import io, os, sys, yaml
           erros = total = 0
           for d, _, fs in os.walk("."):
-              if ".git" in d: continue
+              # Comparar COMPONENTES do caminho, e nao substring. O filtro
+              # anterior era `".git" in d`, e ".git" e substring de
+              # ".github": o diretorio de workflows inteiro escapava da
+              # validacao. Os oito arquivos de pipeline — os que mais
+              # dependem de YAML correto — nunca foram conferidos por este
+              # gate. `.venv` e `node_modules` entram na lista pelo motivo
+              # original: sao arvores grandes que nao sao nossas.
+              partes = set(d.split(os.sep))
+              if partes & {".git", ".venv", "node_modules", "__pycache__"}:
+                  continue
               for f in fs:
                   if not f.endswith((".yaml", ".yml")): continue
                   p = os.path.join(d, f)
@@ -76,7 +85,16 @@ jobs:
           import io, os, re, sys
           quebrados = []
           for d, _, fs in os.walk("."):
-              if ".git" in d: continue
+              # Comparar COMPONENTES do caminho, e nao substring. O filtro
+              # anterior era `".git" in d`, e ".git" e substring de
+              # ".github": o diretorio de workflows inteiro escapava da
+              # validacao. Os oito arquivos de pipeline — os que mais
+              # dependem de YAML correto — nunca foram conferidos por este
+              # gate. `.venv` e `node_modules` entram na lista pelo motivo
+              # original: sao arvores grandes que nao sao nossas.
+              partes = set(d.split(os.sep))
+              if partes & {".git", ".venv", "node_modules", "__pycache__"}:
+                  continue
               for f in fs:
                   if not f.endswith(".md"): continue
                   p = os.path.join(d, f)

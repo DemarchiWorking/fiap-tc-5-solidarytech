@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 
 import psycopg2
 from flask import Flask, jsonify, request
@@ -83,13 +82,23 @@ def create_app(pool: SimpleConnectionPool | None = None) -> Flask:
         dsn = os.getenv("DATABASE_URL")
         if not dsn:
             log.critical("DATABASE_URL nao definida")
-            sys.exit(1)
+            # `raise`, e nao `sys.exit(1)`: a fabrica pode ser chamada de dentro
+            # de um teste ou de um worker do gunicorn. O SystemExit atravessava
+            # os dois de forma opaca — o gunicorn registrava apenas "Worker
+            # failed to boot" sem a causa, e o teste precisava de pytest.raises
+            # (SystemExit), que nao distingue "faltou DATABASE_URL" de qualquer
+            # outra saida. A excecao carrega o motivo ate o log.
+            raise RuntimeError(
+                "DATABASE_URL nao definida: o servico nao pode iniciar sem banco"
+            )
         try:
             pool = criar_pool(dsn)
             log.info("pool de conexoes com o PostgreSQL inicializado")
-        except Exception:
+        except Exception as erro:
             log.critical("falha ao conectar ao PostgreSQL", exc_info=True)
-            sys.exit(1)
+            raise RuntimeError(
+                "falha ao conectar ao PostgreSQL na inicializacao"
+            ) from erro
 
     app.config["POOL"] = pool
 

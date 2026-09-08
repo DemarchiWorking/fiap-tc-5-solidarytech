@@ -140,7 +140,7 @@ output "conformidade_aws_academy" {
     role_utilizada            = data.aws_iam_role.lab.name
     roles_iam_criadas         = 0
     oidc_providers_criados    = 0
-    vcpu_maximo_do_node_group = var.maximo_nos * 2
+    vcpu_maximo_do_node_group = local.vcpu_maximo
     teto_vcpu_do_lab          = 32
     instancias_maximas        = var.maximo_nos
     teto_instancias_do_lab    = 9

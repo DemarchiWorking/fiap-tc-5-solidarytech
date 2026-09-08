@@ -97,10 +97,12 @@ resource "aws_ecr_lifecycle_policy" "servico" {
         rulePriority = 2
         description  = "Mantem apenas as ${var.imagens_mantidas} imagens taggeadas mais recentes"
         selection = {
-          tagStatus     = "tagged"
-          tagPatternList = ["*"]
-          countType     = "imageCountMoreThan"
-          countNumber   = var.imagens_mantidas
+          # tagStatus "any", e nao "tagged" + tagPatternList ["*"]: um padrao
+          # que e apenas o curinga e recusado pelo ECR na validacao do JSON, e
+          # o alinhamento do bloco quebrava o `terraform fmt`.
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = var.imagens_mantidas
         }
         action = { type = "expire" }
       },

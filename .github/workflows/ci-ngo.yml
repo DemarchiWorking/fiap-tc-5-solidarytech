@@ -18,6 +18,23 @@ on:
       - "services/ngo-service/**"
   workflow_dispatch:
 
+# As permissoes precisam ser declaradas AQUI, no chamador.
+#
+# Num workflow reutilizavel o bloco `permissions` do arquivo chamado so consegue
+# RESTRINGIR o que o chamador ja tem — nunca ampliar. Como este arquivo nao
+# declarava nada, valia o padrao do repositorio (contents: read nas
+# configuracoes modernas do GitHub), e o `contents: write` de ci-servico.yml era
+# silenciosamente ignorado.
+#
+# O sintoma seria no ultimo passo de tudo: o job `update-gitops` construia a
+# imagem, publicava no ECR e so entao morria no `git push` com
+# "403 Permission to <repo> denied to github-actions[bot]". A imagem estaria no
+# registry e o GitOps apontando para a versao anterior — ou seja, o deploy
+# automatico simplesmente nao acontece, que e metade do requisito F0.4.
+permissions:
+  contents: write        # update-gitops commita a nova tag da imagem
+  security-events: write # upload do SARIF do Trivy para o GitHub Security
+
 jobs:
   ci:
     uses: ./.github/workflows/ci-servico.yml

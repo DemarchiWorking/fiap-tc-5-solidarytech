@@ -7,6 +7,13 @@
 # `__REPO_URL__` e substituido por `make configurar-repo`, que le a URL do
 # remote do Git. Nao ha URL fixa aqui de proposito: cada grupo publica em seu
 # proprio repositorio.
+#
+# SYNC-WAVES: o kube-prometheus-stack vai na onda -1 porque ele traz as CRDs
+# ServiceMonitor e PrometheusRule. Os demais addons criam objetos DESSES tipos
+# (ingress-nginx, opencost, velero, otel-gateway e a config de observabilidade)
+# e falhariam com `no matches for kind "ServiceMonitor"` na primeira passada.
+# Converge sozinho pela reconciliacao de 3 min, mas gera 10-20 minutos de
+# vermelho no painel — pessimo justamente durante a gravacao do video.
 
 # ------------------------------------------------- ingress-nginx (entrada)
 apiVersion: argoproj.io/v1alpha1
@@ -33,6 +40,9 @@ spec:
   syncPolicy:
     automated: { selfHeal: true, prune: true }
     syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
 ---
 # ------------------------------- kube-prometheus-stack (Prometheus/Grafana)
 apiVersion: argoproj.io/v1alpha1
@@ -40,6 +50,9 @@ kind: Application
 metadata:
   name: kube-prometheus-stack
   namespace: argocd
+  annotations:
+    # Primeiro: instala as CRDs de que os outros addons dependem.
+    argocd.argoproj.io/sync-wave: "-1"
   finalizers: [resources-finalizer.argocd.argoproj.io]
 spec:
   project: default
@@ -89,6 +102,9 @@ spec:
   syncPolicy:
     automated: { selfHeal: true, prune: true }
     syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
 ---
 # ------------------------------------------- OTel Collector — gateway
 apiVersion: argoproj.io/v1alpha1
@@ -115,6 +131,9 @@ spec:
   syncPolicy:
     automated: { selfHeal: true, prune: true }
     syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
 ---
 # ------------------------------------------ OTel Collector — logs (DaemonSet)
 apiVersion: argoproj.io/v1alpha1
@@ -141,6 +160,9 @@ spec:
   syncPolicy:
     automated: { selfHeal: true, prune: true }
     syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
 ---
 # ---------------------------------------------------- OpenCost (FinOps)
 apiVersion: argoproj.io/v1alpha1
@@ -167,6 +189,9 @@ spec:
   syncPolicy:
     automated: { selfHeal: true, prune: true }
     syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
 ---
 # ------------------------------------------------------- Velero (DR)
 apiVersion: argoproj.io/v1alpha1
@@ -193,6 +218,9 @@ spec:
   syncPolicy:
     automated: { selfHeal: true, prune: true }
     syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
 ---
 # ------------------------- Dashboards do Grafana e regras de SLO (kustomize)
 apiVersion: argoproj.io/v1alpha1
@@ -213,3 +241,6 @@ spec:
   syncPolicy:
     automated: { selfHeal: true, prune: true }
     syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -1,7 +1,7 @@
 # donation-service — o Hot Path da SolidaryTech.
 #
 # Todo valor de recurso aqui e resultado de medicao, nao de chute. A tabela
-# antes/depois esta em docs/04-finops/rightsizing.md (requisito F2.2).
+# antes/depois esta em docs/04-finops/README.md, secao 2 (requisito F2.2).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

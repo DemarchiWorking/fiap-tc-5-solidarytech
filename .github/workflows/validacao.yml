@@ -116,6 +116,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+
+      - name: Referências a documentos fora do Markdown
+        run: |
+          python - <<'PY'
+          # Caça ponteiros para docs/*.md escritos em COMENTÁRIOS de YAML, HCL
+          # e shell.
+          #
+          # O verificador de links acima só lê arquivos .md, então uma linha
+          # como
+          #
+          #     # A tabela antes/depois está em docs/04-finops/<arquivo>.md
+          #
+          # dentro de um deployment.yaml passava sem ninguém conferir. Foi
+          # exatamente o que aconteceu: dois arquivos apontavam para um
+          # arquivo que nunca existiu — o conteúdo estava no README.md
+          # da mesma pasta. Quem avaliasse o requisito F2.2 seguindo o ponteiro
+          # do manifesto não encontraria a evidência.
+          #
+          # Comentário desatualizado é barato de escrever e caro de detectar;
+          # este é o subconjunto que dá para verificar de graça.
+          import io, os, re, sys
+
+          EXTENSOES = (".yaml", ".yml", ".tf", ".sh", ".go", ".py", ".json")
+          quebrados = []
+          vistos = 0
+
+          for d, _, fs in os.walk("."):
+              partes = set(d.split(os.sep))
+              if partes & {".git", ".venv", "node_modules", "__pycache__", ".terraform"}:
+                  continue
+              for f in fs:
+                  if not f.endswith(EXTENSOES):
+                      continue
+                  p = os.path.join(d, f)
+                  try:
+                      txt = io.open(p, encoding="utf-8").read()
+                  except (OSError, UnicodeDecodeError):
+                      continue
+                  # Caminhos de documentação referenciados em texto livre.
+                  for m in re.finditer(r"\b(docs/[\w./-]+\.md)\b", txt):
+                      vistos += 1
+                      alvo = m.group(1)
+                      if not os.path.exists(alvo):
+                          linha = txt[: m.start()].count("\n") + 1
+                          quebrados.append(f"{p}:{linha} -> {alvo}")
+
+          print(f"{vistos} referência(s) a docs/*.md fora do Markdown")
+          for q in quebrados:
+              print(f"  QUEBRADA: {q}")
+          sys.exit(1 if quebrados else 0)
+          PY
       - name: Instalar kustomize e kubeconform
         run: |
           curl -sfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.5.0/kustomize_v5.5.0_linux_amd64.tar.gz | tar -xz

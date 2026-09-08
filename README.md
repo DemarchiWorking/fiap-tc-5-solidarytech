@@ -65,7 +65,8 @@ hackathon. É a recomendação de FinOps com maior impacto do projeto.
 ## Validar sem gastar nada
 
 ```bash
-make check          # 4 gates: Academy + observabilidade + workflows + manifestos
+make check          # 4 gates · 22 verificações estáticas
+make relatorio      # PDF do relatório de entrega (E3), sem LaTeX
 make test-local     # testes unitários dos 3 serviços, em container
 make smoke          # Postgres + LocalStack + fluxo completo, sem AWS
 ```

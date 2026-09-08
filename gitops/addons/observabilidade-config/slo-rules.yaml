@@ -272,7 +272,7 @@ spec:
             description: >-
               Politica de error budget: congelar deploys nao criticos do
               donation-service. Hotfix e self-heal continuam liberados.
-              Ver docs/03-sre/error-budget.md
+              Ver docs/03-sre/sli-slo-sla.md, secao 6 (Politica de Error Budget)
 
         - alert: OrcamentoErroEsgotado
           expr: slo:donation_disponibilidade:error_budget_restante <= 0
@@ -284,7 +284,7 @@ spec:
             summary: "SLO de disponibilidade VIOLADO — orcamento de erro esgotado"
             description: >-
               Congelamento total de mudancas no donation-service ate o
-              post-mortem ser concluido. Ver docs/03-sre/error-budget.md
+              post-mortem ser concluido. Ver docs/03-sre/sli-slo-sla.md, secao 6 (Politica de Error Budget)
 
         - alert: FilaDeDoacoesAtrasada
           expr: slo:donation_frescor_erro:ratio_rate1h > (6 * 0.005)

@@ -58,3 +58,8 @@ docs/07-evidencias/**/*.mov
 Thumbs.db
 .idea/
 .vscode/
+
+# HTML intermediario do relatorio: gerado por `make relatorio` a partir do
+# Markdown, em segundos. O PDF ao lado dele SIM e versionado — e o entregavel
+# E3, e quem avalia pode receber so o link do repositorio.
+docs/relatorio/RELATORIO-FASE5.html

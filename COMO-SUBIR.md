@@ -426,6 +426,21 @@ que mostrar, com marcação de minuto. Salve os prints em `docs/07-evidencias/`.
 - [ ] Post-mortem do drill — a partir do [modelo](docs/05-itsm-aiops/post-mortem-modelo.md)
 - [ ] Nomes, RMs e links — [`docs/relatorio/RELATORIO-DE-ENTREGA.md`](docs/relatorio/RELATORIO-DE-ENTREGA.md) §1
 
+**Depois de preencher os quatro, gere o PDF do entregável E3:**
+
+```bash
+make relatorio
+```
+
+Sai em `docs/relatorio/RELATORIO-FASE5.pdf`. O comando **avisa em vermelho, na
+primeira página do próprio PDF**, se ainda houver campo `*a preencher*` — é
+proposital: entregar um relatório sem nome e sem RM custa ponto direto, e esse
+é o tipo de descuido que só aparece depois do envio.
+
+Ele não precisa de LaTeX nem de pandoc: converte o Markdown para HTML com CSS
+de impressão e usa o Edge ou o Chrome que já existem na máquina. Se nenhum for
+encontrado, o HTML fica pronto para abrir e salvar como PDF pelo navegador.
+
 ---
 
 ## Passo 8 — 🔴 DESLIGAR

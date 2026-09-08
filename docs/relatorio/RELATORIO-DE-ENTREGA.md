@@ -3,9 +3,16 @@
 **SolidaryTech — plataforma de doações em AWS**
 FIAP PosTech · DevOps & Arquitetura Cloud · Setembro de 2026
 
-> Este documento é a fonte do PDF exigido no entregável **E3**. Exportar com
-> `pandoc RELATORIO-DE-ENTREGA.md -o RELATORIO-FASE5.pdf` ou pelo visualizador
-> de Markdown de sua preferência.
+> Este documento é a **fonte** do PDF exigido no entregável **E3**. Ele vive em
+> Markdown para entrar em diff e ser revisado em PR como qualquer outro
+> artefato; o PDF é gerado a partir dele com `make relatorio`.
+>
+> A instrução anterior era `pandoc ... -o .pdf`, que **não funciona sem um motor
+> LaTeX instalado** (texlive, vários GB) — o comando falha com `pdflatex not
+> found`, e a véspera da entrega é o pior momento para descobrir isso. O
+> `make relatorio` não instala nada: converte para HTML com CSS de impressão e
+> usa o Edge ou o Chrome que já existem na máquina, em modo headless. Saída em
+> `docs/relatorio/RELATORIO-FASE5.pdf`.
 
 ---
 

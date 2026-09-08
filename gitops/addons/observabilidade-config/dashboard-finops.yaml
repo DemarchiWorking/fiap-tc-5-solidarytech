@@ -60,7 +60,7 @@ data:
         {
           "type": "stat",
           "title": "Custo diario estimado do cluster",
-          "description": "Soma dos itens fixos (control plane, nos, RDS, NLB, EBS). O detalhamento por item esta em docs/04-finops/forecast.md.",
+          "description": "Soma dos itens fixos (control plane, nos, RDS, NLB, EBS). O detalhamento por item esta na secao 3 de docs/04-finops/README.md.",
           "gridPos": { "h": 9, "w": 8, "x": 16, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
@@ -95,7 +95,7 @@ data:
         {
           "type": "table",
           "title": "Eficiencia de CPU por pod",
-          "description": "Uso real dividido pelo request. Abaixo de 20% = superprovisionado, o request pode cair. Acima de 90% = risco de throttling, o request deve subir. Esta tabela e a base da tabela antes/depois de docs/04-finops/rightsizing.md.",
+          "description": "Uso real dividido pelo request. Abaixo de 20% = superprovisionado, o request pode cair. Acima de 90% = risco de throttling, o request deve subir. Esta tabela e a base da tabela antes/depois da secao 2 de docs/04-finops/README.md.",
           "gridPos": { "h": 10, "w": 12, "x": 0, "y": 11 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [

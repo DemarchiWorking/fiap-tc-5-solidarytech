@@ -95,6 +95,10 @@ validate: ## terraform validate nos dois ambientes
 		$(TF) -chdir=infra/environments/$$amb validate || exit 1; \
 	done
 
+.PHONY: relatorio
+relatorio: ## Gera o PDF do relatorio de entrega (entregavel E3)
+	@python scripts/gerar-relatorio.py
+
 .PHONY: gerar-gosum
 gerar-gosum: ## Gera e versiona o go.sum do donation-service (1x, precisa de Docker)
 	@echo "Resolvendo o grafo de modulos dentro de um container Go..."

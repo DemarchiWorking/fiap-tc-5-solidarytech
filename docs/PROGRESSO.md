@@ -341,3 +341,75 @@ make smoke          # Postgres + LocalStack, fluxo completo, sem AWS
 ```
 
 E, com a sessão do Learner Lab ativa, `make pre-voo` e `make plan`.
+
+
+---
+
+## Estado final da entrega
+
+Tudo o que dá para executar nesta máquina foi executado. O que não deu está
+nomeado, com o motivo.
+
+### Verde, executado
+
+| Verificação | Resultado |
+|---|---|
+| `terraform fmt -check -recursive` | limpo |
+| `terraform validate` · **prod-use1** | válido, sem avisos |
+| `terraform validate` · **dr-usw2** | válido, sem avisos |
+| `go vet` · `go build` · `go test` | 0 achados · compila · 7 suítes · **42,6%** |
+| `pytest` ngo-service (Linux/3.12) | 25 testes |
+| `pytest` volunteer-service (Linux/3.12) | 41 testes |
+| `verificar-academy.py` | 11 verificações |
+| `verificar-observabilidade.py` | 6 verificações |
+| `verificar-workflows.py` | 5 verificações |
+| `verificar-manifestos.sh` | kustomize build · kubeconform · política — **6 overlays** |
+| Sintaxe YAML · links Markdown · referências fora do Markdown | 59 · 25 · 20 arquivos, 0 quebras |
+| PDF do relatório (E3) | gerado, 327 KB |
+
+Terraform, Go, kustomize e kubeconform foram instalados na distro Ubuntu 24.04
+do WSL, no home do usuário (`~/.ferramentas-tc5`), sem `sudo` e sem tocar no
+sistema. Apagar essa pasta desfaz tudo.
+
+Os testes Python rodaram num venv Linux/Python 3.12 com os `requirements.txt`
+**fixados** — o mesmo que o estágio `test` dos Dockerfiles faz. Isso prova algo
+que nenhum teste no Windows provava: que os pins existem, resolvem entre si e
+instalam em Linux.
+
+### Ainda não executado, e por quê
+
+| O quê | Motivo |
+|---|---|
+| `docker build --target test` (3 imagens) | `com.docker.service` está parado e iniciá-lo exige privilégio de administrador. O Docker Desktop inicia e encerra sozinho porque não consegue completar o UAC |
+| `make smoke` (Postgres + LocalStack) | idem |
+| `go test -race` | exige cgo/gcc, ausente na distro. O estágio `test` do Dockerfile já instala `gcc musl-dev` para isso |
+| `terraform plan` / `apply` | exige sessão ativa do AWS Academy Learner Lab |
+
+Para fechar os três primeiros, basta abrir o Docker Desktop uma vez (aceitando
+o UAC) e rodar:
+
+```bash
+make test-local && make smoke
+```
+
+### Lacunas de completude encontradas na auditoria final
+
+Uma varredura das 48 exigências do enunciado contra os artefatos do repositório
+encontrou **48 com artefato** — mas quatro ponteiros para documentos
+inexistentes, três deles em lugares que só doem na hora errada:
+
+- `slo-rules.yaml` mandava o plantonista para `docs/03-sre/error-budget.md`
+  **dentro da anotação de dois alertas de paginação**. Quem fosse acordado às
+  3h clicaria no runbook e receberia um 404 — o oposto exato do MTTR que a
+  frente SRE existe para reduzir. O conteúdo está em `sli-slo-sla.md` §6.
+- `dashboard-finops.yaml` apontava para `docs/04-finops/forecast.md`; o
+  forecast está no `README.md` §3 da mesma pasta.
+- `deployment.yaml` do donation e o dashboard de FinOps apontavam para
+  `docs/04-finops/rightsizing.md` como evidência do requisito **F2.2**; a
+  tabela antes/depois está no `README.md` §2.
+
+Nenhum deles seria pego pelo verificador de links, que só lê arquivos `.md` —
+todos estavam em **comentários e anotações de YAML**. O gate foi estendido para
+varrer referências a `docs/*.md` em `.yaml`, `.tf`, `.sh`, `.go`, `.py` e
+`.json`; ele encontrou três das quatro sozinho, incluindo uma no comentário que
+eu tinha acabado de escrever.

@@ -259,7 +259,12 @@ if python -c "import yaml" 2>/dev/null; then
     sed 's/^/        /' /tmp/pv-obs.log | tail -12
   fi
 else
-  aviso "PyYAML ausente — gate de observabilidade pulado"
+  # FALHA, e nao aviso. Um aviso nao impede o veredito GO — entao a ausencia de
+  # uma dependencia de dez segundos fazia o pre-voo dizer "pode subir" sem ter
+  # verificado a coerencia da observabilidade. Gate que pode ser pulado em
+  # silencio nao e gate.
+  falha "PyYAML ausente — o gate de observabilidade NAO rodou"
+  echo "        Instale com:  make setup   (ou: python -m pip install pyyaml)"
   dica "pip install pyyaml"
 fi
 

@@ -135,9 +135,12 @@ A IA precisa de uma linha de base antes de conseguir sinalizar desvio. Sequênci
 # 1. Carga normal por ~30 min — a IA aprende o comportamento esperado
 make carga
 
-# 2. Provocar a anomalia: pico 3x acima do padrão aprendido
-kubectl -n solidary-loadtest patch job k6-load-test \
-  -p '{"spec":{"parallelism":3}}'
+# 2. Provocar a anomalia: pico acima do padrão aprendido
+#    O k6 é um CronJob SUSPENSO (não um Job): sob `selfHeal` do ArgoCD, um Job
+#    patchado seria revertido em segundos. Cria-se um Job novo a partir dele —
+#    esse Job não carrega os rótulos do ArgoCD e roda até o fim.
+kubectl -n solidary-loadtest create job pico-$(date +%s) \
+  --from=cronjob/k6-load-test
 
 # 3. New Relic → Alerts & AI → Anomalies
 #    A anomalia detectada é o print exigido pelo requisito F3.1.

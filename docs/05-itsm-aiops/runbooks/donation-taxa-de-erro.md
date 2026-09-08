@@ -40,8 +40,16 @@ Grafana → **SRE** → *SolidaryTech — SRE: SLOs e Error Budget*.
 kubectl -n solidary-donation logs -l app=donation-service --tail=200 | grep -i error
 
 # b) O banco: o RDS está aceitando conexão?
-kubectl -n solidary-donation exec deploy/donation-service -- \
-  wget -qO- http://localhost:8082/ready
+#    A imagem é distroless/static: não tem shell, curl nem wget. O `exec` com
+#    wget falharia com "executable file not found". Duas formas que funcionam:
+#
+#    pela readiness (o kubelet já a consulta a cada 10s):
+kubectl -n solidary-donation get pods -l app=donation-service \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+
+#    ou consultando o endpoint por fora, via port-forward:
+kubectl -n solidary-donation port-forward deploy/donation-service 8082:8082 &
+curl -s localhost:8082/ready | python -m json.tool
 
 # c) A fila: o SQS está acessível?
 #    (falha aqui NÃO deveria gerar 5xx — a publicação é assíncrona.

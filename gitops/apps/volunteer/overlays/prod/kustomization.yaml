@@ -10,6 +10,7 @@ resources:
   - pdb.yaml
   - networkpolicy.yaml
   - worker-deployment.yaml
+  - worker-pdb.yaml
 
 # A pipeline reescreve `newTag` com o SHA de 40 caracteres do commit
 # (`kustomize edit set image`) e faz commit neste repositorio. E a ponte formal

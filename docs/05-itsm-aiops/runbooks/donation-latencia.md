@@ -52,8 +52,18 @@ o processo funciona nos dois sentidos.
 ## 5. Mitigar
 
 ```bash
-# Mais réplicas absorvem a carga enquanto a causa é investigada
-kubectl -n solidary-donation scale deployment/donation-service --replicas=5
+# Mais réplicas absorvem a carga enquanto a causa é investigada.
+#
+# `kubectl scale` NÃO funciona aqui: o HPA (min 2, max 10, alvo 70% de CPU)
+# reverte em um ciclo de reconciliação — cerca de 15 segundos. Mitigação que
+# não mitiga, e pior: dá a impressão de ter agido.
+#
+# O que funciona é subir o PISO do HPA. O ArgoCD ignora `spec.replicas` do
+# Deployment (`ignoreDifferences`), mas o HPA é gerenciado por ele — então este
+# patch é temporário e será revertido na próxima sincronização. Anote no
+# post-mortem se quiser torná-lo permanente.
+kubectl -n solidary-donation patch hpa donation-service \
+  --type merge -p '{"spec":{"minReplicas":5}}'
 ```
 
 > Escalar é mitigação, não correção. Se a causa for o banco, mais réplicas

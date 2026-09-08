@@ -39,12 +39,12 @@ data:
         {
           "type": "timeseries",
           "title": "Custo mensal projetado por namespace",
-          "description": "Taxa horaria observada, extrapolada para 730 horas. Substitui o AWS Cost Explorer, que nao esta liberado no AWS Academy Learner Lab — e da granularidade por namespace, que o Cost Explorer nunca daria.",
+          "description": "Custo real por namespace, do OpenCost: alocacao de CPU e memoria de cada container multiplicada pelo preco horario do no em que ele roda, extrapolado para 730 horas. Substitui o AWS Cost Explorer, que nao esta liberado no Learner Lab — e da granularidade por namespace, que o Cost Explorer nunca daria. A consulta anterior NAO usava OpenCost: era uma estimativa por requests com preco fixo no proprio painel, e dois de seus tres termos eram multiplicados por zero.",
           "gridPos": { "h": 9, "w": 16, "x": 0, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum by (namespace) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate) * 0 + sum by (namespace) (container_memory_working_set_bytes{container!=\"\"}) * 0 + sum by (namespace) (kube_pod_container_resource_requests{resource=\"cpu\"}) * 0.0416 * 730 / 2",
+              "expr": "sum by (namespace) (avg_over_time(container_cpu_allocation[1h]) * on(node) group_left() avg_over_time(node_cpu_hourly_cost[1h]) + avg_over_time(container_memory_allocation_bytes[1h]) / 1024 / 1024 / 1024 * on(node) group_left() avg_over_time(node_ram_hourly_cost[1h])) * 730",
               "legendFormat": "{{namespace}}",
               "refId": "A"
             }

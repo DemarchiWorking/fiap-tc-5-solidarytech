@@ -209,9 +209,23 @@ triplicado. O Learner Lab limita RDS a `db.t3.micro`/`small`/`medium` e **proíb
 o isolamento por instância não compra alta disponibilidade aqui; compra apenas separação de blast
 radius.
 
-**Decisão.** **Uma instância `db.t3.micro`** hospedando `ngo_db` e `donation_db`, com **usuário e
-senha distintos por database** e `GRANT` restrito ao próprio schema. Isolamento passa a ser lógico
-(database + credencial), não físico.
+**Decisão.** **Uma instância `db.t3.micro`** hospedando `ngo_db` e `donation_db`. Isolamento
+lógico por **database**, não físico por instância.
+
+> ⚠️ **Limitação assumida, não implementada.** Uma versão anterior deste ADR afirmava "usuário e
+> senha distintos por database, com `GRANT` restrito ao próprio schema". Isso **não é o que o
+> código faz**: `scripts/bootstrap-cluster.sh` monta as duas connection strings com o **mesmo
+> usuário master**, e não há `CREATE ROLE` nem `GRANT` em lugar nenhum — os Jobs de init só fazem
+> `CREATE DATABASE` e `CREATE TABLE`.
+>
+> Consequência real: cada serviço tem credencial de master sobre a instância inteira, incluindo o
+> database do outro. O isolamento efetivo hoje é de **rede** (NetworkPolicy + Security Group), não
+> de credencial.
+>
+> Fechar isso exige gerar uma senha por serviço no bootstrap, um `CREATE ROLE ... GRANT` no Job de
+> init de cada database, e a rotação das duas no Secrets Manager. É a evolução natural deste ADR e
+> está registrada como dívida — melhor um ADR que descreve a realidade do que um que descreve a
+> intenção.
 
 **Consequências.**
 

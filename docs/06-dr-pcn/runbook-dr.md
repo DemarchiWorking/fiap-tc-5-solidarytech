@@ -108,7 +108,10 @@ válidas.
 velero backup get
 
 # 2. Restaurar um namespace específico
-velero restore create --from-backup solidarytech-horario-aplicacoes-20260905020000 \
+# O Velero nomeia o backup como <schedule>-<timestamp>, e o schedule chama-se
+# `horario-aplicacoes` (gitops/addons/velero/values.yaml). Confirme o nome real
+# com `velero backup get` antes de restaurar — nao digite de memoria.
+velero restore create --from-backup horario-aplicacoes-20260905020000 \
   --include-namespaces solidary-donation
 
 # 3. Acompanhar

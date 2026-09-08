@@ -17,7 +17,13 @@ um número observado.
 ## Pré-requisitos
 
 ```bash
-make smoke        # ambiente no ar
+# O drill acontece no CLUSTER, não na máquina: os passos abaixo usam
+# `kubectl -n solidary-donation`. Uma versão anterior deste documento pedia
+# `make smoke`, que sobe Postgres e LocalStack em containers locais — quem
+# seguisse à risca levantaria o ambiente errado e depois tentaria escalar um
+# Deployment que não existe.
+make lab-up       # infraestrutura na AWS
+make deploy       # cluster entregue ao ArgoCD
 make carga        # tráfego real — sem ele, o SLI não se move e nada dispara
 ```
 

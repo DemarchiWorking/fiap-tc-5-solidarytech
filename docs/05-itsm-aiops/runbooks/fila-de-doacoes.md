@@ -46,12 +46,29 @@ O worker roda com **1 réplica** de propósito (ver comentário em
 correta **não** é adicionar réplicas fixas — é escalar por profundidade de fila
 com KEDA. Como mitigação temporária:
 
+> ⚠️ **Não escale este worker.** Ele roda com uma réplica *de propósito*, e o
+> motivo está no próprio manifesto (`worker-deployment.yaml`): o SQS entrega
+> **at-least-once e sem ordenação garantida**. Com duas réplicas, o mesmo evento
+> pode ser processado em paralelo — e o processamento não é idempotente contra
+> concorrência, apenas contra repetição sequencial.
+>
+> Uma versão anterior deste runbook mandava escalar para 2. Seguir aquilo
+> durante um incidente transformaria uma fila atrasada em notificação duplicada
+> para voluntários.
+
+Mitigação correta enquanto a causa é investigada:
+
 ```bash
-kubectl -n solidary-volunteer scale deployment/volunteer-worker --replicas=2
+# 1. O worker está vivo e girando? (o heartbeat é a probe dele)
+kubectl -n solidary-volunteer get pods -l app=volunteer-worker
+kubectl -n solidary-volunteer logs -l app=volunteer-worker --tail=100
+
+# 2. Se travou, forçar o reinício — a mensagem em voo volta para a fila
+kubectl -n solidary-volunteer rollout restart deployment/volunteer-worker
 ```
 
-> O processamento é idempotente, então duas réplicas não corrompem dado. Mas
-> duplicam trabalho: volte para 1 depois que a fila drenar.
+A solução estrutural é escalar por **profundidade de fila** com KEDA, que
+respeita a ordenação por partição — não réplicas fixas.
 
 ## 4. Mensagens na DLQ
 

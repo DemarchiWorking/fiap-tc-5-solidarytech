@@ -60,9 +60,20 @@ spec:
               resolve — foi exatamente o cenario do enunciado da Fase 4, em que o
               HPA escalava sem tratar a causa raiz.
 
-        - alert: MensagensNaDLQ
-          # Mensagem na DLQ significa evento de doacao que falhou 3 vezes.
-          # Nunca e normal: sempre exige investigacao humana.
+        - alert: ErrosNoProcessamentoDeEventos
+          # O nome anterior era MensagensNaDLQ, e ele MENTIA: esta expressao
+          # conta excecoes do consumidor, nao mensagens na dead-letter queue.
+          # Sao coisas diferentes, e a diferenca importa nos dois sentidos:
+          #
+          #   * uma indisponibilidade transitoria do DynamoDB dispara este
+          #     alerta dizendo "verificar a DLQ" — com a DLQ vazia;
+          #   * uma poison message de baixo volume enche a DLQ de verdade e
+          #     NAO dispara nada, porque cinco erros por hora nao sao atingidos.
+          #
+          # Medir a profundidade real da DLQ exigiria ApproximateNumberOf
+          # MessagesVisible do CloudWatch, que nao e coletado por nenhum
+          # exporter neste cluster. Enquanto isso nao existir, o nome do alerta
+          # descreve o que ele de fato mede.
           expr: |
             increase(solidary_donation_events_processed_total{status="erro"}[1h]) > 5
           for: 10m
@@ -70,7 +81,11 @@ spec:
             severity: ticket
           annotations:
             summary: "Eventos de doacao falhando no processamento"
-            description: "Verificar a DLQ e o runbook docs/05-itsm-aiops/runbooks/fila-de-doacoes.md"
+            description: >-
+              Taxa de erro do consumidor acima do normal. Isto NAO mede a DLQ:
+              confirme a profundidade dela com
+              `aws sqs get-queue-attributes --attribute-names ApproximateNumberOfMessages`.
+              Runbook: docs/05-itsm-aiops/runbooks/fila-de-doacoes.md
 
     - name: solidarytech.infraestrutura
       rules:

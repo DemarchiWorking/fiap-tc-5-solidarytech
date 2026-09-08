@@ -128,9 +128,14 @@ data:
       },
 
       // Estes são limiares de TESTE DE ESTRESSE (achar o ponto de ruptura),
-      // deliberadamente mais frouxos que os SLOs de produção (p95 < 300ms,
-      // erro < 0,1%). Confundir os dois faria o teste "aprovar" um sistema que
-      // viola o SLO.
+      // deliberadamente mais frouxos que os SLOs de produção.
+      //
+      // O SLO de latência NÃO é "p95 < 300ms" — docs/03-sre/sli-slo-sla.md gasta
+      // um parágrafo rejeitando essa formulação, porque percentil é uma média
+      // disfarçada e esconde a cauda. O SLO implementado é "99% das requisições
+      // abaixo de 300 ms", medido por proporção de bucket, e o de erro é
+      // 99,9% de sucesso. Confundir os dois faria o teste "aprovar" um sistema
+      // que viola o SLO.
       thresholds: {
         'http_req_duration{scenario:doacoes}': ['p(95)<2000', 'p(99)<3000'],
         'erros_doacao': ['rate<0.05'],

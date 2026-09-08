@@ -149,7 +149,7 @@ jobs:
 
   # =========================================================================
   sast:
-    name: SAST (SonarCloud)
+    name: SAST (gosec/bandit + SonarCloud)
     needs: [lint, test]
     runs-on: ubuntu-latest
 
@@ -169,6 +169,10 @@ jobs:
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
+    # O `if` do step do Sonar continua condicional ao segredo — mas agora
+    # isso nao deixa mais o job sem SAST nenhum: gosec e bandit rodam antes,
+    # incondicionalmente.
+    #
     # `if: !cancelled()` foi REMOVIDO: com ele o SAST rodava mesmo apos lint ou
     # teste vermelhos, gastando runner para analisar codigo que ja se sabia
     # quebrado. O comportamento padrao de `needs` — so roda se as dependencias
@@ -185,6 +189,51 @@ jobs:
           name: cobertura-${{ inputs.servico }}
           path: ${{ inputs.caminho }}
         continue-on-error: true
+      # -------------------------------------------------------------------
+      # SAST QUE SEMPRE RODA — nao depende de conta em servico externo.
+      #
+      # O SonarCloud abaixo e PULADO quando falta SONAR_TOKEN. Isso e proposital
+      # (um fork sem a integracao ainda roda o resto), mas tinha um efeito que
+      # nao era: a pipeline inteira podia passar sem NENHUMA analise estatica, e
+      # o job aparecia verde. Na Fase 3 o SAST era incondicional — era uma
+      # regressao silenciosa do requisito F0.3b.
+      #
+      # gosec e bandit rodam localmente, sem token nenhum, e barram severidade
+      # ALTA. O Sonar continua como reforco: cobertura, code smells e analise de
+      # "new code" que estas duas ferramentas nao fazem.
+      # -------------------------------------------------------------------
+      - uses: actions/setup-go@v5
+        if: inputs.linguagem == 'go'
+        with:
+          go-version: "1.23"
+          cache-dependency-path: ${{ inputs.caminho }}/go.sum
+
+      - name: Go — gosec
+        if: inputs.linguagem == 'go'
+        working-directory: ${{ inputs.caminho }}
+        run: |
+          # Versao fixa: cada release do gosec liga regras novas, e com @latest
+          # a pipeline passaria a reprovar codigo que ninguem mudou.
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.21.4
+          # -severity high: barra o que e explorevel. MEDIUM entra no relatorio
+          # sem travar a entrega — mesma politica do Trivy, pelo mesmo motivo:
+          # gate que trava por tudo e gate que alguem desliga.
+          gosec -severity high -confidence medium -fmt text ./...
+
+      - uses: actions/setup-python@v5
+        if: inputs.linguagem == 'python'
+        with:
+          python-version: "3.12"
+
+      - name: Python — bandit
+        if: inputs.linguagem == 'python'
+        working-directory: ${{ inputs.caminho }}
+        run: |
+          pip install --quiet bandit==1.8.0
+          # -lll: so severidade alta reprova. Os testes ficam de fora: `assert`
+          # em teste e o esperado, e o bandit o classifica como B101.
+          bandit -r . -lll --exclude ./test_app.py,./test_worker.py,./conftest.py
+
 
       - name: SonarCloud
         if: env.SONAR_TOKEN != ''

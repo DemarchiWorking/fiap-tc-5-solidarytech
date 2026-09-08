@@ -310,8 +310,11 @@ make pre-voo
 **Este é o passo mais importante da lista.** Sem tocar na nuvem e sem gastar
 nada, ele verifica: ferramentas instaladas, Docker de fato **rodando**,
 credenciais válidas com os **três** campos, `LabRole` existindo, região liberada,
-remote do Git configurado, chave do New Relic, secrets do GitHub, e todos os
-gates de código.
+remote do Git configurado, chave do New Relic, secrets do GitHub, e os gates de
+**política do Academy** e de **observabilidade**.
+
+> Os gates de **workflows** e de **manifestos** não entram no pré-voo: dependem
+> de `kustomize` e `kubeconform`. Eles rodam no `make check`.
 
 Termina com um veredito **GO** ou **NO-GO** — e o NO-GO diz exatamente o que
 corrigir.

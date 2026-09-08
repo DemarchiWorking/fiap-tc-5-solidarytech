@@ -1,0 +1,31 @@
+# PodDisruptionBudget do volunteer-worker.
+#
+# O relatorio de entrega afirma que startupProbe e PodDisruptionBudget existem
+# em "todos os workloads". Existiam nos tres Deployments de servico — o worker
+# nao era coberto por nenhum, porque os PDBs selecionam
+# `app: <servico>-service` e o worker usa `app: volunteer-worker`.
+#
+# `maxUnavailable: 1`, e NAO `minAvailable: 1`, e a escolha correta aqui — o
+# oposto do que os outros tres usam:
+#
+#   * o worker roda com UMA replica de proposito (o SQS entrega at-least-once e
+#     sem ordenacao garantida; duas replicas processariam o mesmo evento em
+#     paralelo);
+#   * com `minAvailable: 1` sobre uma unica replica, o PDB permitiria ZERO
+#     disrupcao e um `kubectl drain` ficaria preso para sempre — um upgrade de
+#     no do EKS travaria a manutencao inteira do cluster;
+#   * despejar este pod e seguro: a mensagem em voo volta para a fila apos o
+#     visibility timeout e e reprocessada. E o mesmo raciocinio que permite ao
+#     heartbeat reiniciar o worker sem perda.
+#
+# Declarado explicitamente para que a intencao fique registrada, em vez de o
+# worker simplesmente nao ter PDB e ninguem saber se foi decisao ou esquecimento.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: volunteer-worker
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: volunteer-worker

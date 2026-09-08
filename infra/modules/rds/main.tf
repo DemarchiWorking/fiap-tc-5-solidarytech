@@ -258,7 +258,7 @@ resource "aws_db_instance" "principal" {
   deletion_protection = var.protecao_delecao
   # Snapshot final ao destruir: e ele que permite reconstruir o ambiente no dia
   # seguinte com os dados da sessao anterior, em vez de comecar do zero.
-  skip_final_snapshot       = false
+  skip_final_snapshot = false
   # plantimestamp(), e nao timestamp(): timestamp() e reavaliado entre o plan e
   # o apply, e com `apply -auto-approve` — que e o que `make lab-up` usa — isso
   # aborta com "Provider produced inconsistent final plan". plantimestamp() e

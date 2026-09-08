@@ -36,33 +36,33 @@ output "rede" {
 output "registry" {
   description = "Repositorios ECR. Consumidos pelo passo de push das pipelines."
   value = {
-    host          = module.ecr.url_registry
-    repositorios  = module.ecr.urls_repositorios
+    host         = module.ecr.url_registry
+    repositorios = module.ecr.urls_repositorios
   }
 }
 
 output "banco_de_dados" {
   description = "Conexao com o PostgreSQL. A senha fica no Secrets Manager, nunca aqui."
   value = {
-    host           = module.rds.host
-    porta          = module.rds.porta
-    usuario        = module.rds.usuario_master
-    banco_inicial  = "ngo_db"
+    host            = module.rds.host
+    porta           = module.rds.porta
+    usuario         = module.rds.usuario_master
+    banco_inicial   = "ngo_db"
     banco_adicional = "donation_db" # criado pelo Job de init via GitOps (F3)
-    secret_arn     = module.rds.arn_secret
-    secret_nome    = module.rds.nome_secret
-    identificador  = module.rds.identificador
+    secret_arn      = module.rds.arn_secret
+    secret_nome     = module.rds.nome_secret
+    identificador   = module.rds.identificador
   }
 }
 
 output "mensageria" {
   description = "Fila de eventos de doacao e sua DLQ."
   value = {
-    url_fila = module.sqs.url_fila
-    arn_fila = module.sqs.arn_fila
+    url_fila  = module.sqs.url_fila
+    arn_fila  = module.sqs.arn_fila
     nome_fila = module.sqs.nome_fila
-    url_dlq  = module.sqs.url_dlq
-    nome_dlq = module.sqs.nome_dlq
+    url_dlq   = module.sqs.url_dlq
+    nome_dlq  = module.sqs.nome_dlq
   }
 }
 
@@ -87,10 +87,10 @@ output "cache" {
 output "armazenamento" {
   description = "Buckets de logs e de backup."
   value = {
-    loki_bucket    = module.bucket_loki.nome
-    loki_regiao    = var.regiao
-    velero_bucket  = module.bucket_velero.nome
-    velero_regiao  = var.regiao_dr
+    loki_bucket   = module.bucket_loki.nome
+    loki_regiao   = var.regiao
+    velero_bucket = module.bucket_velero.nome
+    velero_regiao = var.regiao_dr
   }
 }
 

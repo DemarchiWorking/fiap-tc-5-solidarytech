@@ -123,7 +123,7 @@ variable "snapshot_rds" {
 
 locals {
   tags_padrao = {
-    Project     = "SolidaryTech"
+    Project = "SolidaryTech"
     # DR, e nao Production: separa o custo do standby no relatorio de FinOps.
     # Sem isso, o gasto de manter a regiao secundaria some dentro do total e
     # ninguem consegue responder "quanto custa a nossa resiliencia?".
@@ -153,8 +153,8 @@ data "aws_iam_role" "lab" {
 module "network" {
   source = "../../modules/network"
 
-  prefixo  = var.prefixo
-  regiao   = var.regiao
+  prefixo = var.prefixo
+  regiao  = var.regiao
   # CIDR diferente do de producao (10.0.0.0/16) de proposito: com blocos
   # iguais, um VPC peering entre as regioes seria impossivel — e peering e
   # justamente o que uma evolucao para replicacao continua exigiria.

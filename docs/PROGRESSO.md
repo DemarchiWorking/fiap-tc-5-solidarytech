@@ -83,11 +83,20 @@ e o `smoke-local.sh`. Os gates que **não** dependem de Docker estão todos verd
 | Links markdown | não | ✅ 0 quebrados |
 | `pytest` ngo-service | não | ✅ 25 passed · 91% |
 | `pytest` volunteer-service | não | ✅ 37 passed · 90% |
-| `terraform fmt/validate/plan` | **sim** | ⏳ bloqueado |
-| `go vet` + `go test` | **sim** | ⏳ bloqueado |
-| `docker build` (3 imagens) | **sim** | ⏳ bloqueado |
-| `smoke-local.sh` | **sim** | ⏳ bloqueado |
-| `verificar-manifestos.sh` | **sim** | ⏳ bloqueado |
+| `terraform fmt -check` | não | ✅ **executado** — 0 arquivos fora do formato |
+| `terraform validate` (prod-use1) | não | ✅ **executado** — válido, **sem avisos** |
+| `terraform validate` (dr-usw2) | não | ✅ **executado** — válido, sem avisos |
+| `go vet ./...` | não | ✅ **executado** — 0 achados |
+| `go build` | não | ✅ **executado** — binário de 30 MB |
+| `go test` (donation-service) | não | ✅ **executado** — 7 suítes, **42,6%** (era 17,3%) |
+| `go test -race` | **sim** | ⏳ exige cgo/gcc — coberto pelo estágio `test` do Dockerfile |
+| `docker build` (3 imagens) | **sim** | ⏳ daemon do Docker Desktop não sobe nesta máquina |
+| `smoke-local.sh` | **sim** | ⏳ idem |
+| `verificar-manifestos.sh` | **sim** | ⏳ exige kustomize + kubeconform |
+
+> Terraform e Go **rodaram de verdade**, na distro Ubuntu 24.04 do WSL, com os
+> toolchains instalados no home do usuário (`~/.ferramentas-tc5`, sem `sudo`,
+> sem tocar no sistema). Apagar essa pasta desfaz por completo.
 
 ---
 
@@ -266,14 +275,69 @@ Cada verificação nova foi testada **contra o bug original reintroduzido num
 fixture** — todas disparam nele e nenhuma dispara no código corrigido. Um gate
 que nunca viu o bug que diz pegar é só mais um arquivo verde.
 
-### Estado honesto
+### O que passou a ser verificado de fato
 
-Este repositório está **auditado e corrigido estaticamente**. A palavra
-*validado* só se aplica depois de:
+Depois da rodada de correções, Terraform e Go foram **executados**, não apenas
+lidos:
+
+| Verificação | Resultado |
+|---|---|
+| `terraform fmt -check -recursive infra/` | limpo |
+| `terraform validate` em **prod-use1** | válido, sem avisos |
+| `terraform validate` em **dr-usw2** | válido, sem avisos — o ambiente de DR passou a ser sintaticamente sustentável |
+| `go vet ./...` | 0 achados |
+| `go build` | compila; o `otelhttp` resolve |
+| `go test ./...` | 7 suítes verdes, cobertura 17,3% → **42,6%** |
+| `go mod tidy` idempotente | sim — o job de lint da CI passa |
+
+Duas correções vieram dessa execução, e nenhuma teria aparecido em leitura:
+
+- **Aviso do `terraform validate`:** o módulo `storage` não declarava
+  `required_providers`, e é o único que recebe provider com alias (`aws.dr`,
+  para o bucket do Velero na região secundária). O Terraform adivinhava. Agora
+  está declarado, e o `validate` sai **sem nenhum aviso**.
+- **`.terraform.lock.hcl` multiplataforma:** gerado por um `init` normal, o lock
+  carrega hashes só da plataforma que o gerou. Commitado assim, o próximo
+  integrante do grupo — em Windows ou em Mac — travaria com *"the local package
+  doesn't match any of the checksums recorded in the dependency lock file"*.
+  Regenerado com `terraform providers lock` para `windows_amd64`,
+  `darwin_amd64`, `darwin_arm64`, `linux_amd64` e `linux_arm64`.
+
+### O teste que prova a correção do tracing
+
+`handlers_test.go` é novo. Antes dele, `Health`, `Ready`, `CreateDonation`,
+`ListDonations`, `Routes`, `instrument` e `logCtx` tinham **0% de cobertura** —
+no serviço que é o hot path e o único com SLO de disponibilidade.
+
+O caso central é o `TestRoutesCriaSpanDeServidor`. Para garantir que ele não é
+decorativo, o `otelhttp` foi **removido de uma cópia** do serviço e a suíte
+rodada de novo:
+
+```
+--- FAIL: TestRoutesCriaSpanDeServidor
+    nenhum span de servidor foi criado: Routes() nao esta envolvido por
+    otelhttp.NewHandler. Sem ele nao ha trace_id nos logs nem trace
+    distribuido ponta a ponta.
+```
+
+Um teste que passa com e sem o bug não testa nada. Este falha exatamente onde
+deve.
+
+### O que ainda não foi executado
+
+`docker build --target test` nas três imagens e o `smoke-local.sh`. O CLI do
+Docker existe nesta máquina, mas o daemon do Docker Desktop não sobe — o
+processo inicia e encerra sozinho, o que costuma ser prompt de licença, login
+ou atualização pendente na interface gráfica. Também falta `go test -race`, que
+exige cgo/gcc: o estágio `test` do Dockerfile já instala `gcc musl-dev` para
+isso, mas esse caminho só é exercitado quando o Docker rodar.
+
+Fecha o ciclo com:
 
 ```bash
-make check                                  # inclui os gates novos
-docker build --target test services/donation-service   # prova que o Go compila
-make validate                               # terraform validate nos 2 ambientes
-make plan AMBIENTE=dr-usw2                  # prova a correção do CIDR
+make check          # os 3 gates estáticos, agora com 22 verificações
+make test-local     # docker build --target test nas 3 imagens
+make smoke          # Postgres + LocalStack, fluxo completo, sem AWS
 ```
+
+E, com a sessão do Learner Lab ativa, `make pre-voo` e `make plan`.

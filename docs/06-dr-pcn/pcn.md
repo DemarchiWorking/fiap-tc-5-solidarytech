@@ -21,7 +21,7 @@ Este plano responde a três perguntas de negócio:
 |---|---|
 | Quanto tempo ficamos fora do ar? | **Até 1 hora** para doações (RTO) |
 | Quanto dado podemos perder? | **Até 15 minutos** de doações (RPO) |
-| Quanto custa essa garantia? | **US$ 12/mês** em backup, mais US$ 134/mês **apenas quando** a região secundária é ativada |
+| Quanto custa essa garantia? | **US$ 1/mês** em backup (Velero em S3), mais **US$ 151/mês apenas enquanto** a região secundária estiver ativada |
 
 **O compromisso é assimétrico de propósito.** Uma doação perdida é dinheiro que
 uma ONG não recebe e um doador que provavelmente não tenta de novo. Um cadastro
@@ -93,7 +93,8 @@ reintroduziria a vulnerabilidade que este projeto eliminou.
 | Comando | **`make dr-up`** |
 | Tempo até o cluster pronto | ~20 min |
 | Capacidade | 2 nós (contra 3), escalável após o failover |
-| Custo | **US$ 0** enquanto desligado; ~US$ 134/mês se mantido ativo |
+| Custo | **US$ 0** enquanto desligado; **~US$ 151/mês** se mantido ativo |
+| Composição do custo | EKS 72 + 2 × `t3.medium` 60 + RDS 12,90 + EBS 4,80 + SQS 0,30 + DynamoDB 0,60 |
 
 **O que prova a modularização:** o ambiente `dr-usw2` **não redefine nenhuma
 infraestrutura**. Ele chama exatamente os mesmos módulos de `prod-use1`, com

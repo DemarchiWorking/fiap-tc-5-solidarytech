@@ -343,5 +343,5 @@ echo "    kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.adm
 echo "    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
 echo
 amarelo "  Ao terminar a sessao:  make lab-down"
-amarelo "  O ambiente custa ~US\$ 6,71/dia. Esquecer ligado esgota o credito do lab."
+amarelo "  O ambiente custa ~US\$ 6,73/dia. Esquecer ligado esgota o credito do lab."
 echo

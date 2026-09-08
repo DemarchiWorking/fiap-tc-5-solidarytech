@@ -281,3 +281,127 @@ que é argumentado:
 *Negativas:*
 - Não há failover automático entre provedores. Declarado como fora de escopo, com o custo e o
   esforço estimados no PCN, para que a limitação seja uma decisão visível e não uma omissão.
+
+
+---
+
+## ADR-008
+
+### Sem camada de autenticação nos três serviços
+
+**Status:** Aceito · **Data:** 2026-09-08
+
+**Contexto.** As Fases 1 a 3 do ToggleMaster tinham um `auth-service` dedicado, com API Key e
+`MASTER_KEY`, consultado sincronamente pelos demais serviços. A Regra de Ouro da Fase 5 exige que
+"toda a base tecnológica das Fases 1 a 4" seja aplicada ao novo ecossistema — e uma leitura literal
+diria que a autenticação deveria vir junto.
+
+**Decisão.** **Não implementar autenticação** nos três serviços da SolidaryTech, e registrar a
+ausência como decisão consciente.
+
+**Justificativa.** A Regra de Ouro fala em **base tecnológica** — Docker, Kubernetes, IaC, CI/CD com
+DevSecOps, GitOps, observabilidade — não em portar funcionalidades de produto. O `auth-service` era
+um **microsserviço do ToggleMaster**, um produto diferente; o código dos três serviços da
+SolidaryTech é **fornecido pelos coordenadores** e não inclui autenticação. Reescrevê-los para
+adicioná-la seria alterar o objeto da avaliação.
+
+**Consequências.**
+
+*Negativas — nomeadas, não escondidas:*
+
+- Os Ingress são públicos e qualquer um com a URL pode criar uma doação. Num sistema real isso é
+  inaceitável, e é o **primeiro item** que precisaria mudar antes de qualquer uso com dinheiro real.
+- O isolamento efetivo hoje é de **rede** (NetworkPolicy entre namespaces, Security Group no RDS),
+  não de identidade. Rede protege contra movimentação lateral; não protege contra quem chega pela
+  porta da frente.
+
+*Mitigações já presentes:*
+
+- NetworkPolicy com default-deny em todos os namespaces da aplicação.
+- Rate limiting no ingress-nginx.
+- O RDS não é acessível de fora da VPC.
+
+**Evolução natural.** Um middleware validando `Authorization` contra um Secret, aplicado nos três
+serviços — cerca de 30 linhas por serviço. Fora do escopo desta entrega por decisão, não por
+esquecimento.
+
+---
+
+## ADR-009
+
+### ElastiCache provisionável, mas desligado por padrão
+
+**Status:** Aceito · **Data:** 2026-09-08
+
+**Contexto.** A Fase 3 usava Redis como cache-aside no hot path do `evaluation-service`, com TTL de
+30 s, e a Fase 4 apresentava a degradação graciosa desse cache (todo request virando cache miss sem
+derrubar o sistema) como sua prova de resiliência. O módulo `elasticache` existe neste repositório e
+é funcional.
+
+**Decisão.** Manter `habilitar_elasticache = false` como padrão.
+
+**Justificativa.** **Nenhum dos três serviços da SolidaryTech abre conexão com cache.** Um
+`cache.t3.micro` provisionado e não consultado custa **US$ 12,40/mês com zero requisição** — e o
+eixo de FinOps desta fase existe precisamente para eliminar esse tipo de gasto. Provisionar
+infraestrutura ociosa para "provar" que sabemos provisioná-la seria o oposto do que a Frente 2 pede.
+
+Os padrões de acesso também não pedem cache: `ngo-service` faz CRUD de baixo volume, `donation-service`
+é *write-heavy* no caminho crítico, e `volunteer-service` lê do DynamoDB, que já é sub-10 ms.
+
+**Consequências.**
+
+- O módulo fica versionado e testado pelo gate do Academy; ligar é uma linha em `terraform.tfvars`.
+- A demonstração de degradação graciosa muda de camada: em vez do cache, ela aparece na
+  **publicação assíncrona no SQS** — se a fila estiver indisponível, a doação já foi persistida e o
+  doador recebe 201; quem acusa o atraso é o SLI de frescor da fila, não o de disponibilidade.
+
+---
+
+## ADR-010
+
+### SonarCloud (SaaS) no lugar do SonarQube self-hosted
+
+**Status:** Aceito · **Data:** 2026-09-08
+
+**Contexto.** A Fase 4 provisionava um SonarQube Community no próprio cluster, via ArgoCD
+multi-source, com PostgreSQL dedicado. Este repositório usa o SonarCloud.
+
+**Decisão.** SonarCloud, gratuito para repositório público, sem componente no cluster.
+
+**Justificativa.** O SonarQube self-hosted consome, em números conservadores, **2 GB de RAM e 1 vCPU**
+mais uma instância de PostgreSQL — num cluster de 3 × `t3.medium` (6 vCPU, 12 GB) que já hospeda
+Prometheus, Grafana, Loki, dois OTel Collectors, OpenCost, Velero e as aplicações. Seria o maior
+consumidor isolado do cluster, para uma função que um SaaS gratuito cumpre sem custo de nó.
+
+**Consequência que precisou de correção.** A troca introduziu uma regressão que passou despercebida:
+o job de SAST passou a ser **pulado em silêncio** quando faltava `SONAR_TOKEN`, e a pipeline inteira
+podia passar sem nenhuma análise estática — o que na Fase 3 era impossível. Corrigido com `gosec` e
+`bandit` rodando **sempre**, sem depender de conta externa; o SonarCloud virou reforço.
+
+---
+
+## ADR-011
+
+### Uma instância RDS para dois databases, em vez de uma por serviço
+
+**Status:** Aceito · **Data:** 2026-09-08
+
+**Contexto.** A Fase 3 provisionava **três** instâncias PostgreSQL, uma por serviço, via `for_each`.
+Esta entrega tem uma única instância `db.t3.micro` hospedando `ngo_db` e `donation_db`.
+
+**Decisão.** Uma instância, dois databases. Isolamento lógico, não físico.
+
+**Justificativa.** Custo e teto do lab. Cada `db.t3.micro` adiciona **US$ 12,90/mês** — três
+instâncias custariam **US$ 38,70/mês**, quase 20% do burn total, para separar dois schemas que
+somados não passam de alguns megabytes. O Learner Lab também limita o tamanho das instâncias RDS, o
+que torna a multiplicação ainda menos defensável.
+
+**Consequências.**
+
+- Falha da instância derruba os dois serviços — e o `donation-service` **não** continua aceitando
+  doações enquanto o banco volta, porque o hot path grava de forma síncrona. Essa é a limitação
+  honesta desta decisão: o RTO de 1 hora do PCN cobre a restauração por snapshot, e o intervalo é o
+  que o PCN chama de *janela de indisponibilidade aceita*. Com três instâncias, uma falha isolada
+  atingiria só um serviço.
+- O isolamento por credencial **não** está implementado (ver ADR-006): ambos os serviços usam o
+  usuário master. Registrado ali como dívida.

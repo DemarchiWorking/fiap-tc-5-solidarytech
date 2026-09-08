@@ -126,7 +126,7 @@ ciclo diário para que o ambiente possa ser reconstruído no dia seguinte.
 | NLB (criado pelo ingress-nginx) | 0,54 | 16,20 |
 | EBS ~90 GB gp3 | 0,24 | 7,20 |
 | S3 + DynamoDB + SQS + ECR | ~0,10 | ~3,00 |
-| **Total** | **≈ 6,71** | **≈ 201** |
+| **Total** | **≈ 6,73** | **≈ 202** |
 | *NAT Gateway, se `enable_nat_gateway = true`* | *+1,08* | *+32,40* |
 | *ElastiCache, se `habilitar_elasticache = true`* | *+0,41* | *+12,40* |
 

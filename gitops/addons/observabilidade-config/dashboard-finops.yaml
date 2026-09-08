@@ -65,7 +65,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_node_info) * 0.0416 * 24 + 2.40 + 0.43 + 0.54 + 0.24",
+              "expr": "count(kube_node_info) * 0.0416 * 24 + 2.40 + 0.43 + 0.54 + 0.24 + 0.12",
               "legendFormat": "US$/dia",
               "refId": "A"
             }

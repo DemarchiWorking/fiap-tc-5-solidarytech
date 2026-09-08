@@ -135,7 +135,7 @@ pede assimetria de margem.
 |---|---:|---|
 | NAT Gateway | +32,40 | ADR-003 — 16% do burn, sem dado real em risco no lab |
 | ElastiCache `cache.t3.micro` | +12,40 | Nenhum dos 3 serviços abre conexão com cache |
-| Warm standby `dr-usw2` (2 nós) | +134,00 | Sobe sob demanda para o drill (`make dr-up`) |
+| Warm standby `dr-usw2` completo | +151,00 | Sobe sob demanda para o drill (`make dr-up`). Inclui EKS, 2 nós, **RDS, EBS, SQS e DynamoDB** — o ambiente de DR instancia os mesmos módulos de produção, e uma versão anterior desta linha contava só o control plane e os nós |
 
 ### O que isso significa no Learner Lab
 

@@ -288,7 +288,12 @@ titulo "5 de 7 · Identificação do grupo"
 
 printf "  Requisito ${N}E3.1${X} do enunciado, com dedução direta se faltar.\n\n"
 
-INTEGRANTES="${INTEGRANTES:-}"
+# Pre-carregado com o grupo da Fase 4 (o relatorio daquela entrega e a fonte).
+# Continua sendo possivel refazer logo abaixo — mas o padrao correto evita o
+# caso em que alguem pula a etapa e o PDF sai com "a preencher", que e deducao
+# direta de ponto no requisito E3.1.
+INTEGRANTES="${INTEGRANTES:-Leonardo Alves Freitas | rm369434 | freitasleoalves
+Antonio Eduardo Silveira Demarchi | rm370045 | demarchiworking}"
 if [[ -n "$INTEGRANTES" ]]; then
   ok "integrantes já registrados"
   printf "%b" "$INTEGRANTES" | sed 's/^/     /'

@@ -20,8 +20,8 @@ FIAP PosTech · DevOps & Arquitetura Cloud · Setembro de 2026
 
 | Nome | RM | Username GitHub |
 |---|---|---|
-| *a preencher* | *a preencher* | *a preencher* |
-| *a preencher* | *a preencher* | *a preencher* |
+| Leonardo Alves Freitas | rm369434 | `freitasleoalves` |
+| Antonio Eduardo Silveira Demarchi | rm370045 | `demarchiworking` |
 
 | Item | Link |
 |---|---|
@@ -64,7 +64,7 @@ Nenhuma restrição foi escondida.
 | # | Requisito | Como foi atendido |
 |---|---|---|
 | **F0.1** | Docker e Kubernetes | Dockerfiles multi-stage com estágio de teste, usuário não-root por UID e `HEALTHCHECK`. Go em **distroless**; Python sem compilador na imagem final. Deploy em **EKS** |
-| **F0.2** | IaC (Terraform) | 20 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. **Cluster, bancos, mensageria e rede** — 100% por código |
+| **F0.2** | IaC (Terraform) | 21 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. **Cluster, bancos, mensageria e rede** — 100% por código |
 | **F0.3** | CI/CD DevSecOps | Pipeline reutilizável: `lint‖test` → `sonar`+`build-scan-push` → `update-gitops`. **Trivy em 2 camadas** (SCA + imagem), SBOM CycloneDX, `gitleaks` |
 | **F0.4** | GitOps | **ArgoCD** com App-of-Apps → ApplicationSet. `selfHeal` e `prune` ligados. Um único `kubectl apply` em todo o projeto |
 | **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **New Relic** com Distributed Tracing atravessando o SQS |

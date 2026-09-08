@@ -55,7 +55,7 @@ help: ## Lista os alvos disponiveis
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo -e "  $(AMARELO)Rode 'make lab-down' ao final de TODA sessao.$(RESET)"
-	@echo "  O ambiente completo custa ~US\$$ 6,63/dia; esquecer ligado esgota o credito."
+	@echo "  O ambiente completo custa ~US\$$ 6,73/dia; esquecer ligado esgota o credito."
 	@echo ""
 
 # ---------------------------------------------------------------------------

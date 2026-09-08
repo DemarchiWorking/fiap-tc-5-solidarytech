@@ -76,6 +76,8 @@
 | **F3.2** | **Ciclo de vida do incidente desenhado** | Diagrama cobrindo **detecção (AIOps/alerta) → triagem → notificação → mitigação → resolução → post-mortem → comunicação aos stakeholders** | `docs/05-itsm-aiops/README.md` §1 | Diagrama (evidência visual **obrigatória** do relatório) | Pitch | 🔴 | 🟨 |
 | **F3.x** | *(extra)* Runbooks + post-mortem preenchido | Um runbook por alerta acionável + post-mortem **blameless real** do chaos drill da F1.3 | `docs/05-itsm-aiops/runbooks/` | — | Pitch | 🟢 | 🟨 |
 | **F3.y** | *(extra)* Self-healing automatizado | Alerta do APM → `repository_dispatch` → workflow com **allowlist** → `rollout restart` | `.github/workflows/self-heal.yml` | Run do Actions **disparado pelo alerta**, não manualmente | Demo Tech | 🟠 | 🟨 |
+| **F3.z** | **Gestão de incidentes (PagerDuty)** — herdado da Fase 4 pela Regra de Ouro | Alerta `severity: page` abre incidente automaticamente, via `pagerduty_configs.routing_key_file` | `gitops/addons/kube-prometheus-stack/values.yaml` · `scripts/bootstrap-cluster.sh` | Print do incidente aberto **pelo alerta** | Demo Tech | 🔴 | 🟨 |
+| **F3.w** | **ChatOps (Discord)** — herdado da Fase 4 pela Regra de Ouro | Alerta notifica o canal com summary, serviço e link do runbook, via `slack_configs.api_url_file` (o Discord aceita o formato Slack no sufixo `/slack`) | `gitops/addons/kube-prometheus-stack/values.yaml` · `comecar.sh` etapa 6 | Print da notificação no canal | Demo Tech | 🔴 | 🟨 |
 
 ---
 

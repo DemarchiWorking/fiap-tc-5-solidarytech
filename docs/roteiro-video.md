@@ -6,7 +6,15 @@
 >
 > Cada bloco abaixo aponta o **requisito** que ele cobre. Nada aqui é enfeite.
 
-**Divisão:** Pitch Executivo **9 min** · Demo Tech **10 min** · Fechamento **1 min**
+**Divisão:** Pitch Executivo **9 min** · Demo Tech **12 min** · Fechamento **1 min**
+
+> **Sobre a duração do pitch.** O enunciado se contradiz: pede vídeo de **até
+> 20 min no total** e, na mesma página, **"Pitch Executivo (15 a 20 min)"** — os
+> dois não cabem juntos. Adotamos o teto total de 20 minutos e priorizamos a
+> demonstração, porque a regra de avaliação diz que *requisito não demonstrado
+> sofre dedução direta de pontos*: um pitch de 15 minutos deixaria 5 para provar
+> cinco frentes. A decisão fica registrada aqui para não parecer descuido — e se
+> a banca preferir a outra leitura, o pitch está escrito e é só estendê-lo.
 
 ---
 
@@ -110,7 +118,7 @@ limitações do ambiente da faculdade, com o desenho correto documentado ao lado
 
 Terminal:
 ```bash
-make check                # gate do AWS Academy: 20 arquivos, 0 falhas
+make check                # gate do AWS Academy: 21 arquivos, 0 falhas
 make conformidade         # relatório de conformidade com o lab
 ```
 
@@ -170,6 +178,39 @@ make dr-plan     # plan limpo em us-west-2, os MESMOS módulos
 > automaticamente e recuperação testada em outra região. Tudo dentro das
 > restrições do AWS Academy — sem criar uma única IAM role, porque o ambiente não
 > permite, e cada contorno está documentado com o desenho correto ao lado."
+
+---
+
+### 2.6 Incidente e self-healing em ação (2 min) — **F3.2** + base da Fase 4
+
+O enunciado da Fase 4 pede isto explicitamente, e a Regra de Ouro o mantém
+obrigatório: *alerta disparando → incidente aberto → notificação no canal →
+automação corrigindo*. É o bloco mais difícil de improvisar, e o mais fácil de
+esquecer.
+
+```bash
+# 1. Provocar a falha (o donation-service perde o banco)
+kubectl -n solidary-donation set env deploy/donation-service   DATABASE_URL="postgres://invalido:invalido@127.0.0.1:5432/nao_existe"
+```
+
+**Mostre, nesta ordem:**
+
+1. Prometheus → Alerts: o alerta de taxa de erro passando a `Firing`.
+2. PagerDuty: o incidente aberto sozinho, com o serviço e o runbook.
+3. Discord: a notificação chegando no canal, com o link do runbook.
+4. Actions: a execução do `self-heal.yml`, mostrando o estado **antes** e
+   **depois** do `rollout restart`.
+
+```bash
+# 2. Desfazer — o ArgoCD reverte sozinho, mas não espere pela reconciliação
+#    durante a gravação
+kubectl -n solidary-donation rollout undo deploy/donation-service
+```
+
+> **Se as credenciais de PagerDuty e Discord não estiverem configuradas**, os
+> passos 2 e 3 não acontecem — o alerta dispara e fica visível no Alertmanager,
+> nada mais. Configure antes de gravar: `./comecar.sh` etapa 6. Sem isso, dois
+> requisitos herdados da Fase 4 ficam sem evidência.
 
 ---
 

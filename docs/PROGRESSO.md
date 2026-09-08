@@ -1,5 +1,68 @@
 # Progresso — TCC Fase 5 · SolidaryTech na AWS
 
+> ## ⏱️ Retomada rápida — leia esta seção primeiro
+>
+> Este arquivo é longo e cronológico. O que você precisa para continuar de onde
+> parou está aqui, em uma tela.
+
+### Onde estamos
+
+| Frente | Estado |
+|---|---|
+| **F0** Fundação (Docker, K8s, IaC, CI/CD, GitOps, Observabilidade, APM) | Completa em código |
+| **F1** SRE (3 SLIs, SLOs, dashboard, MTTR) | Completa — o SLI de frescor voltou a funcionar |
+| **F2** FinOps (tags, rightsizing, forecast) | Completa — painel passou a consultar OpenCost de verdade |
+| **F3** ITSM/AIOps (AIOps, ciclo de incidente, self-healing) | Código completo; **um elo depende de configuração no New Relic** |
+| **F4** DR (PCN, Velero, warm standby) | Completa em código |
+
+### O que falta, e de quem depende
+
+| Pendência | Depende de | Como resolver |
+|---|---|---|
+| `docker build --target test` nas 3 imagens · `make smoke` | **Você** | O serviço `com.docker.service` está parado e exige elevação. Abra o Docker Desktop uma vez, aceitando o UAC, e rode `make test-local && make smoke` |
+| `make` não existe nesta máquina | **Você** | `winget search make` (Windows) ou `sudo apt install make` (WSL). Sem ele **nenhum** comando do guia roda, nem o `./comecar.sh` |
+| `terraform plan` / `apply` | Sessão do Learner Lab | `make pre-voo` diz se a credencial está válida |
+| `go test -race` | gcc/cgo | Já coberto pelo estágio `test` do Dockerfile, que instala `gcc musl-dev` |
+| Nomes, RMs e **links** do repositório e do vídeo | **Você** | `docs/relatorio/RELATORIO-DE-ENTREGA.md` §1 · depois `make relatorio` |
+| Notificação de incidentes operando | Credenciais | `./comecar.sh` etapa 6, ou `PAGERDUTY_ROUTING_KEY` e `CHATOPS_WEBHOOK_URL` no ambiente |
+| Disparo automático do self-heal | Config no New Relic | Passo a passo em `docs/05-itsm-aiops/README.md` |
+| Prints de evidência | Cluster no ar | `docs/07-evidencias/README.md` diz qual print cobre qual requisito |
+
+### Como revalidar tudo (sem AWS, sem Docker)
+
+```bash
+python scripts/verificar-academy.py infra          # 11 verificações
+python scripts/verificar-observabilidade.py .      #  7 verificações
+python scripts/verificar-workflows.py .            #  5 verificações
+bash   scripts/verificar-manifestos.sh             # kustomize + kubeconform + política
+
+terraform fmt -check -recursive infra/
+terraform -chdir=infra/environments/prod-use1 validate
+terraform -chdir=infra/environments/dr-usw2  validate
+
+cd services/donation-service  && go vet ./... && go test ./...
+cd ../ngo-service             && pytest -q
+cd ../volunteer-service       && pytest -q
+```
+
+Terraform, Go, kustomize e kubeconform foram instalados no home do WSL
+(`~/.ferramentas-tc5`), sem `sudo`. Apagar essa pasta desfaz.
+
+### Números reais (medidos, não estimados)
+
+| Grandeza | Valor |
+|---|---|
+| Arquivos versionados | 159 |
+| Arquivos `.tf` | 21 · 8 módulos · 2 ambientes |
+| Arquivos YAML | 60 |
+| Documentos Markdown | 25 |
+| Testes Go (donation) | 28 casos · cobertura 42,6% |
+| Testes Python (ngo · volunteer) | 25 · 44 |
+| Custo do ambiente | US$ 6,73/dia · US$ 202/mês |
+| Warm standby, se ativado | +US$ 151/mês |
+
+---
+
 > Estado incremental do projeto. Serve para retomar o trabalho em outra sessão
 > sem reconstruir contexto.
 
@@ -76,13 +139,13 @@ e o `smoke-local.sh`. Os gates que **não** dependem de Docker estão todos verd
 
 | Gate | Precisa de Docker? | Resultado |
 |---|---|---|
-| `scripts/verificar-academy.py` | não | ✅ 20 arquivos `.tf`, **11 verificações**, 0 falhas |
+| `scripts/verificar-academy.py` | não | ✅ 21 arquivos `.tf`, **11 verificações**, 0 falhas |
 | `scripts/verificar-observabilidade.py` | não | ✅ **6 verificações** — dashboards, SLO, contrato de métrica, chaves de Helm, egress x banco |
 | `scripts/verificar-workflows.py` | não | ✅ **novo** — 8 workflows, 5 verificações, 0 falhas |
-| Sintaxe YAML (51 arquivos) | não | ✅ 0 erros |
+| Sintaxe YAML (60 arquivos) | não | ✅ 0 erros |
 | Links markdown | não | ✅ 0 quebrados |
 | `pytest` ngo-service | não | ✅ 25 passed · 91% |
-| `pytest` volunteer-service | não | ✅ 37 passed · 90% |
+| `pytest` volunteer-service | não | ✅ 44 passed |
 | `terraform fmt -check` | não | ✅ **executado** — 0 arquivos fora do formato |
 | `terraform validate` (prod-use1) | não | ✅ **executado** — válido, **sem avisos** |
 | `terraform validate` (dr-usw2) | não | ✅ **executado** — válido, sem avisos |
@@ -125,7 +188,7 @@ no teste.
 
 ### F2 — Terraform / IaC ✅
 
-20 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. Restrições do
+21 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. Restrições do
 Academy codificadas como `validation`, `precondition` e `check`.
 
 **Três decisões sem as quais o ambiente não funciona:**
@@ -359,12 +422,12 @@ nomeado, com o motivo.
 | `terraform validate` · **dr-usw2** | válido, sem avisos |
 | `go vet` · `go build` · `go test` | 0 achados · compila · 7 suítes · **42,6%** |
 | `pytest` ngo-service (Linux/3.12) | 25 testes |
-| `pytest` volunteer-service (Linux/3.12) | 41 testes |
+| `pytest` volunteer-service (Linux/3.12) | 44 testes |
 | `verificar-academy.py` | 11 verificações |
 | `verificar-observabilidade.py` | 6 verificações |
 | `verificar-workflows.py` | 5 verificações |
 | `verificar-manifestos.sh` | kustomize build · kubeconform · política — **6 overlays** |
-| Sintaxe YAML · links Markdown · referências fora do Markdown | 59 · 25 · 20 arquivos, 0 quebras |
+| Sintaxe YAML · links Markdown · referências cruzadas | 60 · 25 · 20, 0 quebras |
 | PDF do relatório (E3) | gerado, 327 KB |
 
 Terraform, Go, kustomize e kubeconform foram instalados na distro Ubuntu 24.04

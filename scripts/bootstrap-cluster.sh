@@ -160,6 +160,47 @@ else
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 fi
 
+# Credenciais de notificacao — PagerDuty e ChatOps (Discord).
+#
+# Criados SEMPRE, mesmo sem valor. O values.yaml do kube-prometheus-stack lista
+# os dois em `alertmanagerSpec.secrets`, e um Secret referenciado que nao existe
+# impede o volume de montar: o pod do Alertmanager fica preso em
+# ContainerCreating. Ficar sem notificacao externa e ruim; ficar sem
+# Alertmanager e pior, porque leva junto a evidencia de que os alertas
+# dispararam.
+#
+# Sem credencial real o envio falha e o erro aparece no log do Alertmanager. Os
+# alertas continuam visiveis na UI e no Prometheus.
+if [[ -n "${PAGERDUTY_ROUTING_KEY:-}" ]]; then
+  kubectl -n monitoring create secret generic alertmanager-pagerduty \
+    --from-literal=routing-key="$PAGERDUTY_ROUTING_KEY" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  verde "PagerDuty configurado — alertas 'page' abrem incidente"
+else
+  amarelo "PAGERDUTY_ROUTING_KEY nao definida — alertas 'page' nao abrem incidente."
+  kubectl -n monitoring create secret generic alertmanager-pagerduty \
+    --from-literal=routing-key="nao-configurada" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+fi
+
+if [[ -n "${CHATOPS_WEBHOOK_URL:-}" ]]; then
+  kubectl -n monitoring create secret generic alertmanager-chatops \
+    --from-literal=webhook-url="$CHATOPS_WEBHOOK_URL" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  verde "ChatOps configurado — alertas notificam o canal"
+else
+  amarelo "CHATOPS_WEBHOOK_URL nao definida — alertas nao chegam ao canal."
+  echo "         Discord: Editar canal > Integracoes > Webhooks > Copiar URL"
+  echo "         IMPORTANTE: acrescente /slack no fim da URL."
+  echo "         O Discord rejeita o payload nativo do Alertmanager com HTTP 400;"
+  echo "         no sufixo /slack ele aceita o formato do Slack, que e o que o"
+  echo "         receiver envia."
+  # URL sintaticamente valida e que nao resolve: falha no envio, nunca no load.
+  kubectl -n monitoring create secret generic alertmanager-chatops \
+    --from-literal=webhook-url="https://chatops-nao-configurado.invalid/slack" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+fi
+
 # solidary-endpoints com PLACEHOLDER, criado agora e nao no passo 8.
 #
 # O Grafana le GF_SERVER_ROOT_URL deste ConfigMap. Se ele so existisse depois do

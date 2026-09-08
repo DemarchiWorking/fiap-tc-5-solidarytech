@@ -63,6 +63,16 @@ prometheus:
 
 alertmanager:
   alertmanagerSpec:
+    # Os Secrets sao montados em /etc/alertmanager/secrets/<nome>/<chave>.
+    #
+    # O bootstrap cria os dois SEMPRE — com o valor real se voce configurou, ou
+    # com um marcador inerte se nao. Isso e deliberado: um Secret referenciado
+    # aqui e inexistente no cluster impede o volume de montar, e o Alertmanager
+    # nao sobe. Ficar sem notificacao e ruim; ficar sem Alertmanager e pior,
+    # porque leva junto a evidencia de que os alertas dispararam.
+    secrets:
+      - alertmanager-pagerduty
+      - alertmanager-chatops
     resources:
       requests:
         cpu: 25m
@@ -98,39 +108,80 @@ alertmanager:
           repeat_interval: 1h
         - matchers: ['severity = "ticket"']
           receiver: "chatops"
-    # RECEIVERS SEM INTEGRACAO EXTERNA — e isto e deliberado, nao um esquecimento.
+    # RECEIVERS — a ultima milha da cadeia de incidentes.
     #
-    # A versao anterior apontava para um `alertmanager-webhook-proxy` que NAO
-    # EXISTE em lugar nenhum do repositorio. O Alertmanager validava a config
-    # (a URL era sintaticamente valida), subia saudavel, e falhava em cada
-    # notificacao com erro de DNS: o alerta de burn rate critico nunca chegaria
-    # a ninguem. Falha silenciosa exatamente na peca cuja funcao e nao falhar em
-    # silencio.
+    # Ate aqui os 14 alertas disparavam, eram roteados corretamente por
+    # severidade... e morriam em receivers que eram apenas um nome. Onze pontos
+    # da documentacao — inclusive o relatorio de entrega — afirmavam que a
+    # notificacao acontecia. Nao acontecia.
     #
-    # Como fica agora: os alertas DISPARAM e ficam visiveis no Prometheus e no
-    # Alertmanager — que e a evidencia que o requisito F3 pede. O caminho de
-    # notificacao externa e uma decisao de quem opera, e as URLs de PagerDuty e
-    # ChatOps sao credenciais que nao entram no Git.
+    # POR QUE `slack_configs` PARA O DISCORD
     #
-    # Para ligar, sem tocar em mais nada:
+    # O caminho obvio seria `webhook_configs`. Ele NAO funciona: o Discord
+    # rejeita com HTTP 400 o payload nativo do Alertmanager, que tem formato
+    # proprio. O Discord aceita payload no formato do Slack no sufixo `/slack`
+    # do webhook — entao usa-se `slack_configs`, e a URL guardada no Secret
+    # termina em `/slack`. Bonus: se um dia o time migrar para Slack de
+    # verdade, basta trocar o conteudo do Secret.
     #
-    #   receivers:
-    #     - name: "paginacao"
-    #       pagerduty_configs:
-    #         - routing_key_file: /etc/alertmanager/secrets/pagerduty/key
-    #     - name: "chatops"
-    #       webhook_configs:
-    #         - url_file: /etc/alertmanager/secrets/chatops/url
+    # POR QUE `_file` E NAO O VALOR
     #
-    # com `alertmanagerSpec.secrets: [pagerduty, chatops]`, que monta os Secrets
-    # em /etc/alertmanager/secrets/. O `_file` mantem o segredo fora do values.
+    # `routing_key_file` e `api_url_file` leem o segredo do disco em tempo de
+    # envio. O values.yaml fica versionado no Git com apenas um CAMINHO — a
+    # credencial nunca entra no repositorio. Foi o problema que a Fase 4 teve,
+    # com a DD_API_KEY em texto puro dentro do proprio values.
     #
-    # O self-healing NAO depende disto: ele e acionado por repository_dispatch a
-    # partir do webhook do APM, nao do Alertmanager.
+    # SEM CREDENCIAL CONFIGURADA
+    #
+    # O envio falha e o Alertmanager registra o erro no log. O alerta continua
+    # visivel na UI do Alertmanager e no Prometheus — que e a evidencia minima
+    # do requisito F3 — e nada mais quebra.
     receivers:
+      # Alertas que nao casam com nenhuma rota. Sem configuracao de entrega de
+      # proposito: se algo cair aqui, e sinal de que falta uma rota, e o lugar
+      # de descobrir isso e a UI do Alertmanager.
       - name: "padrao"
+
+      # P1 — acorda gente. PagerDuty E ChatOps em paralelo, como o fluxo de
+      # incidentes descreve: o plantonista e paginado, e o time ve o contexto
+      # no canal sem precisar abrir o PagerDuty.
       - name: "paginacao"
+        pagerduty_configs:
+          - routing_key_file: /etc/alertmanager/secrets/alertmanager-pagerduty/routing-key
+            severity: critical
+            description: '{{ .CommonAnnotations.summary }}'
+            details:
+              servico: '{{ .CommonLabels.service }}'
+              descricao: '{{ .CommonAnnotations.description }}'
+              # O runbook viaja NA PAGINACAO. Quem for acordado as 3h nao deve
+              # precisar procurar o que fazer.
+              runbook: '{{ .CommonAnnotations.runbook_url }}'
+              alertas_disparando: '{{ .Alerts.Firing | len }}'
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/alertmanager-chatops/webhook-url
+            channel: "#incidentes"
+            send_resolved: true
+            title: '[P1] {{ .CommonAnnotations.summary }}'
+            text: >-
+              *Servico:* {{ .CommonLabels.service }}
+
+              {{ .CommonAnnotations.description }}
+
+              *Runbook:* {{ .CommonAnnotations.runbook_url }}
+
+      # P2 — nao acorda ninguem, mas o time precisa saber. So ChatOps.
       - name: "chatops"
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/alertmanager-chatops/webhook-url
+            channel: "#alertas"
+            send_resolved: true
+            title: '[P2] {{ .CommonAnnotations.summary }}'
+            text: >-
+              *Servico:* {{ .CommonLabels.service }}
+
+              {{ .CommonAnnotations.description }}
+
+              *Runbook:* {{ .CommonAnnotations.runbook_url }}
 
 grafana:
   adminUser: admin

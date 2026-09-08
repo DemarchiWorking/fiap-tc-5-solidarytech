@@ -194,11 +194,28 @@ Manualmente, em **Settings → Secrets and variables → Actions**:
 
 ## 🟢 Bloco C — Opcional: só se quiser ir além
 
-### C1. Alertas para PagerDuty ou Slack/Discord?
+### C1. Alertas para PagerDuty e Discord
 
-O Alertmanager está configurado com um receiver de webhook. Sem URL configurada,
-os alertas **disparam e ficam visíveis no Alertmanager** — apenas não saem do
-cluster. Para o vídeo, mostrar o alerta em `Firing` no Prometheus já é evidência.
+**Recomendado, não opcional** — o enunciado pede a cadeia de incidentes
+*operando*, e "configurado" não conta.
+
+O `./comecar.sh` pergunta as duas credenciais na etapa 6, e o bootstrap cria os
+Secrets. Se você pulou, dá para ligar depois:
+
+```bash
+export PAGERDUTY_ROUTING_KEY="..."     # Service > Integrations > Events API V2
+export CHATOPS_WEBHOOK_URL="https://discord.com/api/webhooks/.../slack"
+./scripts/bootstrap-cluster.sh
+```
+
+> ⚠️ **A URL do Discord precisa terminar em `/slack`.** O Discord rejeita o
+> payload nativo do Alertmanager com HTTP 400; no sufixo `/slack` ele aceita o
+> formato do Slack, que é o que o receiver envia. O `comecar.sh` acrescenta
+> sozinho se você esquecer.
+
+Sem as credenciais o cluster sobe igual: os alertas **disparam e ficam visíveis**
+no Alertmanager e no Prometheus, apenas não saem. O envio falha e o erro aparece
+no log do Alertmanager — nada mais quebra.
 
 ### C2. Ligar o ElastiCache?
 

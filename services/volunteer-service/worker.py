@@ -36,7 +36,7 @@ from opentelemetry.propagate import extract
 from opentelemetry.trace import SpanKind
 
 from app import criar_tabela
-from telemetry import configure_logging, setup_telemetry
+from telemetry import LAG_METRIC_NAME, configure_logging, setup_telemetry
 
 SERVICE_NAME = "volunteer-service-worker"
 VERSION = os.getenv("SERVICE_VERSION", "dev")
@@ -254,15 +254,28 @@ def heartbeat_recente(agora: float | None = None) -> bool:
     return idade < HEARTBEAT_TIMEOUT
 
 
-def construir_metricas():
-    medidor = metrics.get_meter(SERVICE_NAME)
+def construir_metricas(medidor=None):
+    """Cria os instrumentos do worker.
+
+    `medidor` injetavel porque `metrics.set_meter_provider` e set-once por
+    processo: um teste que precise de um MeterProvider proprio — para ler os
+    buckets efetivamente exportados, por exemplo — nao consegue instalar o dele
+    no global sem interferir nos demais. Mesmo motivo pelo qual o tracer ja e
+    injetado nos testes deste servico.
+    """
+    medidor = medidor or metrics.get_meter(SERVICE_NAME)
     processados = medidor.create_counter(
         "solidary.donation.events.processed",
         description="Eventos de doacao consumidos da fila",
         unit="1",
     )
+    # Nome vindo de telemetry.LAG_METRIC_NAME, e nao repetido como literal: e
+    # a mesma constante que a View usa para casar o instrumento. Escrito duas
+    # vezes, um erro de digitacao faria a View nao casar e o histograma voltaria
+    # silenciosamente para as fronteiras padrao — sem bucket de 60 s, que e
+    # exatamente o defeito que esta correcao elimina.
     lag = medidor.create_histogram(
-        "solidary.donation.event.lag",
+        LAG_METRIC_NAME,
         description="Tempo entre a criacao da doacao e o processamento do evento",
         unit="s",
     )

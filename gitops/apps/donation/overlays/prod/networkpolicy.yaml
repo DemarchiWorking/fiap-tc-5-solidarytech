@@ -61,11 +61,29 @@ spec:
     # ficar pronta, com o diagnostico confuso de "o banco esta la, a tabela esta
     # la, e a app nao conecta" — porque os Jobs de init tem outro label e nao
     # sao selecionados por esta policy, entao o schema e criado normalmente.
+    #
+    # AS DUAS REGIOES, e nao so producao. As subnets privadas de us-east-1 sao
+    # 10.0.32.0/20 e 10.0.48.0/20; as de us-west-2, 10.10.32.0/20 e
+    # 10.10.48.0/20 (a VPC de DR e 10.10.0.0/16 — CIDR diferente de proposito,
+    # para permitir peering entre as regioes).
+    #
+    # O ArgoCD do standby sincroniza ESTES MESMOS manifestos: o runbook de DR
+    # manda rodar `AMBIENTE=dr-usw2 ./scripts/bootstrap-cluster.sh`, que aplica
+    # o mesmo app-of-apps. Com apenas os blocos de producao aqui e a
+    # NetworkPolicy de fato aplicada pelo VPC CNI, os pods do standby subiriam
+    # sem conseguir falar com o RDS — no unico cenario em que o standby importa.
+    #
+    # Listar as quatro faixas e mais seguro do que alargar para 10.0.0.0/12:
+    # continua negando todo o resto do espaco privado.
     - to:
         - ipBlock:
             cidr: 10.0.32.0/20
         - ipBlock:
             cidr: 10.0.48.0/20
+        - ipBlock:
+            cidr: 10.10.32.0/20
+        - ipBlock:
+            cidr: 10.10.48.0/20
       ports:
         - protocol: TCP
           port: 5432
@@ -78,6 +96,10 @@ spec:
             cidr: 0.0.0.0/0
             except:
               - 10.0.0.0/16
+              # A VPC de DR tambem precisa constar: sem ela, o mesmo manifesto
+              # aplicado no standby deixaria de bloquear o trafego lateral que
+              # esta regra existe para bloquear.
+              - 10.10.0.0/16
       ports:
         - protocol: TCP
           port: 443

@@ -80,7 +80,7 @@ printf "   Vou pedir apenas o que só você tem. Cada resposta é validada na ho
 printf "   Nada sensível vai para o Git.\n"
 
 # ===========================================================================
-titulo "1 de 6 · Ferramentas na máquina"
+titulo "1 de 7 · Ferramentas na máquina"
 
 FALTANDO=0
 # `make` e pre-requisito deste proprio script: as etapas 1 a 5 abaixo chamam
@@ -132,7 +132,7 @@ python -m pip install --quiet -r scripts/requirements-tools.txt 2>/dev/null \
   || aviso "não consegui instalar PyYAML — alguns gates serão pulados"
 
 # ===========================================================================
-titulo "2 de 6 · Credenciais do AWS Academy"
+titulo "2 de 7 · Credenciais do AWS Academy"
 
 printf "  As credenciais do Learner Lab ${N}expiram em ~4 horas${X}, junto com a sessão.\n"
 printf "  Você vai repetir este passo a cada sessão nova.\n\n"
@@ -227,7 +227,7 @@ AWS_REGIAO_DR=$([[ "$AWS_REGIAO" == "us-east-1" ]] && echo "us-west-2" || echo "
 ok "primária: $AWS_REGIAO · DR: $AWS_REGIAO_DR"
 
 # ===========================================================================
-titulo "3 de 6 · Repositório Git"
+titulo "3 de 7 · Repositório Git"
 
 printf "  O ArgoCD sincroniza a partir do ${N}GitHub${X}, não do seu disco.\n"
 printf "  Sem um repositório publicado, o GitOps não funciona.\n\n"
@@ -259,7 +259,7 @@ else
 fi
 
 # ===========================================================================
-titulo "4 de 6 · APM (New Relic)"
+titulo "4 de 7 · APM (New Relic)"
 
 printf "  Sem a chave do New Relic, dois requisitos ${N}não são demonstráveis${X}:\n"
 printf "    ${R}F0.5b${X}  Distributed Tracing no APM\n"
@@ -284,7 +284,7 @@ if [[ -z "${NEW_RELIC_LICENSE_KEY:-}" ]]; then
 fi
 
 # ===========================================================================
-titulo "5 de 6 · Identificação do grupo"
+titulo "5 de 7 · Identificação do grupo"
 
 printf "  Requisito ${N}E3.1${X} do enunciado, com dedução direta se faltar.\n\n"
 
@@ -310,7 +310,35 @@ if [[ -z "$INTEGRANTES" ]]; then
 fi
 
 # ===========================================================================
-titulo "6 de 6 · SonarCloud (opcional)"
+titulo "6 de 7 · Notificação de incidentes (opcional)"
+
+printf "  Sem isto os alertas ${N}disparam e ficam visíveis${X} no Alertmanager,\n"
+printf "  mas não saem do cluster. O enunciado pede a cadeia ${N}operando${X}:\n"
+printf "  alerta → incidente no PagerDuty → notificação no canal.\n\n"
+
+if confirmar "Configurar PagerDuty e ChatOps?"; then
+  printf "\n  ${C}PagerDuty${X}: Service > Integrations > Events API V2 > Integration Key\n"
+  read -r -s -p "  Routing key (Enter para pular): " PD_KEY; echo
+  [[ -n "$PD_KEY" ]] && PAGERDUTY_ROUTING_KEY="$PD_KEY" && ok "PagerDuty configurado"
+
+  printf "\n  ${C}Discord${X}: Editar canal > Integrações > Webhooks > Copiar URL\n"
+  printf "  ${N}Acrescente /slack no fim da URL.${X} O Discord rejeita o payload\n"
+  printf "  nativo do Alertmanager; no sufixo /slack ele aceita o formato do\n"
+  printf "  Slack, que é o que o receiver envia.\n"
+  read -r -s -p "  URL do webhook (Enter para pular): " CO_URL; echo
+  if [[ -n "$CO_URL" ]]; then
+    if [[ "$CO_URL" == *discord.com/api/webhooks/* && "$CO_URL" != */slack ]]; then
+      aviso "a URL do Discord não termina em /slack — acrescentando"
+      CO_URL="${CO_URL%/}/slack"
+    fi
+    CHATOPS_WEBHOOK_URL="$CO_URL"
+    ok "ChatOps configurado"
+  fi
+else
+  aviso "pulado — os alertas ficam só no Alertmanager"
+fi
+
+titulo "7 de 7 · SonarCloud (opcional)"
 
 printf "  O ${N}Trivy já atende${X} o requisito F0.3b de SAST/SCA. O Sonar é reforço.\n"
 printf "  Gratuito para repositório público: ${C}https://sonarcloud.io${X}\n\n"
@@ -345,6 +373,8 @@ ok ".solidarytech.conf"
   printf '# Segredos — NUNCA versionado (ver .gitignore)\n'
   [[ -n "${NEW_RELIC_LICENSE_KEY:-}" ]] && printf 'NEW_RELIC_LICENSE_KEY=%s\n' "$NEW_RELIC_LICENSE_KEY"
   [[ -n "${SONAR_TOKEN:-}" ]]           && printf 'SONAR_TOKEN=%s\n' "$SONAR_TOKEN"
+  [[ -n "${PAGERDUTY_ROUTING_KEY:-}" ]] && printf 'PAGERDUTY_ROUTING_KEY=%s\n' "$PAGERDUTY_ROUTING_KEY"
+  [[ -n "${CHATOPS_WEBHOOK_URL:-}" ]]   && printf 'CHATOPS_WEBHOOK_URL=%s\n' "$CHATOPS_WEBHOOK_URL"
 } > "$ENV_LOCAL"
 chmod 600 "$ENV_LOCAL" 2>/dev/null || true
 ok ".env.local (permissão 600)"

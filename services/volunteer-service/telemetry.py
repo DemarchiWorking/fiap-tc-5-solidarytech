@@ -33,6 +33,32 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 #     solidary_http_server_duration_seconds_bucket{...}
 DURATION_METRIC_NAME = "solidary.http.server.duration"
 
+# Frescor da fila — o SLI 3, e o unico que mede a experiencia de ponta a ponta:
+# quanto tempo passa entre o doador confirmar a doacao e o voluntario ser
+# notificado.
+LAG_METRIC_NAME = "solidary.donation.event.lag"
+
+# A FRONTEIRA DE 60 SEGUNDOS E OBRIGATORIA.
+#
+# As regras de gravacao em gitops/addons/observabilidade-config/slo-rules.yaml
+# consultam literalmente `solidary_donation_event_lag_seconds_bucket{le="60"}`.
+# Sem uma View, o SDK do OpenTelemetry aplica as fronteiras padrao
+# (0, 5, 10, 25, 50, 75, 100, 250, ...) — que NAO incluem 60. A consulta
+# devolvia serie vazia, e a consequencia se espalhava em silencio:
+#
+#   * `slo:donation_frescor:error_budget_restante` nunca era gravado;
+#   * o gauge "Frescor da fila < 60s" do painel de SRE mostrava "No data";
+#   * o alerta FilaDeDoacoesAtrasada nunca podia disparar.
+#
+# Ou seja: um terco do requisito F1.1 existia no papel e nao produzia um unico
+# ponto. E o mesmo raciocinio que o slo-rules.yaml documenta em detalhe para a
+# fronteira de 0.3 s da latencia — ele so nao tinha sido aplicado aqui.
+#
+# As demais fronteiras cobrem a faixa util: sub-segundo quando a fila esta
+# saudavel, minutos quando ha acumulo, e 600 s para enxergar a cauda sem
+# distorcer o resto.
+LAG_BUCKETS = [0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600]
+
 # Os mesmos buckets do lado Go. Se divergirem, histogram_quantile mistura
 # fronteiras diferentes entre servicos e o p95 do SLO passa a mentir.
 DURATION_BUCKETS = [
@@ -96,6 +122,34 @@ def configure_logging(service_name: str, version: str) -> logging.Logger:
     return logging.getLogger(service_name)
 
 
+def construir_views() -> list[View]:
+    """As agregacoes dos dois histogramas do servico.
+
+    Extraida de `setup_telemetry` para poder ser TESTADA. As fronteiras destes
+    histogramas nao sao detalhe de implementacao: as regras de gravacao do
+    Prometheus consultam buckets por valor exato (`le="0.3"`, `le="60"`), e uma
+    fronteira ausente nao produz erro — produz serie vazia. Painel em branco e
+    alerta que nunca dispara, sem nada nos logs.
+
+    Com a lista aqui, o teste exercita o mesmo objeto que a producao usa, em vez
+    de uma copia que pode divergir.
+    """
+    return [
+        View(
+            instrument_name=DURATION_METRIC_NAME,
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=DURATION_BUCKETS
+            ),
+        ),
+        View(
+            instrument_name=LAG_METRIC_NAME,
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=LAG_BUCKETS
+            ),
+        ),
+    ]
+
+
 def setup_telemetry(service_name: str, version: str, env: str):
     """Configura tracing e metricas OTLP e devolve o histograma de duracao.
 
@@ -123,14 +177,7 @@ def setup_telemetry(service_name: str, version: str, env: str):
                     OTLPMetricExporter(), export_interval_millis=15_000
                 )
             ],
-            views=[
-                View(
-                    instrument_name=DURATION_METRIC_NAME,
-                    aggregation=ExplicitBucketHistogramAggregation(
-                        boundaries=DURATION_BUCKETS
-                    ),
-                )
-            ],
+            views=construir_views(),
         )
         metrics.set_meter_provider(meter_provider)
 

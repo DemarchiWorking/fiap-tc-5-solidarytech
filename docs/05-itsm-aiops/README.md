@@ -182,6 +182,47 @@ Alerta (Prometheus ou APM)
    └─▶ PagerDuty + ChatOps (em paralelo)
 ```
 
+### Quem dispara o `repository_dispatch` — o elo que precisa ser configurado
+
+O diagrama acima descreve o fluxo completo, mas **um elo mora fora do
+repositório** e precisa ser ligado uma vez, à mão. É honesto dizer isso: sem
+esta configuração, `self-heal.yml` só roda por `workflow_dispatch` manual — o
+que basta para demonstrar a automação no vídeo, mas não é o disparo automático
+que o critério de aceitação F3.y exige.
+
+**Por que não sai do Alertmanager.** O `webhook_configs` do Alertmanager envia um
+payload de formato próprio. A API de `repository_dispatch` do GitHub exige um
+corpo com o campo `event_type`, que o Alertmanager não sabe produzir. Ligar os
+dois exigiria um tradutor rodando no cluster — mais um workload para manter, num
+cluster de 6 vCPU, e mais uma peça para falhar durante um incidente.
+
+**Por onde sai.** Pelo APM. O New Relic permite webhook com **cabeçalhos e corpo
+personalizados**, então ele fala diretamente com a API do GitHub. É o mesmo
+caminho que a Fase 4 usou com o Monitor do Datadog (`@webhook-github-selfheal`).
+
+Configuração, em *Alerts → Destinations → Webhook*:
+
+| Campo | Valor |
+|---|---|
+| Endpoint | `https://api.github.com/repos/<org>/<repo>/dispatches` |
+| Header | `Authorization: Bearer <PAT>` |
+| Header | `Accept: application/vnd.github+json` |
+
+E o *payload template*:
+
+```json
+{
+  "event_type": "self-heal",
+  "client_payload": { "servico": "donation-service" }
+}
+```
+
+**O PAT precisa de um escopo só:** `repo` (ou, num *fine-grained token*,
+`Contents: read and write` limitado a este repositório). Qualquer coisa além
+disso amplia o estrago possível se o token vazar — e o `repository_dispatch` é
+acionável por qualquer um que o tenha, que é exatamente por que a allowlist
+abaixo existe.
+
 ### A allowlist é o controle de segurança mais importante do workflow
 
 `repository_dispatch` é acionável por qualquer token com permissão de escrita.

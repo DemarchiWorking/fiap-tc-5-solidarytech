@@ -259,3 +259,90 @@ def test_falha_de_escrita_nao_derruba_o_worker(heartbeat_isolado, monkeypatch):
 
     monkeypatch.setattr("builtins.open", escrita_falha)
     modulo.bater_heartbeat()  # nao pode levantar
+
+
+# ---------------------------------------------------------------------------
+# Fronteiras dos histogramas — o contrato silencioso com o Prometheus.
+#
+# As regras de gravacao consultam buckets por valor EXATO. Uma fronteira que
+# nao existe nao gera erro: gera serie vazia. Foi assim que o SLI 3 (frescor da
+# fila) ficou incalculavel sem ninguem perceber — o histograma de lag nao tinha
+# View, caia nas fronteiras padrao do SDK (0, 5, 10, 25, 50, 75, 100, 250, ...)
+# e a fronteira de 60 s, que `slo-rules.yaml` consulta, simplesmente nao estava
+# la. Painel "No data", alerta que nunca dispara, um terco do requisito F1.1
+# existindo so no papel.
+# ---------------------------------------------------------------------------
+
+
+def test_view_do_lag_tem_a_fronteira_de_60s():
+    """O bucket le="60" precisa existir: e o SLO de frescor inteiro."""
+    from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation
+
+    import telemetry
+
+    views = telemetry.construir_views()
+    do_lag = [v for v in views
+              if v._instrument_name == telemetry.LAG_METRIC_NAME]
+    assert do_lag, "nenhuma View casa com o histograma de lag"
+
+    agregacao = do_lag[0]._aggregation
+    assert isinstance(agregacao, ExplicitBucketHistogramAggregation)
+    assert 60 in agregacao._boundaries, (
+        "sem a fronteira de 60s, slo-rules.yaml consulta "
+        'solidary_donation_event_lag_seconds_bucket{le="60"} e recebe serie '
+        "vazia: o SLI de frescor nao existe"
+    )
+
+
+def test_view_da_duracao_tem_a_fronteira_de_300ms():
+    """Mesmo contrato, do outro lado: o SLO de latencia usa le="0.3"."""
+    import telemetry
+
+    views = telemetry.construir_views()
+    da_duracao = [v for v in views
+                  if v._instrument_name == telemetry.DURATION_METRIC_NAME]
+    assert da_duracao, "nenhuma View casa com o histograma de duracao"
+    assert 0.3 in da_duracao[0]._aggregation._boundaries
+
+
+def test_metrica_exportada_carrega_o_bucket_de_60s():
+    """O teste que realmente prova a correcao.
+
+    Monta um MeterProvider com as Views de producao, cria os instrumentos pelo
+    MESMO codigo que o worker usa, grava um valor e le o que seria exportado.
+    Se o nome do instrumento divergir da View, ou se a View sumir, as fronteiras
+    voltam para o padrao do SDK e este teste falha — que e exatamente o defeito
+    que passou despercebido ate agora.
+    """
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+    import telemetry
+    import worker
+
+    leitor = InMemoryMetricReader()
+    provedor = MeterProvider(
+        metric_readers=[leitor], views=telemetry.construir_views()
+    )
+    # Medidor injetado: nao toca no provider global do processo.
+    _processados, lag = worker.construir_metricas(
+        medidor=provedor.get_meter(worker.SERVICE_NAME)
+    )
+    lag.record(42.0)
+
+    dados = leitor.get_metrics_data()
+    fronteiras = None
+    for recurso in dados.resource_metrics:
+        for escopo in recurso.scope_metrics:
+            for metrica in escopo.metrics:
+                if metrica.name == telemetry.LAG_METRIC_NAME:
+                    fronteiras = list(metrica.data.data_points[0].explicit_bounds)
+
+    assert fronteiras is not None, (
+        f"a metrica {telemetry.LAG_METRIC_NAME} nao foi exportada"
+    )
+    assert 60 in fronteiras, (
+        f"fronteiras exportadas: {fronteiras}. Sem o 60, a consulta "
+        'solidary_donation_event_lag_seconds_bucket{le="60"} de slo-rules.yaml '
+        "devolve serie vazia e o SLI de frescor nao existe"
+    )

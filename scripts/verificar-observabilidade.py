@@ -281,6 +281,94 @@ def main() -> int:
     if len(falhas) == antes and not politicas:
         print("   (nenhuma NetworkPolicy encontrada)")
 
+    # ------------------------------------------------------------------- 7
+    # Rota do Alertmanager que aponta para um receiver sem entrega.
+    #
+    # Este e o defeito mais caro que a auditoria encontrou, e ele sobreviveu a
+    # tres revisoes porque tudo em volta estava certo: 14 alertas bem escritos,
+    # roteamento por severidade correto, e receivers com o nome exato que as
+    # rotas esperavam. So que os receivers eram SO o nome:
+    #
+    #     receivers:
+    #       - name: "paginacao"
+    #       - name: "chatops"
+    #
+    # O Alertmanager aceita isso sem reclamar — um receiver vazio e valido, e
+    # significa "descarte silenciosamente". O alerta de burn rate critico
+    # disparava, era roteado, e evaporava. Falha silenciosa exatamente na peca
+    # cuja funcao e nao falhar em silencio.
+    #
+    # A regra: se uma ROTA aponta para um receiver, esse receiver precisa ter
+    # ao menos uma configuracao de entrega. O receiver default pode ser vazio de
+    # proposito (e onde cai o que nao casa com rota nenhuma, e a UI do
+    # Alertmanager basta para investigar).
+    print("\n== 7. Rotas do Alertmanager x receivers ==")
+    antes = len(falhas)
+
+    caminho_kps = os.path.join(
+        raiz, "gitops", "addons", "kube-prometheus-stack", "values.yaml")
+    if not os.path.exists(caminho_kps):
+        print("   (kube-prometheus-stack/values.yaml nao encontrado)")
+    else:
+        with io.open(caminho_kps, encoding="utf-8") as fh:
+            kps = yaml.safe_load(fh) or {}
+        config = ((kps.get("alertmanager") or {}).get("config") or {})
+        rota_raiz = config.get("route") or {}
+        receivers = config.get("receivers") or []
+
+        entregas = {}
+        for r in receivers:
+            if not isinstance(r, dict):
+                continue
+            entregas[r.get("name")] = [
+                k for k in r if k.endswith("_configs") and r.get(k)
+            ]
+
+        # Todos os receivers alcancaveis por uma rota (recursivo).
+        def alvos(rota):
+            achados = []
+            for sub in rota.get("routes") or []:
+                if sub.get("receiver"):
+                    achados.append(sub["receiver"])
+                achados += alvos(sub)
+            return achados
+
+        for nome in sorted(set(alvos(rota_raiz))):
+            if nome not in entregas:
+                falhas.append(
+                    f"kube-prometheus-stack/values.yaml: uma rota aponta para o "
+                    f"receiver '{nome}', que nao existe."
+                )
+            elif not entregas[nome]:
+                falhas.append(
+                    f"kube-prometheus-stack/values.yaml: o receiver '{nome}' e "
+                    f"alvo de uma rota mas nao tem nenhuma configuracao de "
+                    f"entrega (pagerduty_configs, slack_configs, "
+                    f"webhook_configs...). O alerta dispara, e roteado e "
+                    f"descartado em silencio."
+                )
+            else:
+                print(f"   ok  {nome} -> {', '.join(entregas[nome])}")
+
+        # Segredo referenciado por `_file` precisa estar montado.
+        montados = set(
+            ((kps.get("alertmanager") or {}).get("alertmanagerSpec") or {})
+            .get("secrets") or []
+        )
+        bruto = io.open(caminho_kps, encoding="utf-8").read()
+        for referencia in re.findall(
+                r"/etc/alertmanager/secrets/([\w.-]+)/", bruto):
+            if referencia not in montados:
+                falhas.append(
+                    f"kube-prometheus-stack/values.yaml: um receiver le "
+                    f"/etc/alertmanager/secrets/{referencia}/, mas "
+                    f"'{referencia}' nao esta em alertmanagerSpec.secrets. O "
+                    f"volume nao monta e o Alertmanager nao sobe."
+                )
+
+    if len(falhas) == antes:
+        print("   ok  toda rota chega a um receiver que entrega")
+
     print()
     if falhas:
         print(f"== {len(falhas)} FALHA(S) ==")

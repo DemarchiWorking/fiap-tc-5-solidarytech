@@ -91,13 +91,45 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "volunteer-worker"
 
-          # Sem probe HTTP: o worker nao escuta porta nenhuma. A saude dele e
-          # observada pela METRICA solidary_donation_events_processed_total e
-          # pelo SLI de frescor da fila — que e uma medida melhor de "o worker
-          # esta funcionando?" do que qualquer endpoint /health responderia.
+          # Probes por HEARTBEAT, nao por HTTP.
           #
-          # Uma liveness por exec (`pgrep -f worker.py`) so provaria que o
-          # processo existe, e um worker travado em I/O tambem existe.
+          # O worker nao escuta porta, entao httpGet nao se aplica. A versao
+          # anterior nao tinha probe nenhuma, com a justificativa de que a
+          # metrica solidary_donation_events_processed_total e o SLI de frescor
+          # da fila ja observam a saude dele. Observam mesmo — mas observar e
+          # ALERTAR, e alerta acorda uma pessoa. Probe RECUPERA sozinha, sem
+          # ninguem no meio. Sao camadas diferentes, e faltava a de baixo.
+          #
+          # A objecao original ao exec continua valida e e o que define o
+          # desenho: `pgrep -f worker.py` provaria apenas que o processo
+          # existe, e um worker travado em I/O tambem existe. Por isso a probe
+          # nao pergunta "o processo esta vivo?" e sim "o laco girou ha pouco?"
+          # — o worker escreve /tmp/worker-heartbeat a cada volta e
+          # `worker.py --probe` confere a idade do arquivo. Travou no meio de
+          # uma chamada ao DynamoDB? O arquivo envelhece e o pod reinicia.
+          #
+          # O batimento acontece TAMBEM nos ramos de erro tratado: fila
+          # indisponivel nao e worker travado, e reiniciar o pod nao traria a
+          # fila de volta.
+          startupProbe:
+            exec:
+              command: ["python", "worker.py", "--probe"]
+            # 30 x 5s = ate 150s para o primeiro batimento. Cobre a resolucao
+            # de credencial pelo IMDS e a criacao do cliente boto3, que na
+            # primeira chamada busca metadados da instancia.
+            periodSeconds: 5
+            failureThreshold: 30
+
+          livenessProbe:
+            exec:
+              command: ["python", "worker.py", "--probe"]
+            periodSeconds: 30
+            timeoutSeconds: 10
+            # 3 falhas x 30s = 90s de tolerancia ALEM dos 90s de
+            # HEARTBEAT_TIMEOUT do proprio worker. Conservador de proposito:
+            # reiniciar um worker saudavel devolve as mensagens em voo para a
+            # fila e piora justamente a latencia que a probe deveria proteger.
+            failureThreshold: 3
 
           resources:
             requests:

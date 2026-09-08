@@ -49,6 +49,26 @@ log = configure_logging(SERVICE_NAME, VERSION)
 WAIT_TIME_SECONDS = 20
 MAX_MESSAGES = 10
 
+# Arquivo de heartbeat: a unica forma de o Kubernetes saber que este processo
+# ainda esta vivo.
+#
+# O worker nao escuta porta nenhuma — consome SQS num laco — entao nao existe
+# httpGet para uma livenessProbe apontar. Sem probe, um travamento e INVISIVEL:
+# o pod continua Running, o Kubernetes nao reinicia nada, as mensagens se
+# acumulam na fila e o problema so aparece quando alguem repara que voluntario
+# nenhum foi notificado. E exatamente a falha silenciosa que o enunciado
+# descreve como origem do incidente de 6 horas.
+#
+# O laco toca este arquivo a cada volta; a probe confere se ele esta recente.
+HEARTBEAT = os.getenv("HEARTBEAT_FILE", "/tmp/worker-heartbeat")
+
+# Tolerancia da probe. Um ciclo normal dura no maximo WAIT_TIME_SECONDS (long
+# polling) mais o processamento do lote. 90s da folga para tres ciclos lentos
+# seguidos sem gerar reinicio por falso positivo — reiniciar um worker saudavel
+# devolve as mensagens em voo para a fila e piora a latencia que a probe
+# deveria proteger.
+HEARTBEAT_TIMEOUT = int(os.getenv("HEARTBEAT_TIMEOUT", "90"))
+
 _encerrando = False
 
 
@@ -195,6 +215,45 @@ class DonationEventWorker:
         return removidas
 
 
+def bater_heartbeat() -> None:
+    """Registra que o laco completou mais uma volta.
+
+    Escrita atomica (arquivo temporario + os.replace) de proposito: se o
+    processo morrer no meio de um write comum, a probe leria um arquivo
+    truncado e o mtime ficaria ambiguo. Com replace, ou o arquivo antigo
+    permanece intacto ou o novo aparece inteiro.
+
+    Falha ao escrever NAO derruba o worker: um /tmp cheio nao pode ser motivo
+    para parar de processar doacoes. O silencio do heartbeat ja e o sinal — a
+    probe reinicia o pod, que e o comportamento correto de qualquer forma.
+    """
+    try:
+        temporario = f"{HEARTBEAT}.tmp"
+        with open(temporario, "w", encoding="utf-8") as arquivo:
+            arquivo.write(str(time.time()))
+        os.replace(temporario, HEARTBEAT)
+    except OSError:
+        log.warning("nao foi possivel escrever o heartbeat", exc_info=True)
+
+
+def heartbeat_recente(agora: float | None = None) -> bool:
+    """Responde a pergunta da livenessProbe: o laco girou ha pouco?
+
+    Vive aqui, e nao numa linha de shell dentro do YAML, por dois motivos: da
+    para testar, e a regra de "quao velho e velho demais" fica junto da
+    constante que a define, em vez de duplicada num manifesto que ninguem
+    lembra de atualizar.
+    """
+    agora = time.time() if agora is None else agora
+    try:
+        idade = agora - os.path.getmtime(HEARTBEAT)
+    except OSError:
+        # Arquivo ainda nao existe: normal durante a inicializacao. Quem cobre
+        # essa janela e a startupProbe, com failureThreshold generoso.
+        return False
+    return idade < HEARTBEAT_TIMEOUT
+
+
 def construir_metricas():
     medidor = metrics.get_meter(SERVICE_NAME)
     processados = medidor.create_counter(
@@ -235,13 +294,23 @@ def main() -> int:
 
     log.info("worker iniciado", extra={"queue_url": queue_url})
 
+    # Primeiro batimento antes do laco: sem ele, a startupProbe so teria um
+    # arquivo para ler depois do primeiro ciclo completo (ate 20s de long
+    # polling), e o pod pareceria travado logo ao subir.
+    bater_heartbeat()
+
     while not _encerrando:
         try:
             worker.rodar_um_ciclo()
+            bater_heartbeat()
         except (ClientError, BotoCoreError):
             # Backoff curto para nao entrar em loop apertado de erro, que
             # queimaria cota de requisicao SQS (cobrada por chamada).
             log.error("falha ao ler a fila; nova tentativa em 5s", exc_info=True)
+            # Bate mesmo em erro: o laco ESTA girando, o que a probe mede. Uma
+            # indisponibilidade da fila por mais de 90s reiniciaria um worker
+            # perfeitamente saudavel — e o reinicio nao traria a fila de volta.
+            bater_heartbeat()
             time.sleep(5)
         except Exception:
             # Rede de seguranca. Antes so ClientError/BotoCoreError eram
@@ -259,6 +328,7 @@ def main() -> int:
             # KeyboardInterrupt e SystemExit nao sao capturados aqui: herdam de
             # BaseException, entao o desligamento gracioso segue funcionando.
             log.exception("erro nao previsto no ciclo; worker continua")
+            bater_heartbeat()
             time.sleep(5)
 
     log.info("worker encerrado")
@@ -266,4 +336,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # `python worker.py --probe` responde a livenessProbe: 0 se o laco girou
+    # ha menos de HEARTBEAT_TIMEOUT segundos, 1 caso contrario.
+    #
+    # A imagem nao tem curl no runtime e o worker nao sobe servidor HTTP, entao
+    # a probe e `exec`. Reusar o proprio modulo evita duplicar a regra de
+    # frescor dentro do YAML.
+    if "--probe" in sys.argv:
+        sys.exit(0 if heartbeat_recente() else 1)
     sys.exit(main())

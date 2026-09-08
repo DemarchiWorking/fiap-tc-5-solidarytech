@@ -194,3 +194,68 @@ def test_ciclo_preserva_mensagem_apos_falha_transitoria(worker):
 
     assert worker.rodar_um_ciclo() == 0
     assert worker.sqs.deletadas == []
+
+
+# ---------------------------------------------------------------------------
+# Heartbeat — a liveness de um processo que nao escuta porta.
+#
+# O worker consome SQS num laco e nao expoe HTTP, entao nao ha httpGet para
+# uma probe apontar. Sem probe, um travamento e invisivel: o pod segue Running,
+# o Kubernetes nao reinicia nada e as mensagens se acumulam. A probe pergunta
+# "o laco girou ha pouco?", e nao "o processo existe?" — porque um worker
+# travado em I/O tambem existe.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def heartbeat_isolado(tmp_path, monkeypatch):
+    """Aponta o heartbeat para um arquivo temporario do proprio teste."""
+    import worker as modulo
+
+    caminho = tmp_path / "worker-heartbeat"
+    monkeypatch.setattr(modulo, "HEARTBEAT", str(caminho))
+    return modulo, caminho
+
+
+def test_heartbeat_ausente_reprova_a_probe(heartbeat_isolado):
+    # Antes do primeiro batimento o arquivo nao existe. A probe precisa
+    # reprovar, e nao estourar excecao: quem cobre essa janela e a
+    # startupProbe, com failureThreshold generoso.
+    modulo, caminho = heartbeat_isolado
+    assert not caminho.exists()
+    assert modulo.heartbeat_recente() is False
+
+
+def test_batimento_aprova_a_probe(heartbeat_isolado):
+    modulo, caminho = heartbeat_isolado
+    modulo.bater_heartbeat()
+
+    assert caminho.exists()
+    assert modulo.heartbeat_recente() is True
+    # Escrita atomica: nao pode sobrar o arquivo temporario.
+    assert not caminho.with_suffix(".tmp").exists()
+
+
+def test_heartbeat_velho_reprova_a_probe(heartbeat_isolado):
+    # O caso que justifica a probe existir: o processo esta vivo, o arquivo
+    # esta la, mas o laco parou de girar. E o unico sinal disponivel.
+    import time
+
+    modulo, _ = heartbeat_isolado
+    modulo.bater_heartbeat()
+
+    futuro = time.time() + modulo.HEARTBEAT_TIMEOUT + 1
+    assert modulo.heartbeat_recente(agora=futuro) is False
+
+
+def test_falha_de_escrita_nao_derruba_o_worker(heartbeat_isolado, monkeypatch):
+    # Um /tmp cheio nao pode ser motivo para parar de processar doacoes. O
+    # silencio do heartbeat ja e o sinal: a probe reinicia o pod, que e o
+    # comportamento correto de qualquer forma.
+    modulo, _ = heartbeat_isolado
+
+    def escrita_falha(*_args, **_kwargs):
+        raise OSError("disco cheio")
+
+    monkeypatch.setattr("builtins.open", escrita_falha)
+    modulo.bater_heartbeat()  # nao pode levantar

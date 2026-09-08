@@ -160,6 +160,23 @@ else
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 fi
 
+# Identidade do cluster para a telemetria.
+#
+# O OTel Collector marcava k8s.cluster.name com a constante
+# "solidarytech-prod-eks". O comentario ao lado dizia, textualmente, que o
+# atributo serve para "saber de qual cluster veio o dado quando a regiao de DR
+# estiver no ar ao mesmo tempo que a primaria" — e era exatamente nesse cenario
+# que ele mentia: o standby sincroniza o MESMO values.yaml e etiquetaria toda a
+# sua telemetria como se fosse producao.
+#
+# Vem do Terraform, como todo o resto. Namespace `monitoring` porque e onde o
+# Collector roda; o solidary-infra existe so nos namespaces das aplicacoes.
+kubectl -n monitoring create configmap solidary-cluster \
+  --from-literal=CLUSTER_NAME="$CLUSTER" \
+  --from-literal=AWS_REGION="$REGIAO" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+verde "Identidade do cluster publicada para a telemetria ($CLUSTER)"
+
 # Credenciais de notificacao — PagerDuty e ChatOps (Discord).
 #
 # Criados SEMPRE, mesmo sem valor. O values.yaml do kube-prometheus-stack lista

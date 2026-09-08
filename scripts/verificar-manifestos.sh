@@ -99,6 +99,26 @@ for ARQUIVO in /tmp/gitops_*.yaml; do
 done
 
 # ---------------------------------------------------------------------------
+titulo "2b. ApplicationSets (fora de qualquer kustomization)"
+
+# O diretorio gitops/applicationsets/ nao tem kustomization.yaml, e tanto este
+# gate quanto o workflow de validacao iteram somente sobre diretorios que tem
+# um. Resultado: o apps-appset.yaml — o arquivo cujo goTemplate decide o NOME e
+# o NAMESPACE de todas as Applications — nunca passava por kubeconform.
+#
+# Um erro ali nao aparece em nenhum dos dois; aparece no cluster, como
+# Application que nao sincroniza.
+for ARQUIVO in "$RAIZ"/gitops/applicationsets/*.yaml; do
+  [[ -f "$ARQUIVO" ]] || continue
+  REL="${ARQUIVO#$RAIZ/}"
+  if SAIDA=$(kubeconform -strict -ignore-missing-schemas -summary < "$ARQUIVO" 2>&1); then
+    echo "  ok  $REL"
+  else
+    falhar "$REL"
+    printf '%s\n' "$SAIDA" | head -10 | sed 's/^/       /'
+  fi
+done
+
 titulo "3. Placeholders não substituídos"
 
 if PENDENTES=$(grep -rn "__[A-Z_]*__" "$RAIZ/gitops" "$RAIZ/.github" 2>/dev/null); then
@@ -139,6 +159,7 @@ import yaml
 raiz = sys.argv[1]
 apps = os.path.join(raiz, "gitops", "apps")
 falhas = []
+deployments_vistos = []  # (arquivo, nome, rotulos do pod)
 
 
 def caminho_relativo(p):
@@ -203,7 +224,10 @@ for diretorio, _, arquivos in os.walk(apps):
                 continue
 
             nome_dep = (doc.get("metadata") or {}).get("name", "?")
-            spec_pod = ((doc.get("spec") or {}).get("template") or {}).get("spec") or {}
+            modelo = (doc.get("spec") or {}).get("template") or {}
+            spec_pod = modelo.get("spec") or {}
+            rotulos_pod = (modelo.get("metadata") or {}).get("labels") or {}
+            deployments_vistos.append((rel, nome_dep, rotulos_pod))
             e_worker = "worker" in nome_dep
 
             ctx = spec_pod.get("securityContext") or {}
@@ -216,12 +240,42 @@ for diretorio, _, arquivos in os.walk(apps):
             for c in containers:
                 verificar_container(rel, nome_dep, c, e_worker)
 
-# Todo servico com Deployment precisa de PodDisruptionBudget.
-for servico in ("ngo", "donation", "volunteer"):
-    pdb = os.path.join(apps, servico, "overlays", "prod", "pdb.yaml")
-    if not os.path.exists(pdb):
-        falhas.append(f"gitops/apps/{servico}: sem PodDisruptionBudget — um "
-                      f"drain de no pode despejar todas as replicas")
+# Todo Deployment precisa ser COBERTO por um PodDisruptionBudget cujo seletor
+# de fato case com os rotulos do pod.
+#
+# A versao anterior so conferia se o ARQUIVO pdb.yaml existia por servico. Era
+# insuficiente de um jeito que passou despercebido: os tres PDBs selecionam
+# `app: <servico>-service`, e o volunteer-worker usa `app: volunteer-worker` —
+# entao ele nao era coberto por nenhum, enquanto o relatorio de entrega afirmava
+# que "startupProbe e PodDisruptionBudget estao em todos os workloads".
+#
+# Arquivo existir nao e o mesmo que seletor casar.
+pdbs = []
+for diretorio, _, arquivos in os.walk(apps):
+    for nome_arq in sorted(arquivos):
+        if not nome_arq.endswith((".yaml", ".yml")):
+            continue
+        try:
+            with io.open(os.path.join(diretorio, nome_arq), encoding="utf-8") as fh:
+                for doc in yaml.safe_load_all(fh):
+                    if isinstance(doc, dict) and doc.get("kind") == "PodDisruptionBudget":
+                        seletor = ((doc.get("spec") or {}).get("selector") or {})
+                        pdbs.append((
+                            (doc.get("metadata") or {}).get("name", "?"),
+                            seletor.get("matchLabels") or {},
+                        ))
+        except yaml.YAMLError:
+            continue
+
+for rel, nome_dep, rotulos in deployments_vistos:
+    coberto = [n for n, sel in pdbs
+               if sel and all(rotulos.get(k) == v for k, v in sel.items())]
+    if not coberto:
+        falhas.append(
+            f"{rel}: o Deployment '{nome_dep}' (rotulos {rotulos}) nao e "
+            f"coberto por nenhum PodDisruptionBudget. Um drain de no pode "
+            f"despeja-lo sem espera."
+        )
 
 if falhas:
     for f in falhas:

@@ -43,6 +43,12 @@ extraEnvsFrom:
   - secretRef:
       name: apm-credentials
       optional: true
+  # Identidade do cluster, criada pelo bootstrap a partir das saidas do
+  # Terraform. `optional: true` porque o Collector precisa subir mesmo antes de
+  # o bootstrap ter passado por aqui — o valor tem default no config abaixo.
+  - configMapRef:
+      name: solidary-cluster
+      optional: true
 
 service:
   type: ClusterIP
@@ -72,13 +78,25 @@ config:
 
     # Marca a origem da telemetria. Util quando a regiao de DR estiver no ar ao
     # mesmo tempo que a primaria e for preciso saber de qual cluster veio o dado.
+    #
+    # O valor vinha FIXO como "solidarytech-prod-eks" — e era justamente no
+    # cenario descrito acima que ele mentia, porque o standby sincroniza este
+    # mesmo arquivo e etiquetaria tudo como producao. Agora vem do ConfigMap
+    # solidary-cluster, que o bootstrap preenche com a saida do Terraform.
+    #
+    # O `:-` e o default do expansor de config do Collector: sem ele, um
+    # ConfigMap ausente (o `optional: true` acima permite) faria o Collector
+    # falhar na inicializacao em vez de subir com um rotulo generico.
     resource:
       attributes:
         - key: cloud.provider
           value: aws
           action: upsert
         - key: k8s.cluster.name
-          value: solidarytech-prod-eks
+          value: ${env:CLUSTER_NAME:-solidarytech-cluster-nao-identificado}
+          action: upsert
+        - key: cloud.region
+          value: ${env:AWS_REGION:-desconhecida}
           action: upsert
 
   exporters:

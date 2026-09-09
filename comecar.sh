@@ -492,6 +492,17 @@ else
     sed -i "s|bucket         = .*|bucket         = \"$BUCKET\"|" infra/environments/dr-usw2/backend.hcl
     sed -i "s|region         = .*|region         = \"$AWS_REGIAO\"|" infra/environments/dr-usw2/backend.hcl
     ok "backend.hcl do DR preenchido — mesmo bucket, key dr-usw2/"
+
+    # As MESMAS coordenadas precisam chegar ao GitHub, senao o workflow do
+    # Terraform monta um backend.hcl com bucket vazio e o `init` falha com um
+    # erro que nao diz o motivo. Sao publicadas aqui, e nao junto das outras
+    # variaveis la em cima, porque so agora o bucket e conhecido.
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1        && [[ -n "${REPO_CURTO:-}" ]]; then
+      TABELA=$(docker run --rm -v "$RAIZ":/wk -w /wk -v "$HOME/.aws":/root/.aws:ro         hashicorp/terraform:1.9 -chdir=infra/bootstrap output -raw tabela_lock 2>/dev/null || echo "")
+      gh variable set TF_STATE_BUCKET --repo "$REPO_CURTO" --body "$BUCKET" >/dev/null 2>&1
+      [[ -n "$TABELA" ]] && gh variable set TF_LOCK_TABLE --repo "$REPO_CURTO" --body "$TABELA" >/dev/null 2>&1
+      ok "TF_STATE_BUCKET e TF_LOCK_TABLE publicados no GitHub"
+    fi
   else
     aviso "preencha infra/environments/prod-use1/backend.hcl à mão e rode de novo"
     exit 1

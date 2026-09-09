@@ -237,6 +237,36 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
       dica "make sync-creds"
     fi
   done
+  # As VARIAVEIS tambem importam, e sao mais faceis de esquecer que os secrets.
+  #
+  # O workflow do Terraform monta o backend.hcl a partir de TF_STATE_BUCKET e
+  # TF_LOCK_TABLE. Ausentes, ele gera `bucket = ""` e o `terraform init` falha
+  # com um erro que nao diz o motivo. O ./comecar.sh publica as duas na etapa
+  # do backend; esta conferencia existe para quem pulou o console.
+  VARIAVEIS=$(gh variable list --json name --jq '.[].name' 2>/dev/null || echo "")
+  for NOME in TF_STATE_BUCKET TF_LOCK_TABLE AWS_REGION EKS_CLUSTER; do
+    if printf '%s' "$VARIAVEIS" | grep -q "^${NOME}$"; then
+      ok "variável $NOME configurada no GitHub"
+    else
+      aviso "variável $NOME ausente no GitHub"
+      dica "gh variable set $NOME --body <valor>   (o ./comecar.sh faz isso)"
+    fi
+  done
+
+  # A branch precisa ser `main`: TODOS os workflows disparam nela, e o push da
+  # imagem para o ECR e a atualizacao do GitOps sao condicionados a
+  # refs/heads/main. Publicar como `master` faz a CI simplesmente nao rodar —
+  # sem erro, sem aviso, sem execucao nenhuma no painel do Actions.
+  BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+  if [[ "$BRANCH" == "main" ]]; then
+    ok "branch main — os workflows vao disparar"
+  else
+    falha "branch é '$BRANCH', mas os workflows disparam em 'main'"
+    printf "      A CI nao rodaria: nenhuma imagem no ECR, nenhum deploy.
+"
+    printf "      Renomeie com:  git branch -m %s main
+" "$BRANCH"
+  fi
 else
   aviso "gh não autenticado — não dá para conferir os secrets do GitHub"
 fi

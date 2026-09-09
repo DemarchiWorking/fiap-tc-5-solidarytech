@@ -116,6 +116,8 @@ case "$ALVO" in
     resultado $? "policy do AWS Academy (15 verificacoes)"
     py scripts/verificar-observabilidade.py . >/dev/null 2>&1
     resultado $? "observabilidade (7 verificacoes)"
+    py scripts/verificar-promql.py . >/dev/null 2>&1
+    resultado $? "contrato PromQL x codigo"
     py scripts/verificar-workflows.py . >/dev/null 2>&1
     resultado $? "workflows (5 verificacoes)"
     bash scripts/verificar-manifestos.sh >/dev/null 2>&1

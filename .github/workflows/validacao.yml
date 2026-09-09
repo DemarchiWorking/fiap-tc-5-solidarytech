@@ -47,6 +47,67 @@ jobs:
         run: python scripts/verificar-observabilidade.py .
 
       # ---------------------------------------------------------------
+      - name: Contrato PromQL x código
+        run: python scripts/verificar-promql.py .
+
+      # promtool e amtool validam a SINTAXE; o gate acima valida o CONTRATO.
+      # Sao coisas diferentes e as duas importam: uma expressao pode ser PromQL
+      # impecavel e citar uma metrica que ninguem emite — o Prometheus carrega
+      # sem reclamar e a serie nunca aparece.
+      - name: Instalar promtool e amtool
+        run: |
+          curl -sfL https://github.com/prometheus/prometheus/releases/download/v3.6.0/prometheus-3.6.0.linux-amd64.tar.gz | tar -xz
+          curl -sfL https://github.com/prometheus/alertmanager/releases/download/v0.28.1/alertmanager-0.28.1.linux-amd64.tar.gz | tar -xz
+          sudo mv prometheus-3.6.0.linux-amd64/promtool alertmanager-0.28.1.linux-amd64/amtool /usr/local/bin/
+
+      - name: PromQL das regras e dos painéis
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          # As regras vivem em PrometheusRule (CRD); o promtool espera um
+          # arquivo de regras puro, com `groups` na raiz.
+          import io, json, os, yaml
+          os.makedirs("regras-extraidas", exist_ok=True)
+          for arq in ("gitops/addons/observabilidade-config/slo-rules.yaml",
+                      "gitops/addons/observabilidade-config/alertas-plataforma.yaml"):
+              for doc in yaml.safe_load_all(io.open(arq, encoding="utf-8")):
+                  if isinstance(doc, dict) and doc.get("kind") == "PrometheusRule":
+                      nome = doc["metadata"]["name"]
+                      io.open(f"regras-extraidas/{nome}.yaml", "w", encoding="utf-8").write(
+                          yaml.safe_dump({"groups": doc["spec"]["groups"]},
+                                         sort_keys=False, allow_unicode=True))
+
+          # As expressoes dos paineis viram regras sinteticas, uma por arquivo.
+          exprs = []
+          for arq in ("gitops/addons/observabilidade-config/dashboard-sre.yaml",
+                      "gitops/addons/observabilidade-config/dashboard-finops.yaml"):
+              for doc in yaml.safe_load_all(io.open(arq, encoding="utf-8")):
+                  if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
+                      continue
+                  for valor in (doc.get("data") or {}).values():
+                      for p in json.loads(valor).get("panels", []):
+                          for t in p.get("targets", []):
+                              if t.get("expr"):
+                                  exprs.append((p.get("title", "painel"), t["expr"]))
+          for i, (titulo, e) in enumerate(exprs):
+              io.open(f"regras-extraidas/painel-{i:02d}.yaml", "w", encoding="utf-8").write(
+                  yaml.safe_dump({"groups": [{"name": "painel",
+                                              "rules": [{"record": "painel:teste", "expr": e}]}]},
+                                 sort_keys=False, allow_unicode=True))
+          print(f"{len(exprs)} expressao(oes) de painel extraida(s)")
+          PY
+          promtool check rules regras-extraidas/*.yaml
+
+      - name: Config do Alertmanager
+        run: |
+          python - <<'PY'
+          import io, yaml
+          v = yaml.safe_load(io.open("gitops/addons/kube-prometheus-stack/values.yaml", encoding="utf-8"))
+          io.open("am.yaml", "w", encoding="utf-8").write(
+              yaml.safe_dump(v["alertmanager"]["config"], sort_keys=False, allow_unicode=True))
+          PY
+          amtool check-config am.yaml
+
       - name: Sintaxe YAML
         run: |
           python - <<'PY'

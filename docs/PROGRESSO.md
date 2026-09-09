@@ -64,6 +64,7 @@ sem erro nenhum.
 ```bash
 python scripts/verificar-academy.py infra          # 11 verificações
 python scripts/verificar-observabilidade.py .      #  7 verificações
+python scripts/verificar-promql.py .               # contrato PromQL x código
 python scripts/verificar-workflows.py .            #  5 verificações
 bash   scripts/verificar-manifestos.sh             # kustomize + kubeconform + política
 

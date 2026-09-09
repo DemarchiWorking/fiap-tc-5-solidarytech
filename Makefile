@@ -85,7 +85,7 @@ pre-voo: ## VERIFIQUE ANTES DE SUBIR — valida ferramentas, credenciais e codig
 	@./scripts/pre-voo.sh
 
 .PHONY: check
-check: check-academy check-observabilidade check-workflows fmt-check validate check-manifestos ## Roda todos os gates locais
+check: check-academy check-observabilidade check-promql check-workflows fmt-check validate check-manifestos ## Roda todos os gates locais
 
 .PHONY: check-observabilidade
 check-observabilidade: ## Coerencia da observabilidade (dashboards, regras de SLO, contrato da metrica)
@@ -94,6 +94,10 @@ check-observabilidade: ## Coerencia da observabilidade (dashboards, regras de SL
 .PHONY: check-manifestos
 check-manifestos: ## Valida os manifestos Kubernetes (kustomize build + kubeconform)
 	@./scripts/verificar-manifestos.sh
+
+.PHONY: check-promql
+check-promql: ## Contrato entre as consultas PromQL e as metricas do codigo
+	@python scripts/verificar-promql.py .
 
 .PHONY: check-workflows
 check-workflows: ## Coerencia dos workflows do GitHub Actions (escopo de env, permissions, versoes)

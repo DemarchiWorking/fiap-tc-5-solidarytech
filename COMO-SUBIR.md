@@ -301,6 +301,11 @@ make setup
 
 ---
 
+> 📋 **Para o dia da gravação**, siga
+> [`docs/08-validacao-final.md`](docs/08-validacao-final.md): os mesmos passos,
+> mas com o que conferir em cada ponto, qual requisito aquilo prova e qual print
+> capturar.
+
 ## Passo 0 — Pré-voo (40 segundos) ⭐
 
 ```bash

@@ -28,6 +28,12 @@
 | Disparo automático do self-heal | Config no New Relic | Passo a passo em `docs/05-itsm-aiops/README.md` |
 | Prints de evidência | Cluster no ar | `docs/07-evidencias/README.md` diz qual print cobre qual requisito |
 
+### Para o dia da gravação
+
+[`docs/08-validacao-final.md`](08-validacao-final.md) — a sessão do Learner Lab
+do início ao fim, com o que conferir, o que cada passo prova e qual print
+capturar.
+
 ### Como revalidar tudo (sem AWS, sem Docker)
 
 ```bash

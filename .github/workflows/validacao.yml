@@ -162,78 +162,72 @@ jobs:
                           linha = txt[: m.start()].count("\n") + 1
                           quebrados.append(f"{p}:{linha} -> {alvo}")
 
-          print(f"{vistos} referência(s) a docs/*.md fora do Markdown")
+          # Segundo passo: caminhos do repositorio escritos entre CRASES, em Markdown.
+          #
+          # O passo acima so olha `docs/*.md` em texto livre, e por isso deixou passar
+          # cinco ponteiros mortos — entre eles a matriz de requisitos apontando para um
+          # "ADR-007-multicloud.md" que nunca existiu (o ADR-007 vive dentro do README da
+          # pasta) e para um arquivo de evidencia com outro nome. Quem avaliasse o
+          # requisito seguindo o ponteiro nao encontraria nada.
+          #
+          # Caminho entre crases e a forma mais comum de citar arquivo em documentacao
+          # tecnica, e era justamente a que ninguem verificava.
+          PREFIXOS = r"(?:docs|infra|gitops|scripts|services|\.github)"
+          EXTENSOES = r"(?:md|yaml|yml|tf|sh|py|go|json)"
+          PADRAO = "`(" + PREFIXOS + r"/[\w./*-]+\." + EXTENSOES + ")`"
+
+          for d, _, fs in os.walk("."):
+              partes = set(d.split(os.sep))
+              if partes & {".git", ".venv", "node_modules", "__pycache__", ".terraform"}:
+                  continue
+              for f in fs:
+                  if not f.endswith(".md"):
+                      continue
+                  p = os.path.join(d, f)
+                  try:
+                      txt = io.open(p, encoding="utf-8").read()
+                  except (OSError, UnicodeDecodeError):
+                      continue
+                  for m in re.finditer(PADRAO, txt):
+                      alvo = m.group(1)
+                      if "*" in alvo:      # glob e ilustrativo, nao e ponteiro
+                          continue
+                      vistos += 1
+                      if not os.path.exists(alvo):
+                          linha = txt[: m.start()].count("\n") + 1
+                          quebrados.append(f"{p}:{linha} -> {alvo} (entre crases)")
+
+          print(f"{vistos} referência(s) a arquivos do repositório")
           for q in quebrados:
               print(f"  QUEBRADA: {q}")
           sys.exit(1 if quebrados else 0)
           PY
+      # UMA fonte de verdade: o mesmo script que roda na maquina.
+      #
+      # Estes tres passos — instalar as ferramentas, rodar kustomize+kubeconform
+      # e conferir a politica de Deployment — eram uma COPIA da logica de
+      # scripts/verificar-manifestos.sh, embutida aqui. A copia envelheceu: a
+      # checagem de politica ainda procurava as marcacoes como TEXTO no arquivo
+      # inteiro, entao tratava os tres hpa.yaml como Deployments (um
+      # HorizontalPodAutoscaler contem `scaleTargetRef: kind: Deployment`) e
+      # produzia 21 falsos positivos.
+      #
+      # Ou seja: este workflow reprovava em toda execucao, por um bug que ja
+      # tinha sido corrigido no script. Duplicar logica de verificacao custa
+      # exatamente isso — as duas copias divergem, e a que ninguem olha e a que
+      # apita.
+      #
+      # O script tambem ja prefere binario nativo e cai para container so se
+      # precisar, entao roda igual aqui e na maquina de quem desenvolve.
       - name: Instalar kustomize e kubeconform
         run: |
           curl -sfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.5.0/kustomize_v5.5.0_linux_amd64.tar.gz | tar -xz
           curl -sfL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar -xz
           sudo mv kustomize kubeconform /usr/local/bin/
 
-      - name: kustomize build + kubeconform
-        run: |
-          set -euo pipefail
-          FALHAS=0
-          DIRS=$(find gitops -name kustomization.yaml -printf '%h\n' | sort)
+      - name: Manifestos — kustomize, kubeconform e política
+        run: bash scripts/verificar-manifestos.sh
 
-          for DIR in $DIRS; do
-            if SAIDA=$(kustomize build "$DIR" 2>&1); then
-              echo "  ok  $DIR"
-              # -ignore-missing-schemas: CRDs de terceiros (Application,
-              # PrometheusRule) não têm schema no catálogo público. O que
-              # interessa validar aqui são os recursos nativos.
-              printf '%s' "$SAIDA" | kubeconform -strict -ignore-missing-schemas -summary || FALHAS=$((FALHAS+1))
-            else
-              echo "  FALHA  $DIR"
-              printf '%s\n' "$SAIDA" | head -15
-              FALHAS=$((FALHAS+1))
-            fi
-          done
-          exit $FALHAS
-
-      - name: Política de manifestos
-        # Todo Deployment precisa de requests/limits (senão o rightsizing do
-        # requisito F2.2 não tem base), probes (senão o pod entra no
-        # balanceamento antes de estar pronto e devolve 5xx que consomem error
-        # budget sem falha real) e contexto de segurança.
-        run: |
-          python - <<'PY'
-          import io, os, sys
-          falhas = []
-          for d, _, fs in os.walk("gitops/apps"):
-              for f in fs:
-                  if not f.endswith(".yaml"): continue
-                  p = os.path.join(d, f)
-                  txt = io.open(p, encoding="utf-8").read()
-                  if "kind: Deployment" not in txt: continue
-                  exigidos = {
-                      "requests:": "sem requests — o scheduler agenda por request",
-                      "limits:": "sem limits — um pod sem teto pode inanir o Prometheus",
-                      "livenessProbe:": "sem livenessProbe",
-                      "runAsNonRoot: true": "sem runAsNonRoot",
-                      "allowPrivilegeEscalation: false": "sem allowPrivilegeEscalation: false",
-                  }
-                  # O worker não escuta porta: a saúde dele é observada por métrica.
-                  if "volunteer-worker" not in txt:
-                      exigidos["readinessProbe:"] = "sem readinessProbe"
-                      exigidos["startupProbe:"] = "sem startupProbe"
-                  for marcador, motivo in exigidos.items():
-                      if marcador not in txt:
-                          falhas.append(f"{p}: {motivo}")
-
-          for servico in ("ngo", "donation", "volunteer"):
-              if not os.path.exists(f"gitops/apps/{servico}/overlays/prod/pdb.yaml"):
-                  falhas.append(f"{servico}: sem PodDisruptionBudget")
-
-          for f in falhas: print("FALHA", f)
-          print("ok — todos os Deployments conformes" if not falhas else f"{len(falhas)} falha(s)")
-          sys.exit(1 if falhas else 0)
-          PY
-
-  # =========================================================================
   testes:
     name: Testes dos serviços
     runs-on: ubuntu-latest

@@ -397,6 +397,117 @@ def main() -> int:
                 )
     print("   ok\n" if len(falhas) == antes else "")
 
+    # 12. QUALQUER recurso IAM --------------------------------------------
+    #
+    # A checagem 2 lista sete tipos de recurso IAM, um a um. A lista envelhece:
+    # `aws_iam_role_policy_attachment`, `aws_iam_service_linked_role`,
+    # `aws_iam_access_key`, `aws_iam_user_policy` e vários outros passariam
+    # direto, e qualquer um deles faz o `apply` morrer com AccessDenied no
+    # Learner Lab.
+    #
+    # A regra real nao e "estes sete tipos sao proibidos", e sim "nenhum IAM e
+    # criado". A regex generica expressa a regra, e nao uma amostra dela.
+    #
+    # `data "aws_iam_role"` continua permitido — e assim que a LabRole entra.
+    print("12. Nenhum recurso IAM (regra generica)")
+    antes = len(falhas)
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        for m in re.finditer(r'resource\s+"(aws_iam_[a-z0-9_]+)"', corpo):
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: cria {m.group(1)}. O "
+                f"Learner Lab nao permite criar NENHUM recurso IAM — use a "
+                f"LabRole existente via `data \"aws_iam_role\"`."
+            )
+    print("   ok\n" if len(falhas) == antes else "")
+
+    # 13. Teto de armazenamento -------------------------------------------
+    #
+    # O lab limita volumes EBS a 100 GB. Um `volume_size = 200` no launch
+    # template passa em todos os gates atuais e so falha no apply — depois de
+    # o cluster ja estar meio criado.
+    print("13. Teto de 100 GB por volume")
+    antes = len(falhas)
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        for atributo in ("volume_size", "allocated_storage",
+                         "max_allocated_storage"):
+            for m in re.finditer(rf"{atributo}\s*=\s*(\d+)", corpo):
+                if int(m.group(1)) > 100:
+                    falhas.append(
+                        f"{rel(a)}:{linha_de(corpo, m.start())}: "
+                        f"{atributo} = {m.group(1)} GB excede o teto de 100 GB "
+                        f"do Learner Lab."
+                    )
+    print("   ok\n" if len(falhas) == antes else "")
+
+    # 14. Chave gerenciada por nos e endpoint de interface -----------------
+    #
+    # Duas coisas diferentes que falham pelo mesmo motivo — o lab nao deixa:
+    #
+    #   * `kms_key_id` e `encryption_config` exigem uma CMK, e gerenciar key
+    #     policy e operacao restrita. As chaves gerenciadas pela AWS (que sao o
+    #     default quando o argumento e OMITIDO) funcionam e sao gratuitas.
+    #   * VPC endpoint de INTERFACE cria uma ENI por AZ e cobra por hora. Os de
+    #     tipo Gateway (S3 e DynamoDB), que este projeto usa, sao gratuitos.
+    print("14. CMK e VPC endpoint de interface")
+    antes = len(falhas)
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        for m in re.finditer(r"kms_key_id\s*=", corpo):
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: kms_key_id exige uma "
+                f"CMK, e o Learner Lab restringe o gerenciamento de key policy. "
+                f"Omita o argumento: a chave gerenciada pela AWS e o default, e "
+                f"e gratuita."
+            )
+        for m in re.finditer(r"encryption_config\s*\{", corpo):
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: encryption_config do "
+                f"EKS exige CMK para cifrar Secrets do etcd — bloqueado no lab."
+            )
+        for m in re.finditer(r'vpc_endpoint_type\s*=\s*"Interface"', corpo):
+            falhas.append(
+                f"{rel(a)}:{linha_de(corpo, m.start())}: VPC endpoint de "
+                f"Interface cria ENI por AZ e cobra por hora. Use Gateway (S3 e "
+                f"DynamoDB) ou saia pela internet."
+            )
+    print("   ok\n" if len(falhas) == antes else "")
+
+    # 15. IRSA entrando pelo GitOps ---------------------------------------
+    #
+    # Este gate sempre varreu apenas `infra/`. Mas IRSA nao chega so pelo
+    # Terraform: uma anotacao `eks.amazonaws.com/role-arn` num values de Helm
+    # ou num manifesto pede uma role que ninguem pode criar, e o
+    # ServiceAccount sobe sem credencial nenhuma — o pod falha em runtime, com
+    # AccessDenied, longe daqui.
+    #
+    # ADR-001: neste projeto os pods autenticam pelo IMDS do no.
+    print("15. IRSA nos manifestos do GitOps")
+    antes = len(falhas)
+    raiz_repo = os.path.dirname(os.path.abspath(raiz)) if os.path.basename(
+        os.path.abspath(raiz)) == "infra" else os.path.abspath(raiz)
+    gitops = os.path.join(raiz_repo, "gitops")
+    if not os.path.isdir(gitops):
+        print("   (diretorio gitops/ nao encontrado — pulado)")
+    else:
+        for d, _, fs in os.walk(gitops):
+            for f in fs:
+                if not f.endswith((".yaml", ".yml")):
+                    continue
+                caminho = os.path.join(d, f)
+                texto = io.open(caminho, encoding="utf-8", errors="replace").read()
+                for m in re.finditer(
+                        r"^[^#\n]*eks\.amazonaws\.com/role-arn", texto, re.M):
+                    curto = os.path.relpath(caminho, raiz_repo).replace(os.sep, "/")
+                    falhas.append(
+                        f"{curto}:{texto[:m.start()].count(chr(10)) + 1}: "
+                        f"anotacao de IRSA. Exige criar role IAM, bloqueado no "
+                        f"lab — os pods autenticam pelo IMDS do no (ADR-001)."
+                    )
+        if len(falhas) == antes:
+            print("   ok\n")
+
     # Resultado --------------------------------------------------------------
     if falhas:
         print(f"== {len(falhas)} FALHA(S) ==")

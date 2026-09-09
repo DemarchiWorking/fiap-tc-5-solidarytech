@@ -461,14 +461,14 @@ Uma varredura das 48 exigências do enunciado contra os artefatos do repositóri
 encontrou **48 com artefato** — mas quatro ponteiros para documentos
 inexistentes, três deles em lugares que só doem na hora errada:
 
-- `slo-rules.yaml` mandava o plantonista para `docs/03-sre/error-budget.md`
+- `slo-rules.yaml` mandava o plantonista para um `error-budget.md` que nunca existiu
   **dentro da anotação de dois alertas de paginação**. Quem fosse acordado às
   3h clicaria no runbook e receberia um 404 — o oposto exato do MTTR que a
   frente SRE existe para reduzir. O conteúdo está em `sli-slo-sla.md` §6.
-- `dashboard-finops.yaml` apontava para `docs/04-finops/forecast.md`; o
+- `dashboard-finops.yaml` apontava para um `forecast.md` inexistente; o
   forecast está no `README.md` §3 da mesma pasta.
 - `deployment.yaml` do donation e o dashboard de FinOps apontavam para
-  `docs/04-finops/rightsizing.md` como evidência do requisito **F2.2**; a
+  um `rightsizing.md` inexistente como evidência do requisito **F2.2**; a
   tabela antes/depois está no `README.md` §2.
 
 Nenhum deles seria pego pelo verificador de links, que só lê arquivos `.md` —

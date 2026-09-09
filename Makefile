@@ -39,8 +39,17 @@ DOCKER_BASE := docker run --rm -it \
 	-v "$(HOME)/.aws":/root/.aws:ro \
 	-e AWS_PROFILE -e AWS_REGION -e AWS_DEFAULT_REGION $(TF_VAR_FLAGS)
 
-TF  := $(DOCKER_BASE) hashicorp/terraform:$(VERSAO_TERRAFORM)
-AWS := $(DOCKER_BASE) amazon/aws-cli:$(VERSAO_AWSCLI)
+# Binario NATIVO quando existir; container so como alternativa.
+#
+# A versao anterior ia sempre ao container. Isso torna o Makefile inteiro
+# refem do daemon do Docker: com ele parado — que e o estado da maquina onde
+# esta entrega foi construida — os 16 pontos que usam $(TF) e $(AWS) morrem de
+# uma vez, incluindo `make validate`, que nao precisa de Docker para nada.
+#
+# Com o binario nativo ha ainda um ganho de simplicidade: TF_VAR_* e AWS_* sao
+# herdados do ambiente direto, sem precisar do repasse explicito por -e.
+TF  := $(if $(shell command -v terraform 2>/dev/null),terraform,$(DOCKER_BASE) hashicorp/terraform:$(VERSAO_TERRAFORM))
+AWS := $(if $(shell command -v aws 2>/dev/null),aws,$(DOCKER_BASE) amazon/aws-cli:$(VERSAO_AWSCLI))
 
 VERDE := \033[32m
 AMARELO := \033[33m

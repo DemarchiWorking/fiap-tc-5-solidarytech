@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+#
+# solidary — a mesma entrada do Makefile, para quem nao tem `make`.
+#
+# POR QUE ISTO EXISTE
+#
+# Todo o projeto e dirigido pelo Makefile, inclusive o ./comecar.sh. Mas `make`
+# nao vem no Git for Windows nem na imagem padrao do WSL — e nao estava na
+# maquina onde esta entrega foi construida. O sintoma e opaco: o console valida
+# credencial e regiao, grava a configuracao, e so entao morre com
+# "make: command not found".
+#
+# O Makefile CONTINUA sendo o artefato principal, e nao foi substituido: uma
+# banca de DevOps espera encontra-lo, e ele documenta os alvos melhor do que
+# qualquer script. Este arquivo e uma segunda porta para a mesma casa.
+#
+# COMO EVITA DIVERGIR
+#
+# Nao reimplementa nada. Se `make` existir, delega a ele — entao o
+# comportamento e identico por construcao. Se nao existir, chama os MESMOS
+# scripts que os alvos do Makefile chamam.
+#
+#   ./solidary                 lista o que da para fazer
+#   ./solidary check           roda os gates
+#   ./solidary pre-voo         veredito GO / NO-GO
+#   ./solidary validate        terraform validate nos dois ambientes
+#
+set -uo pipefail
+
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$RAIZ"
+
+VERDE=$'\033[32m'; VERMELHO=$'\033[31m'; AMARELO=$'\033[33m'
+NEGRITO=$'\033[1m'; RESET=$'\033[0m'
+
+# ---------------------------------------------------------------------------
+# Terraform: nativo quando existir, container como alternativa. Espelha
+# exatamente a decisao do Makefile — se mudar la, mude aqui.
+# ---------------------------------------------------------------------------
+tf() {
+  if command -v terraform >/dev/null 2>&1; then
+    terraform "$@"
+  elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    docker run --rm -i \
+      -v "$RAIZ":/wk -w /wk \
+      -v "$HOME/.aws":/root/.aws:ro \
+      -e AWS_PROFILE -e AWS_REGION -e AWS_DEFAULT_REGION \
+      hashicorp/terraform:1.9 "$@"
+  else
+    printf '%s\n' "${VERMELHO}Nem terraform nativo, nem daemon Docker no ar.${RESET}"
+    return 2
+  fi
+}
+
+py() { command -v python3 >/dev/null 2>&1 && python3 "$@" || python "$@"; }
+
+ajuda() {
+  cat <<AJUDA
+${NEGRITO}solidary${RESET} — entrada alternativa ao Makefile (para quem nao tem make)
+
+  ${VERDE}comecar${RESET}       Console de primeira execucao (credenciais e configuracao)
+  ${VERDE}pre-voo${RESET}       Veredito GO / NO-GO antes de subir
+  ${VERDE}check${RESET}         Todos os gates locais
+  ${VERDE}validate${RESET}      terraform validate nos dois ambientes
+  ${VERDE}fmt${RESET}           terraform fmt
+  ${VERDE}relatorio${RESET}     Gera o PDF do relatorio de entrega
+  ${VERDE}test-local${RESET}    Testes dos servicos (exige Docker)
+  ${VERDE}ajuda${RESET}         Esta lista
+
+Para os alvos de infraestrutura (bootstrap, lab-up, deploy, lab-down) instale o
+\`make\` — eles orquestram varios passos e o Makefile e a fonte da verdade:
+
+  Windows:   winget search make
+  WSL/Linux: sudo apt install make
+AJUDA
+}
+
+# ---------------------------------------------------------------------------
+# Se `make` existir, delega. Comportamento identico por construcao.
+# ---------------------------------------------------------------------------
+if command -v make >/dev/null 2>&1 && [[ "${1:-}" != "ajuda" ]]; then
+  if [[ $# -eq 0 ]]; then exec make help; fi
+  exec make "$@"
+fi
+
+ALVO="${1:-ajuda}"
+FALHAS=0
+passo() { printf '\n%s\n' "${NEGRITO}$1${RESET}"; }
+resultado() {
+  if [[ $1 -eq 0 ]]; then printf '  %s %s\n' "${VERDE}ok${RESET}" "$2"
+  else printf '  %s %s\n' "${VERMELHO}FALHOU${RESET}" "$2"; FALHAS=$((FALHAS + 1)); fi
+}
+
+case "$ALVO" in
+  ajuda|help|-h|--help) ajuda ;;
+
+  comecar) ./comecar.sh ;;
+  pre-voo) ./scripts/pre-voo.sh ;;
+  relatorio) py scripts/gerar-relatorio.py ;;
+
+  fmt) tf fmt -recursive infra/ ;;
+
+  validate)
+    for AMB in prod-use1 dr-usw2; do
+      passo "validate $AMB"
+      tf -chdir="infra/environments/$AMB" init -backend=false -input=false >/dev/null 2>&1
+      tf -chdir="infra/environments/$AMB" validate
+      resultado $? "$AMB"
+    done
+    exit $FALHAS
+    ;;
+
+  check)
+    passo "Gates locais"
+    py scripts/verificar-academy.py infra >/dev/null 2>&1
+    resultado $? "policy do AWS Academy (15 verificacoes)"
+    py scripts/verificar-observabilidade.py . >/dev/null 2>&1
+    resultado $? "observabilidade (7 verificacoes)"
+    py scripts/verificar-workflows.py . >/dev/null 2>&1
+    resultado $? "workflows (5 verificacoes)"
+    bash scripts/verificar-manifestos.sh >/dev/null 2>&1
+    resultado $? "manifestos Kubernetes"
+    tf fmt -check -recursive infra/ >/dev/null 2>&1
+    resultado $? "terraform fmt"
+
+    printf '\n'
+    if [[ $FALHAS -eq 0 ]]; then
+      printf '%s\n' "${VERDE}${NEGRITO}Todos os gates passaram.${RESET}"
+    else
+      printf '%s\n' "${VERMELHO}${NEGRITO}$FALHAS gate(s) falharam.${RESET}"
+      printf '%s\n' "Rode o gate isolado para ver o detalhe. Ex.:"
+      printf '%s\n' "  python scripts/verificar-academy.py infra"
+    fi
+    exit $FALHAS
+    ;;
+
+  test-local)
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+      printf '%s\n' "${AMARELO}Docker nao esta no ar — os testes rodam dentro da imagem.${RESET}"
+      exit 2
+    fi
+    for S in donation-service ngo-service volunteer-service; do
+      docker build --target test "services/$S" || FALHAS=$((FALHAS + 1))
+    done
+    exit $FALHAS
+    ;;
+
+  *)
+    printf '%s\n' "${VERMELHO}Alvo desconhecido: $ALVO${RESET}"
+    ajuda
+    exit 1
+    ;;
+esac

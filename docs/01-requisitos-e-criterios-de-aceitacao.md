@@ -31,7 +31,7 @@
 
 | ID | Requisito | Critério de aceitação (o que prova que está pronto) | Artefato no repo | Evidência | Vídeo | Risco | Status |
 |---|---|---|---|---|---|---|---|
-| **F0.1a** | Dockerfiles **otimizados** para os 3 serviços | Build multi-stage; imagem final **sem toolchain**; usuário **não-root**; `HEALTHCHECK`; tamanho registrado antes/depois | `services/*/Dockerfile` | `docs/07-evidencias/f1-imagens-tamanho.md` (saída de `docker images`) | Demo Tech | 🟠 | 🟨 |
+| **F0.1a** | Dockerfiles **otimizados** para os 3 serviços | Build multi-stage; imagem final **sem toolchain**; usuário **não-root**; `HEALTHCHECK`; tamanho registrado antes/depois | `services/*/Dockerfile` | `docs/07-evidencias/README.md` — print `f0-imagens-tamanho.png`, saída de `docker images` | Demo Tech | 🟠 | 🟨 |
 | **F0.1b** | Implantação em **Kubernetes gerenciado** | Cluster **EKS** provisionado por IaC; os 3 serviços `Running` e `Ready` | `infra/modules/eks/` | `kubectl get pods -A` + console EKS | Demo Tech | 🔴 | ⬜ |
 | **F0.2** | **IaC com Terraform** cobrindo **todo** o ambiente | Cluster **+ Bancos + Mensageria + Rede** provisionados 100% por Terraform. **Zero** recurso criado no console | `infra/` completo | `terraform plan` limpo + `terraform state list` | Demo Tech (item 2) | 🔴 | 🟨 |
 | **F0.3a** | Pipeline com **testes automatizados** | Job `test` roda e publica cobertura; falha de teste **quebra** o pipeline | `.github/workflows/ci-*.yml` | Run verde no Actions | Demo Tech (item 1) | 🔴 | 🟨 |
@@ -98,7 +98,7 @@
 > Fase 4 rodou esta mesma arquitetura em **Azure/AKS**, e este repositório a reimplanta em
 > **AWS/EKS** reusando os mesmos manifestos Kubernetes e o mesmo padrão GitOps — o que prova, na
 > prática, que a camada de aplicação é agnóstica de nuvem. Registrado em
-> `docs/02-arquitetura/adr/ADR-007-multicloud.md`.
+> `docs/02-arquitetura/adr/README.md` (ADR-007).
 
 ---
 

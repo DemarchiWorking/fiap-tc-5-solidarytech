@@ -175,7 +175,10 @@ func (a *App) ListDonations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "erro interno")
 		return
 	}
-	defer rows.Close()
+	// O erro de Close aqui nao tem tratamento possivel: as linhas ja foram
+	// lidas e o erro de iteracao e checado por rows.Err() abaixo. `_ =` torna
+	// o descarte explicito, que e o que o errcheck cobra.
+	defer func() { _ = rows.Close() }()
 
 	donations := []Donation{}
 	for rows.Next() {

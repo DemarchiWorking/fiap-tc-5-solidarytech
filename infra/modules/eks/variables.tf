@@ -6,7 +6,25 @@ variable "nome_cluster" {
 variable "versao_kubernetes" {
   description = "Versao do Kubernetes do control plane."
   type        = string
-  default     = "1.31"
+  # 1.34: a versao mais recente em SUPORTE PADRAO que ainda esta proxima do
+  # ecossistema de charts desta entrega.
+  #
+  # Estava em 1.31, e isso custava caro: o suporte padrao da 1.31 terminou em
+  # 26/11/2025 e ela entrou em EXTENDED SUPPORT, cobrado a US$ 0,60 por hora de
+  # cluster em vez de US$ 0,10. O control plane saltaria de US$ 73 para US$ 438
+  # por mes, o total do ambiente de US$ 202 para US$ 567, e o credito tipico do
+  # Learner Lab duraria 5 dias em vez de 15 — alem de invalidar a projecao de
+  # custos que sustenta a frente de FinOps.
+  #
+  # Calendario da AWS (consultado em 09/2026):
+  #   1.34  suporte padrao ate 02/12/2026   <- esta
+  #   1.35  suporte padrao ate 27/03/2027
+  #   1.36  suporte padrao ate 02/08/2027
+  #   1.31  ja em extended support, encerra em 26/11/2026
+  #
+  # Os addons acompanham sozinhos: `data.aws_eks_addon_version` resolve a versao
+  # compativel com a do cluster, entao nao ha nada mais para alinhar aqui.
+  default = "1.34"
 }
 
 variable "nome_role_lab" {

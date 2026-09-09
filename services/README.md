@@ -17,7 +17,7 @@ base as correções foram feitas.
 | Serviço | Stack | Porta | Persistência | Papel |
 |---|---|---|---|---|
 | `ngo-service` | Python 3.12 / Flask | 8081 | PostgreSQL `ngo_db` | Cadastro de ONGs |
-| `donation-service` | Go 1.23 | 8082 | PostgreSQL `donation_db` + SQS | **Hot Path** — doações |
+| `donation-service` | Go 1.26 | 8082 | PostgreSQL `donation_db` + SQS | **Hot Path** — doações |
 | `volunteer-service` | Python 3.12 / Flask | 8083 | DynamoDB | Cadastro de voluntários |
 | `volunteer-worker` | *(mesma imagem)* | — | SQS → DynamoDB | Consome eventos de doação |
 

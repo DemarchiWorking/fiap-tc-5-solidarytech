@@ -27,7 +27,7 @@ spec:
   sources:
     - repoURL: https://kubernetes.github.io/ingress-nginx
       chart: ingress-nginx
-      targetRevision: 4.11.3
+      targetRevision: 4.15.1
       helm:
         releaseName: ingress-nginx
         valueFiles: ["$values/gitops/addons/ingress-nginx/values.yaml"]
@@ -59,7 +59,7 @@ spec:
   sources:
     - repoURL: https://prometheus-community.github.io/helm-charts
       chart: kube-prometheus-stack
-      targetRevision: 65.5.1
+      targetRevision: 90.0.0
       helm:
         releaseName: kube-prometheus-stack
         valueFiles: ["$values/gitops/addons/kube-prometheus-stack/values.yaml"]
@@ -89,7 +89,7 @@ spec:
   sources:
     - repoURL: https://grafana.github.io/helm-charts
       chart: loki
-      targetRevision: 6.24.0
+      targetRevision: 7.3.0
       helm:
         releaseName: loki
         valueFiles: ["$values/gitops/addons/loki/values.yaml"]
@@ -118,7 +118,7 @@ spec:
   sources:
     - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
       chart: opentelemetry-collector
-      targetRevision: 0.108.1
+      targetRevision: 0.172.1
       helm:
         releaseName: otel-collector
         valueFiles: ["$values/gitops/addons/otel-collector-gateway/values.yaml"]
@@ -147,7 +147,7 @@ spec:
   sources:
     - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
       chart: opentelemetry-collector
-      targetRevision: 0.108.1
+      targetRevision: 0.172.1
       helm:
         releaseName: otel-collector-logs
         valueFiles: ["$values/gitops/addons/otel-collector-logs/values.yaml"]
@@ -176,7 +176,7 @@ spec:
   sources:
     - repoURL: https://opencost.github.io/opencost-helm-chart
       chart: opencost
-      targetRevision: 1.42.2
+      targetRevision: 2.5.30
       helm:
         releaseName: opencost
         valueFiles: ["$values/gitops/addons/opencost/values.yaml"]
@@ -205,7 +205,7 @@ spec:
   sources:
     - repoURL: https://vmware-tanzu.github.io/helm-charts
       chart: velero
-      targetRevision: 8.1.0
+      targetRevision: 12.1.0
       helm:
         releaseName: velero
         valueFiles: ["$values/gitops/addons/velero/values.yaml"]

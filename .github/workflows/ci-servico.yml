@@ -58,7 +58,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: inputs.linguagem == 'go'
         with:
-          go-version: "1.23"
+          go-version: "1.26"
           cache-dependency-path: ${{ inputs.caminho }}/go.sum
 
       - uses: actions/setup-python@v5
@@ -68,12 +68,16 @@ jobs:
 
       - name: Go — golangci-lint
         if: inputs.linguagem == 'go'
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
           # Versao fixa, nao `latest`: cada release do golangci-lint liga
           # analisadores novos, e com `latest` a pipeline passa a reprovar
           # codigo que ninguem mudou. Atualizar vira uma decisao, com PR proprio.
-          version: v1.62.2
+          # v2.13.2 (08/2026). A v1 nao entende o export data do Go 1.26, e
+          # a action v6 so fala com a v1 do linter — por isso as duas sobem
+          # juntas. A v2 removeu as exclusoes embutidas do errcheck, o que
+          # revelou quatro `defer x.Close()` sem tratamento; corrigidos.
+          version: v2.13.2
           working-directory: ${{ inputs.caminho }}
 
       - name: Go — go.mod e go.sum consistentes
@@ -112,7 +116,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: inputs.linguagem == 'go'
         with:
-          go-version: "1.23"
+          go-version: "1.26"
           cache-dependency-path: ${{ inputs.caminho }}/go.sum
 
       - uses: actions/setup-python@v5
@@ -205,7 +209,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: inputs.linguagem == 'go'
         with:
-          go-version: "1.23"
+          go-version: "1.26"
           cache-dependency-path: ${{ inputs.caminho }}/go.sum
 
       - name: Go — gosec

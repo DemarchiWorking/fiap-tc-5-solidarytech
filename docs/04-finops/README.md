@@ -137,6 +137,22 @@ pede assimetria de margem.
 | ElastiCache `cache.t3.micro` | +12,40 | Nenhum dos 3 serviços abre conexão com cache |
 | Warm standby `dr-usw2` completo | +151,00 | Sobe sob demanda para o drill (`make dr-up`). Inclui EKS, 2 nós, **RDS, EBS, SQS e DynamoDB** — o ambiente de DR instancia os mesmos módulos de produção, e uma versão anterior desta linha contava só o control plane e os nós |
 
+### A versão do Kubernetes é uma linha de custo
+
+O item mais caro desta tabela — o control plane, US$ 72/mês — **dobra de preço
+seis vezes** se o cluster rodar numa versão fora do suporte padrão da AWS. O
+*extended support* custa **US$ 0,60/hora** em vez de US$ 0,10.
+
+Foi um risco real nesta entrega: o cluster estava fixado em **1.31**, cuja
+janela de suporte padrão terminou em 26/11/2025. Rodando hoje, o total mensal
+seria **US$ 567 em vez de US$ 202** e o crédito do lab duraria 5 dias, não 15.
+Corrigido para **1.34** (suporte padrão até 02/12/2026) — ver
+[ADR-012](../02-arquitetura/adr/README.md).
+
+A lição de FinOps: **data de fim de suporte é uma linha do orçamento.** Nenhum
+gate estático a detecta — o código estava correto, o `terraform validate`
+passava, e o ambiente custaria 2,8× o previsto.
+
 ### O que isso significa no Learner Lab
 
 Com o crédito típico de um AWS Academy Learner Lab:

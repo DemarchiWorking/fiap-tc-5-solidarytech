@@ -71,7 +71,7 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	publisher, err := buildPublisher(ctx, log)
 	if err != nil {
@@ -135,7 +135,7 @@ func openDB(ctx context.Context, log *slog.Logger) (*sql.DB, error) {
 	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := db.PingContext(pingCtx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, errors.Join(errors.New("banco de dados inacessivel"), err)
 	}
 
@@ -213,7 +213,7 @@ func healthcheck() int {
 	if err != nil {
 		return 1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return 1
 	}

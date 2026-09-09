@@ -83,7 +83,7 @@ variable "responsavel" {
 variable "versao_kubernetes" {
   description = "Deve acompanhar a versao da producao: um standby em versao diferente nao e um espelho."
   type        = string
-  default     = "1.31"
+  default     = "1.34"
 }
 
 variable "quantidade_nos" {

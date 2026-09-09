@@ -405,3 +405,59 @@ que torna a multiplicação ainda menos defensável.
   atingiria só um serviço.
 - O isolamento por credencial **não** está implementado (ver ADR-006): ambos os serviços usam o
   usuário master. Registrado ali como dívida.
+
+
+---
+
+## ADR-012
+
+### Versão do Kubernetes escolhida pelo calendário de suporte, não pela novidade
+
+**Status:** Aceito · **Data:** 2026-09-09
+
+**Contexto.** O cluster estava fixado em **EKS 1.31**. Essa versão saiu do **suporte padrão em
+26/11/2025** e entrou em *extended support*, que a AWS cobra a **US$ 0,60 por hora de cluster** em
+vez de US$ 0,10 — seis vezes mais.
+
+O efeito não é acadêmico:
+
+| | Declarado | Com 1.31 em extended support |
+|---|---:|---:|
+| Control plane | US$ 73/mês | **US$ 438/mês** |
+| Total do ambiente | US$ 202/mês | **US$ 567/mês** |
+| Custo diário | US$ 6,73 | **US$ 18,90** |
+| Duração do crédito típico (US$ 100) | ~15 dias | **~5 dias** |
+
+Ou seja: a projeção de custos que sustenta a frente de FinOps estaria **errada por um fator de
+2,8×**, e o crédito do Learner Lab acabaria em um terço do tempo previsto — provavelmente no meio
+da gravação do vídeo.
+
+**Decisão.** **EKS 1.34**, e a regra que a origina: *escolher a versão pelo calendário de suporte da
+AWS, não pela mais nova nem pela mais conhecida*.
+
+Calendário consultado em 09/2026:
+
+| Versão | Fim do suporte padrão | Situação hoje |
+|---|---|---|
+| 1.36 | 02/08/2027 | padrão — mas 4 meses à frente dos charts desta entrega |
+| 1.35 | 27/03/2027 | padrão |
+| **1.34** | **02/12/2026** | **padrão — escolhida** |
+| 1.33 | 29/07/2026 | já em extended support |
+| 1.31 | 26/11/2025 | extended support, encerra em 26/11/2026 |
+
+1.34 cobre a entrega (29/09/2026) com folga e é a versão em suporte padrão **mais próxima** do
+ecossistema de charts do projeto — o que minimiza o risco de API removida.
+
+**Consequências.**
+
+- O custo volta ao declarado: US$ 0,10/h de control plane, US$ 6,73/dia.
+- Os addons acompanham sozinhos: `data.aws_eks_addon_version` resolve a versão compatível com a do
+  cluster, então não há nada para alinhar à mão.
+- **A escolha tem prazo.** 1.34 sai do suporte padrão em 02/12/2026. Um projeto que fosse viver
+  além disso precisaria de um plano de upgrade — e é exatamente esse o ponto de FinOps que este ADR
+  registra: **versão de Kubernetes é uma linha de custo**, não só uma decisão técnica.
+
+**Lição que vale para o relatório.** Nenhum gate estático pega isso. O código estava correto, o
+`terraform validate` passava, a política do Academy passava — e o ambiente custaria 2,8× o previsto.
+Datas de fim de suporte são uma dependência tão real quanto uma biblioteca, e só aparecem quando
+alguém as consulta.

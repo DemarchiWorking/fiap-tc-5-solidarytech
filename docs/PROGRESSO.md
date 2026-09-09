@@ -34,6 +34,31 @@
 do início ao fim, com o que conferir, o que cada passo prova e qual print
 capturar.
 
+### Versões (conferidas em 09/2026)
+
+| Componente | Versão | Observação |
+|---|---|---|
+| EKS | **1.34** | suporte padrão até 02/12/2026 — ver ADR-012 |
+| Go | **1.26** | 1.23 saiu de suporte em 08/2025 |
+| Python | 3.12 | em suporte |
+| Terraform | ≥ 1.9 · provider AWS `~> 5.80` | família 5 ainda recebe correções |
+| ingress-nginx | 4.15.1 | |
+| kube-prometheus-stack | 90.0.0 | |
+| loki | 7.3.0 | |
+| opentelemetry-collector | 0.172.1 | o processor virou `k8s_attributes`; o chart normaliza |
+| opencost | 2.5.30 | |
+| velero | 12.1.0 | |
+| golangci-lint | v2.13.2 (action v8) | a v2 removeu as exclusões do errcheck |
+
+**Como os charts foram validados sem cluster:** cada um foi renderizado com
+`helm template` na versão nova, com os nossos values, contra `--kube-version
+1.34.0`; depois foi conferido, na saída renderizada, que cada configuração que
+a entrega depende sobreviveu (política de tráfego do NLB, StorageClass, os
+receivers do Alertmanager dentro do Secret, o bucket do Loki, os processors do
+Collector, o schedule do Velero). Renderizar não basta: o Helm ignora values
+desconhecidos em silêncio, então uma chave que muda de lugar volta ao default
+sem erro nenhum.
+
 ### Como revalidar tudo (sem AWS, sem Docker)
 
 ```bash
@@ -132,7 +157,7 @@ e o `smoke-local.sh`. Os gates que **não** dependem de Docker estão todos verd
 |---|---|
 | Nuvem | AWS **Academy Learner Lab** |
 | Regiões | `us-east-1` (prod) · `us-west-2` (DR) |
-| Cluster | EKS 1.31, node group `t3.medium` × 3 |
+| Cluster | EKS 1.34, node group `t3.medium` × 3 |
 | IAM | **`LabRole`** por `data source` — nunca `resource` |
 | APM | New Relic (Datadog atrás de flag — ADR-004) |
 | Código-fonte | `dougls/hackathon-DCLT` @ `79f5c20de1f039ae9c43c3ef4c09ad89362f5f1a` |

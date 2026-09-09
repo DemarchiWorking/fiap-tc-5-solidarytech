@@ -28,7 +28,11 @@
 #
 # Depois de rodar `make gerar-gosum` uma vez e commitar go.mod/go.sum, este
 # estagio vira so verificacao: o `tidy` nao muda mais nada.
-FROM golang:1.23-alpine AS deps
+# 1.26: o Go 1.23 saiu de suporte quando o 1.25 foi lancado (08/2025). Base
+# sem patch de seguranca e CVE garantida no scan da imagem — o gate de
+# CRITICAL do Trivy barraria o push. As versoes vivas hoje sao 1.26 e 1.27;
+# a penultima e a escolha conservadora.
+FROM golang:1.26-alpine AS deps
 WORKDIR /src
 
 # git: o `tidy` precisa dele para resolver modulos servidos via VCS.
@@ -40,7 +44,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod tidy && go mod download
 
 # ---------- Estagio 2: build ----------
-FROM golang:1.23-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 
 # Necessario para o modo VCS do Go e para verificar checksums via TLS.

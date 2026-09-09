@@ -77,7 +77,7 @@ variable "enable_nat_gateway" {
 variable "versao_kubernetes" {
   description = "Versao do control plane."
   type        = string
-  default     = "1.31"
+  default     = "1.34"
 }
 
 variable "tipos_instancia_nos" {

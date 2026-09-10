@@ -1,0 +1,67 @@
+AMBIENTE COMPLETO NO AR — captura final
+2026-09-10 19:52 UTC  ·  conta 227007723638  ·  commit a94ef37
+=======================================================================
+
+1. TODAS AS APPLICATIONS DO ARGOCD
+   NAME                     SYNC STATUS   HEALTH STATUS
+   app-donation             Synced        Healthy
+   app-loadtest             Synced        Healthy
+   app-ngo                  Synced        Healthy
+   app-volunteer            Synced        Healthy
+   bootstrap                Synced        Healthy
+   cluster-addons           Synced        Healthy
+   ingress-nginx            Synced        Healthy
+   kube-prometheus-stack    Synced        Healthy
+   loki                     Synced        Healthy
+   observabilidade-config   Synced        Healthy
+   opencost                 Synced        Healthy
+   otel-collector-gateway   Synced        Healthy
+   otel-collector-logs      Synced        Healthy
+   velero                   OutOfSync     Healthy
+
+2. OS TRES SERVICOS E O WORKER
+   solidary-donation    db-init-donation-mzbpm                                     0/1   Completed   0               4m16s
+   solidary-donation    donation-service-5fd86bbf8b-5gs8h                          1/1   Running     0               3m59s
+   solidary-donation    donation-service-5fd86bbf8b-c5ggf                          1/1   Running     0               4m3s
+   solidary-loadtest    k6-run-1789069817-4wcmg                                    1/1   Running     0               2m2s
+   solidary-ngo         db-init-ngo-qnrtc                                          0/1   Completed   0               5m
+   solidary-ngo         ngo-service-786dd75bdd-6zmw2                               1/1   Running     0               4m46s
+   solidary-ngo         ngo-service-786dd75bdd-cxhqw                               1/1   Running     0               4m56s
+   solidary-volunteer   volunteer-service-5b875c99bb-czf5s                         1/1   Running     0               5m6s
+   solidary-volunteer   volunteer-service-5b875c99bb-vlhlr                         1/1   Running     0               4m53s
+   solidary-volunteer   volunteer-worker-66bfb6dd57-v6cjk                          1/1   Running     0               4m45s
+
+3. HOT PATH FUNCIONANDO — doacao criada pela API publica
+   $ curl -X POST http://<nlb>/donations -d '{"ngo_id":1,"amount":150.50,...}'
+   {"id":687,"ngo_id":1,"amount":99.9,"donor_name":"Evidencia Final","status":"APPROVED","created_at":"2026-09-10T19:52:22.571355Z"}
+
+
+   $ curl http://<nlb>/donations
+   [{"id":881,"ngo_id":1,"amount":142.74,"donor_name":"Doador 29423","status":"APPROVED","created_at":"2026-09-10T19:52:32.897151Z"},{"id":880,"ngo_id":2,"amount":187.9,"donor_name":"Doador 44925","status":"APPROVED","created_at":"2026-09-10T19:52:32.846514Z"},{"id":879,"ngo_id":1,"amount":504.98,"donor_name":"Doador 65567","status":"APPROVED","created_at":"2026-09-10T19:52:32.79542Z"},{"id":878,"ngo_id":2,"amount":246.64,"donor_name":"Doador 75601","status":"APPROVED","created_at":"2026-09-10T19:52:32.746266Z"},{"id":877,"ngo_id":1,"amount":354.23,"donor_name":"Doador 25174","status":"APPROVED",
+
+4. AS IMAGENS PUBLICADAS PELA PIPELINE (ECR, tags imutaveis = SHA)
+   == ngo-service
+      2026-09-10T16:41:31.467000-03:00	83d38b1578338c3a83a504123acd7e7d95be6848
+   == donation-service
+      2026-09-10T16:46:45.462000-03:00	f0a70e07ffdb3c12363799ff7d46007dbf32d79e
+   == volunteer-service
+      2026-09-10T16:41:46.895000-03:00	83d38b1578338c3a83a504123acd7e7d95be6848
+
+5. OS COMMITS QUE A PROPRIA PIPELINE ESCREVEU NO GITOPS
+   a94ef37 deploy(donation-service): f0a70e07ffdb3c12363799ff7d46007dbf32d79e
+   08ccbef deploy(volunteer-service): 83d38b1578338c3a83a504123acd7e7d95be6848
+   6c37b05 deploy(ngo-service): 83d38b1578338c3a83a504123acd7e7d95be6848
+   b26bf37 deploy(ngo-service): 2aa2820a9bfacf6e5b0f15f6a73ad47240f9e1d1
+   28c6a40 deploy(volunteer-service): 2aa2820a9bfacf6e5b0f15f6a73ad47240f9e1d1
+   a802229 deploy(volunteer-service): 8b524b66be3702db8a651071eb0e474f7d3eea05
+   1c556c7 deploy(ngo-service): 8b524b66be3702db8a651071eb0e474f7d3eea05
+
+6. CARGA EM ANDAMENTO
+   NAME                STATUS    COMPLETIONS   DURATION   AGE
+   k6-run-1789069817   Running   0/1           2m19s      2m19s
+   k6-run-1789069817-4wcmg   1/1   Running   0     2m20s
+
+7. ENDERECOS
+   Aplicacao   http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com/ngo/ngos  ·  /donations  ·  /volunteers/1
+   Grafana     http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com/grafana/
+   ArgoCD      http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com/argocd/

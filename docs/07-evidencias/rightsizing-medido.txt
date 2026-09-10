@@ -1,0 +1,101 @@
+RIGHTSIZING MEDIDO — uso real sob carga vs. reservado
+2026-09-10 20:00 UTC  ·  commit ef61bbf
+=======================================================================
+
+A carga k6 acabou de rodar (5m06s, 8.101 eventos processados). Os numeros
+abaixo sao do periodo COM trafego — nao de um ambiente ocioso, que daria
+uma recomendacao de rightsizing sem valor.
+
+1. CPU USADA (media 5m, em cores) — namespaces da aplicacao
+      volunteer-service-5b875c99bb-czf5s                   0.00038170581249447755
+      ngo-service-786dd75bdd-cxhqw                         0.0002753024245549405
+      volunteer-service-5b875c99bb-vlhlr                   0.0003021485937729953
+      ngo-service-786dd75bdd-6zmw2                         0.00031866224787050764
+      volunteer-worker-66bfb6dd57-v6cjk                    0.04462782737087886
+      donation-service-5fd86bbf8b-c5ggf                    0.00025833690449687005
+      donation-service-5fd86bbf8b-5gs8h                    0.00029976266604112516
+      volunteer-service-7496469c95-kvgk8                   0.012338593666666666
+      volunteer-worker-6555797796-whgcf                    0.07685219564347576
+      volunteer-service-7496469c95-fs8dz                   0.011473428108586129
+      ngo-service-5574fc5fbf-wdcvq                         0.009021405223354581
+      ngo-service-5574fc5fbf-fmlmh                         0.008818223672748988
+      donation-service-7c67fff848-gbx6r                    0.0002465422222222222
+      donation-service-7c67fff848-6ntdg                    0.00028701088172423446
+
+2. CPU RESERVADA (requests)
+      k6-run-1789069817-4wcmg                              0.6
+      volunteer-service-7496469c95-kvgk8                   0.2
+      volunteer-worker-6555797796-whgcf                    0.1
+      ngo-service-5574fc5fbf-fmlmh                         0.2
+      volunteer-service-7496469c95-fs8dz                   0.2
+      db-init-ngo-6wkfr                                    0.1
+      ngo-service-5574fc5fbf-wdcvq                         0.2
+      db-init-donation-crwgc                               0.1
+      donation-service-7c67fff848-6ntdg                    0.2
+      donation-service-7c67fff848-gbx6r                    0.2
+
+3. MEMORIA USADA (working set, bytes)
+      volunteer-service-7496469c95-kvgk8                   128671744
+      volunteer-worker-6555797796-whgcf                    75747328
+      volunteer-service-7496469c95-fs8dz                   128192512
+      ngo-service-5574fc5fbf-wdcvq                         91586560
+      ngo-service-5574fc5fbf-fmlmh                         89882624
+      donation-service-7c67fff848-gbx6r                    7360512
+      donation-service-7c67fff848-6ntdg                    7434240
+
+4. MEMORIA RESERVADA (requests, bytes)
+      k6-run-1789069817-4wcmg                              536870912
+      volunteer-service-7496469c95-kvgk8                   201326592
+      volunteer-worker-6555797796-whgcf                    201326592
+      ngo-service-5574fc5fbf-fmlmh                         201326592
+      volunteer-service-7496469c95-fs8dz                   201326592
+      db-init-ngo-6wkfr                                    134217728
+      ngo-service-5574fc5fbf-wdcvq                         201326592
+      db-init-donation-crwgc                               134217728
+      donation-service-7c67fff848-6ntdg                    134217728
+      donation-service-7c67fff848-gbx6r                    134217728
+
+5. EFICIENCIA = usado / reservado  (o numero que embasa o ajuste)
+   CPU:
+      solidary-volunteer                                   0.2890037556663071
+      solidary-ngo                                         0.037098292920659165
+      solidary-donation                                    0.0021903429890227674
+   Memoria:
+      solidary-volunteer                                   0.5506998697916666
+      solidary-ngo                                         0.3380126953125
+      solidary-donation                                    0.0367431640625
+
+6. O QUE ESTA DECLARADO NOS MANIFESTOS (GitOps)
+   == ngo
+               resources:
+                 requests:
+                   cpu: 100m
+                   memory: 96Mi
+                 limits:
+                   cpu: 400m
+                   memory: 256Mi
+     
+               volumeMounts:
+   == donation
+               resources:
+                 requests:
+                   cpu: 100m
+                   memory: 64Mi
+                 limits:
+                   # Sem limite de CPU seria melhor para latencia (evita throttling),
+                   # mas num cluster de 6 vCPU compartilhado com a stack de
+                   # observabilidade, um pod sem teto pode matar o Prometheus por
+                   # inanicao. O teto e 5x o request: absorve pico sem monopolizar.
+   == volunteer
+               resources:
+                 requests:
+                   cpu: 100m
+                   memory: 96Mi
+                 limits:
+                   cpu: 400m
+                   memory: 256Mi
+     
+               volumeMounts:
+
+7. CUSTO POR NAMESPACE (OpenCost)
+   opencost-68c74ffb54-q895s   1/1   Running   2 (4h19m ago)   4h20m

@@ -163,7 +163,7 @@ def create_app(table=None) -> Flask:
             app.config["TABLE"].put_item(Item=item)
             return jsonify(json_seguro(item)), 201
         except (ClientError, BotoCoreError):
-            log.error("falha ao salvar voluntario", exc_info=True)
+            log.exception("falha ao salvar voluntario")
             return jsonify(error="erro interno ao processar dados"), 500
 
     @app.get("/volunteers/<int:ngo_id>")
@@ -181,7 +181,7 @@ def create_app(table=None) -> Flask:
             )
             return jsonify(json_seguro(resposta.get("Items", []))), 200
         except (ClientError, BotoCoreError):
-            log.error("falha ao consultar voluntarios", exc_info=True)
+            log.exception("falha ao consultar voluntarios")
             return jsonify(error="erro interno"), 500
 
     return app

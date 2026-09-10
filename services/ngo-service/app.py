@@ -132,7 +132,11 @@ def create_app(pool: SimpleConnectionPool | None = None) -> Flask:
                 cur.execute("SELECT 1")
                 cur.fetchone()
             return jsonify(ready=True, checks={"database": "ok"})
-        except Exception as exc:
+        # Captura ampla de proposito: a readiness precisa reprovar por QUALQUER
+        # motivo que impeca de atender — driver, DNS, pool esgotado, timeout.
+        # Deixar uma classe escapar viraria um 500 nao tratado, que e pior do
+        # que simplesmente sair do balanceamento.
+        except Exception as exc:  # noqa: BLE001
             log.warning("readiness reprovada", extra={"erro": str(exc)})
             return jsonify(ready=False, checks={"database": f"erro: {exc}"}), 503
         finally:
@@ -167,7 +171,7 @@ def create_app(pool: SimpleConnectionPool | None = None) -> Flask:
             return jsonify(error="e-mail ja cadastrado"), 409
         except Exception:
             conn.rollback()
-            log.error("falha ao criar ONG", exc_info=True)
+            log.exception("falha ao criar ONG")
             return jsonify(error="erro interno"), 500
         finally:
             app.config["POOL"].putconn(conn)
@@ -184,7 +188,7 @@ def create_app(pool: SimpleConnectionPool | None = None) -> Flask:
                 cur.execute("SELECT * FROM ngos ORDER BY id DESC LIMIT %s", (200,))
                 return jsonify(cur.fetchall()), 200
         except Exception:
-            log.error("falha ao listar ONGs", exc_info=True)
+            log.exception("falha ao listar ONGs")
             return jsonify(error="erro interno"), 500
         finally:
             app.config["POOL"].putconn(conn)
@@ -206,7 +210,7 @@ def create_app(pool: SimpleConnectionPool | None = None) -> Flask:
                     return jsonify(error="ONG nao encontrada"), 404
                 return jsonify(ngo), 200
         except Exception:
-            log.error("falha ao buscar ONG", exc_info=True)
+            log.exception("falha ao buscar ONG")
             return jsonify(error="erro interno"), 500
         finally:
             app.config["POOL"].putconn(conn)

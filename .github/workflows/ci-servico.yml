@@ -103,7 +103,11 @@ jobs:
         if: inputs.linguagem == 'python'
         working-directory: ${{ inputs.caminho }}
         run: |
-          pip install --quiet ruff
+          # Versao fixa, pelo mesmo motivo do gosec e do bandit logo abaixo.
+          # Sem ela o gate depende do calendario de release de terceiro: a 0.16
+          # ligou G201, BLE001, FURB157 e RUF100 no conjunto padrao, e a
+          # pipeline passou a reprovar codigo que ninguem tinha tocado.
+          pip install --quiet ruff==0.16.6
           ruff check .
 
   # =========================================================================
@@ -218,7 +222,17 @@ jobs:
         run: |
           # Versao fixa: cada release do gosec liga regras novas, e com @latest
           # a pipeline passaria a reprovar codigo que ninguem mudou.
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.21.4
+          #
+          # Mas versao fixa tambem envelhece contra o COMPILADOR. A v2.21.4
+          # depende de golang.org/x/tools@v0.25.0, cujo tokeninternal.go usa um
+          # truque que o Go 1.26 rejeita:
+          #
+          #   invalid array length -delta * delta (constant -256 of type int64)
+          #
+          # O `go install` falhava antes de o gosec analisar uma linha sequer —
+          # o job de SAST reprovava sem que houvesse nenhum achado. Ao subir a
+          # versao do Go aqui, esta linha tem de subir junto.
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
           # -severity high: barra o que e explorevel. MEDIUM entra no relatorio
           # sem travar a entrega — mesma politica do Trivy, pelo mesmo motivo:
           # gate que trava por tudo e gate que alguem desliga.

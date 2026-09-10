@@ -162,7 +162,7 @@ class DonationEventWorker:
             # Falha de infraestrutura E transitoria: NAO remove da fila. O SQS
             # reentrega e, apos maxReceiveCount, a mensagem cai na DLQ — que e o
             # sinal de que existe um problema persistente, e nao perda de dado.
-            log.error("falha transitoria ao processar evento", exc_info=True)
+            log.exception("falha transitoria ao processar evento")
             self.processados.add(1, {"status": "erro"})
             return False
         finally:
@@ -319,7 +319,7 @@ def main() -> int:
         except (ClientError, BotoCoreError):
             # Backoff curto para nao entrar em loop apertado de erro, que
             # queimaria cota de requisicao SQS (cobrada por chamada).
-            log.error("falha ao ler a fila; nova tentativa em 5s", exc_info=True)
+            log.exception("falha ao ler a fila; nova tentativa em 5s")
             # Bate mesmo em erro: o laco ESTA girando, o que a probe mede. Uma
             # indisponibilidade da fila por mais de 90s reiniciaria um worker
             # perfeitamente saudavel — e o reinicio nao traria a fila de volta.

@@ -27,7 +27,7 @@ class SQSFalso:
     def __init__(self):
         self.deletadas = []
 
-    def delete_message(self, QueueUrl, ReceiptHandle):  # noqa: N803
+    def delete_message(self, QueueUrl, ReceiptHandle):
         self.deletadas.append(ReceiptHandle)
 
 

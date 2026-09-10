@@ -24,12 +24,12 @@ class TabelaFalsa:
         if self.erro is not None:
             raise self.erro
 
-    def put_item(self, Item):  # noqa: N803 - assinatura do boto3
+    def put_item(self, Item):
         if self.erro is not None:
             raise self.erro
         self.itens.append(Item)
 
-    def scan(self, FilterExpression=None):  # noqa: N803 - assinatura do boto3
+    def scan(self, FilterExpression=None):
         if self.erro is not None:
             raise self.erro
         return {"Items": self.resultado_scan}
@@ -57,8 +57,8 @@ def client(table):
 
 
 def test_decimal_inteiro_vira_int():
-    assert json_seguro(decimal.Decimal("42")) == 42
-    assert isinstance(json_seguro(decimal.Decimal("42")), int)
+    assert json_seguro(decimal.Decimal(42)) == 42
+    assert isinstance(json_seguro(decimal.Decimal(42)), int)
 
 
 def test_decimal_fracionario_vira_float():
@@ -66,7 +66,7 @@ def test_decimal_fracionario_vira_float():
 
 
 def test_conversao_recursiva_em_estruturas():
-    entrada = [{"ngo_id": decimal.Decimal("7"), "tags": [decimal.Decimal("1.5")]}]
+    entrada = [{"ngo_id": decimal.Decimal(7), "tags": [decimal.Decimal("1.5")]}]
     assert json_seguro(entrada) == [{"ngo_id": 7, "tags": [1.5]}]
 
 
@@ -87,8 +87,8 @@ def test_listagem_com_decimal_nao_quebra(client, table):
         {
             "volunteer_id": "abc",
             "name": "Ana",
-            "ngo_id": decimal.Decimal("7"),
-            "registered_at": decimal.Decimal("1770000000"),
+            "ngo_id": decimal.Decimal(7),
+            "registered_at": decimal.Decimal(1770000000),
         }
     ]
     resp = client.get("/volunteers/7")

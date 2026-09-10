@@ -222,12 +222,12 @@ func (a *App) logCtx(ctx context.Context) *slog.Logger {
 // funciona neste servico. Sem ele nao existe span de servidor, e a consequencia
 // se espalha:
 //
-//   * `trace.SpanContextFromContext(r.Context())` devolve um contexto invalido,
+//   - `trace.SpanContextFromContext(r.Context())` devolve um contexto invalido,
 //     entao `logCtx` nunca anexa trace_id nem span_id — os logs em JSON saem
 //     sem o campo que o Loki usa para correlacionar com o APM;
-//   * o span de publicacao no SQS vira um span RAIZ: o trace comeca na fila, e
+//   - o span de publicacao no SQS vira um span RAIZ: o trace comeca na fila, e
 //     nao na requisicao do doador;
-//   * o `traceparent` propagado para o worker carrega um trace que nunca teve
+//   - o `traceparent` propagado para o worker carrega um trace que nunca teve
 //     comeco.
 //
 // Ou seja: o requisito F0.5b (Distributed Tracing ponta a ponta) dependia

@@ -320,11 +320,27 @@ jobs:
       - name: Build da imagem
         id: build
         run: |
+          # A saida vai para arquivo E para a tela. Se o build falhar, as
+          # ultimas linhas viram ANOTACAO de check-run — que, ao contrario do
+          # log do Actions, e legivel pela API publica e aparece no topo da
+          # pagina da execucao.
+          #
+          # Sem isto, "Build da imagem: failure" era tudo que se sabia de fora,
+          # e depurar exigia abrir o passo logado no navegador.
+          set -o pipefail
           docker build \
             --target runtime \
             --build-arg VERSION=${{ github.sha }} \
             -t ${{ inputs.servico }}:${{ github.sha }} \
-            ${{ inputs.caminho }}
+            ${{ inputs.caminho }} 2>&1 | tee /tmp/build.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "::error title=Build da imagem falhou::$(tail -c 3000 /tmp/build.log | tr '\n' ' | ' | tail -c 900)"
+            }
+            tail -40 /tmp/build.log
+            exit "$rc"
+          fi
 
       - name: Rodar a suite dentro da imagem
         # Estagio `test` do Dockerfile. Garante que os testes passem no MESMO

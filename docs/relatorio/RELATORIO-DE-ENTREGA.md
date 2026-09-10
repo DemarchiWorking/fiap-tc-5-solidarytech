@@ -136,6 +136,69 @@ Aplicado removendo `syncPolicy.automated` do Application — o ArgoCD para de
 sincronizar, mas o self-heal continua funcionando. Congelar mudanças **não pode**
 significar congelar a capacidade de mitigar.
 
+### O error budget em ação — um achado real do teste de carga
+
+O ciclo abaixo não é ilustrativo. Aconteceu neste ambiente, e é a melhor
+evidência de que os SLIs fazem trabalho de verdade.
+
+**Detecção.** Depois da primeira carga (8.755 eventos), o SLI de frescor
+acusou:
+
+| | |
+|---|---|
+| Eventos com lag ≤ 60 s | 6.137 — **70,1 %** |
+| Eventos com lag > 60 s | 2.618 — **29,9 %** |
+| Lag médio | 39,7 s |
+| Error budget restante | **−42,38** (estourado em mais de 40×) |
+
+Os outros dois SLIs estavam verdes. Só o de frescor viu — e é exatamente o
+ponto cego que ele foi criado para cobrir: a doação é confirmada **antes** do
+consumo da fila.
+
+**Diagnóstico.** Duas causas somadas, nenhuma delas produzindo erro:
+
+1. **O EKS não instala o `metrics-server`, e ninguém instalou.** Sem a API
+   `metrics.k8s.io`, um HPA não falha — fica em `<unknown>` e nunca escala. Os
+   três HPAs do projeto estavam declarados, criados, listados, e eram
+   **decorativos**. `kubectl top` também não respondia.
+
+2. **O `volunteer-worker` não tinha HPA nenhum.** Rodava fixo em 1 réplica com
+   50 m de CPU. O produtor escalava (na intenção); o consumidor, não.
+
+O script do k6 tem um estágio comentado como *"PICO — dispara o HPA"*. O pico
+chegava, e nada disparava.
+
+**Por que nenhum gate pegou.** `kustomize build`, `kubeconform`,
+`terraform validate` e os cinco gates locais validam a **forma**. Nenhum deles
+executa um cluster, e um HPA sintaticamente perfeito que nunca escala passa por
+todos. Foi preciso rodar carga contra o ambiente real para o defeito aparecer.
+
+**Ação.** Pelo GitOps, em dois commits: `metrics-server` como addon (onda de
+sync −2, antes de tudo) e HPA próprio para o worker.
+
+**Recuperação.** Assim que a Metrics API subiu, o HPA do worker leu **194 %** de
+utilização e escalou sozinho em 81 segundos. Na carga seguinte:
+
+| | Antes | Depois |
+|---|---|---|
+| Réplicas do worker | 1 (fixo) | 1 → 6 (HPA) |
+| Eventos fora do alvo | 29,9 % | **0,1 %** (4.862 de 4.867) |
+| `kubectl get hpa` | `cpu: <unknown>/70%` | `cpu: 1%/70%` |
+
+**O que o pico revelou de quebra.** O HPA chegou a **404 %** de utilização — o
+request de 50 m estava quatro vezes abaixo do uso real (~200 m). Isso não mata
+o pod, porque o *limit* não era atingido; o que se degrada em silêncio é o
+**agendamento**: o scheduler acreditava que quatro workers custavam 200 m
+quando custavam 800 m. Corrigido para 100 m de request — o dobro do regime e
+metade do pico, porque request igual ao pico faria a utilização nunca passar de
+100 % e o HPA nunca escalar.
+
+**O orçamento de 7 dias não voltou ao verde**, e não deveria. A taxa
+instantânea está no alvo; o error budget leva dias para cicatrizar. É essa a
+função dele: lembrar do que aconteceu depois que o gráfico já voltou ao normal.
+
+**Evidência:** [`elasticidade-e-frescor.txt`](../07-evidencias/elasticidade-e-frescor.txt)
+
 ### MTTR (F1.3)
 
 | Etapa | Sem a stack | Com a stack |

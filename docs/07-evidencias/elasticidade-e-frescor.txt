@@ -1,0 +1,85 @@
+ELASTICIDADE E FRESCOR DA FILA — antes e depois
+2026-09-10 21:08 UTC  ·  commit 462396a
+=======================================================================
+
+O PROBLEMA
+
+  1. O EKS nao instala o metrics-server, e ninguem instalou. Sem a API
+     metrics.k8s.io os HPAs nao falham — ficam em <unknown> e nunca
+     escalam. Os tres HPAs do projeto eram decorativos:
+
+       donation-service    cpu: <unknown>/70%   2  10  2
+       ngo-service         cpu: <unknown>/70%   2   6  2
+       volunteer-service   cpu: <unknown>/70%   2   6  2
+       kubectl top nodes   error: Metrics API not available
+
+  2. O volunteer-worker — o consumidor da fila, que sustenta o SLI de
+     frescor — nao tinha HPA nenhum. Rodava fixo em 1 replica de 50m.
+
+  Resultado medido na primeira carga (8.755 eventos):
+
+       lag <= 60s    6.137 eventos   (70,1%)
+       lag  > 60s    2.618 eventos   (29,9%)   <- estouro do SLO
+       lag medio     39,7 s
+       error budget de frescor:  -42,38
+
+  Nenhum gate pegou: kustomize, kubeconform, terraform validate e os
+  cinco gates locais validam a FORMA. Nenhum executa um cluster, e um
+  HPA sintaticamente perfeito que nunca escala passa por todos.
+
+=======================================================================
+A CORRECAO — metrics-server como addon do GitOps + HPA para o worker
+
+1. A METRICS API RESPONDE
+   NAME                          CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+   ip-10-0-24-202.ec2.internal   111m         5%       1848Mi          56%         
+   ip-10-0-4-129.ec2.internal    92m          4%       2317Mi          70%         
+   ip-10-0-7-154.ec2.internal    240m         12%      2204Mi          66%         
+
+2. OS HPAs SAIRAM DE <unknown>
+   NAMESPACE            NAME                REFERENCE                      TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+   solidary-donation    donation-service    Deployment/donation-service    cpu: 1%/70%     2         10        2          5h23m
+   solidary-ngo         ngo-service         Deployment/ngo-service         cpu: 1%/70%     2         6         2          5h23m
+   solidary-volunteer   volunteer-service   Deployment/volunteer-service   cpu: 2%/70%     2         6         2          5h23m
+   solidary-volunteer   volunteer-worker    Deployment/volunteer-worker    cpu: 102%/70%   1         6         1          15m
+
+3. O WORKER ESCALA
+   volunteer-worker-6986b4fd6d-6kczm   1/1   Running   0     15s
+   volunteer-worker-6986b4fd6d-g6kj7   1/1   Running   0     3m23s
+
+   Durante o pico da carga, o HPA foi de 1 ate o teto de replicas,
+   com a utilizacao chegando a 404% do request — o que revelou o item
+   seguinte.
+
+4. RIGHTSIZING A PARTIR DA MEDICAO
+
+   request declarado    50m
+   utilizacao no pico   404%  (~200m por pod)
+   uso em regime        1-10m ocioso, 67m pos-pico
+   memoria              57-59Mi, estavel
+
+   cpu request  50m -> 100m   ·  limit 300m -> 400m  ·  max 4 -> 6
+
+   100m e proposital e nao 'o valor medido': com request igual ao pico,
+   a utilizacao nunca passaria de 100% e o HPA nunca escalaria. O
+   request dimensiona o REGIME; o HPA cobre o PICO.
+
+   Uso atual por pod:
+     volunteer-service-7496469c95-fs8dz   2m    118Mi   
+     volunteer-service-7496469c95-kvgk8   2m    119Mi   
+     volunteer-worker-6986b4fd6d-g6kj7    4m    63Mi    
+
+5. O SLI DE FRESCOR RECUPEROU
+   janela de 10 min apos a correcao:
+     eventos            4867.281300011203
+     com lag <= 60s     4862.14173564929
+
+   Os tres SLIs agora:
+     slo:donation_disponibilidade_erro:ratio_rate5m   0
+     slo:donation_latencia:p95                        0.00475
+     slo:donation_frescor_erro:ratio_rate1h           0.12262824181819099
+
+   O error budget de 7 dias NAO se recupera na janela da apresentacao —
+   a janela e longa de proposito. A taxa instantanea voltou ao alvo; o
+   orcamento de 7 dias leva dias para cicatrizar. E exatamente esse o
+   ponto de um error budget: ele lembra do que aconteceu.

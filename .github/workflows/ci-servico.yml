@@ -288,8 +288,13 @@ jobs:
       # seja, HIGH tambem barrava. A politica descrita e a implementada eram
       # diferentes, e a implementada e a que para a entrega na vespera da
       # apresentacao. Separado em dois passos, cada um fazendo o que o nome diz.
+      # A tag do trivy-action ganhou prefixo `v` em algum momento: a `0.28.0`
+      # sem prefixo deixou de existir no repositorio da acao. Uma referencia
+      # que nao resolve falha em "Set up job" — antes de qualquer passo rodar,
+      # e sem dizer qual acao e a culpada. Foi o que reprovou este job nas tres
+      # pipelines, com lint, teste e SAST todos verdes acima.
       - name: Trivy — dependencias (SCA) — relatorio HIGH
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ inputs.caminho }}
@@ -299,7 +304,7 @@ jobs:
           trivyignores: .trivyignore
 
       - name: Trivy — dependencias (SCA) — gate CRITICAL
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: ${{ inputs.caminho }}
@@ -333,7 +338,7 @@ jobs:
       # base (Debian/Alpine), que o scan de filesystem nao enxerga.
       # ---------------------------------------------------------------
       - name: Trivy — imagem (gate CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ inputs.servico }}:${{ github.sha }}
           # Mesma politica do scan de dependencias, pelo mesmo motivo. O HIGH
@@ -344,7 +349,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy — relatorio SARIF para o GitHub Security
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         if: always()
         with:
           image-ref: ${{ inputs.servico }}:${{ github.sha }}

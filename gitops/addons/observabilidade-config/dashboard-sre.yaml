@@ -266,12 +266,12 @@ data:
         {
           "type": "timeseries",
           "title": "Taxa de erro 5xx por servico",
-          "description": "ngo-service e volunteer-service nao tem SLO formal — o enunciado exige SLO apenas para o donation-service. Aparecem aqui para contexto.",
+          "description": "ngo-service e volunteer-service nao tem SLO formal — o enunciado exige SLO apenas para o donation-service. Aparecem aqui para contexto. Linha reta em zero significa servico com trafego e sem erro; servico ausente do grafico e servico sem trafego no periodo.",
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum by (service_name) (rate(solidary_http_server_duration_seconds_count{status_class=\"5xx\"}[5m])) / clamp_min(sum by (service_name) (rate(solidary_http_server_duration_seconds_count[5m])), 1e-9)",
+              "expr": "(sum by (service_name) (rate(solidary_http_server_duration_seconds_count{status_class=\"5xx\"}[5m])) or (sum by (service_name) (rate(solidary_http_server_duration_seconds_count[5m])) * 0)) / clamp_min(sum by (service_name) (rate(solidary_http_server_duration_seconds_count[5m])), 1e-9)",
               "legendFormat": "{{service_name}}",
               "refId": "A"
             }

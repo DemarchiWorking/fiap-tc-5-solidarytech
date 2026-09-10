@@ -318,6 +318,7 @@ jobs:
 
       # ---------------------------------------------------------------
       - name: Build da imagem
+        id: build
         run: |
           docker build \
             --target runtime \
@@ -348,9 +349,18 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
 
+      # `if: always()` puro fazia este passo rodar mesmo quando o build da
+      # imagem falhava — e ai ele falhava tambem, com "unable to find the
+      # specified image", empilhando um erro derivado por cima do erro real.
+      # Quem abria a execucao via DOIS passos vermelhos e ia investigar o
+      # ultimo, que e o que nao interessa.
+      #
+      # `always()` continua: o SARIF precisa ser enviado mesmo quando o gate de
+      # CRITICAL reprova — e justamente ai que a aba Security importa. O que
+      # muda e exigir que a imagem EXISTA.
       - name: Trivy — relatorio SARIF para o GitHub Security
         uses: aquasecurity/trivy-action@v0.36.0
-        if: always()
+        if: always() && steps.build.outcome == 'success'
         with:
           image-ref: ${{ inputs.servico }}:${{ github.sha }}
           format: sarif
@@ -362,7 +372,9 @@ jobs:
       # da trivy-action, que so apareceu quando a tag antiga sumiu.
       - name: Enviar ao GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        # Mesmo motivo do passo acima: sem imagem nao ha trivy.sarif, e o
+        # upload reclamava "Path does not exist: trivy.sarif".
+        if: always() && steps.build.outcome == 'success'
         with:
           sarif_file: trivy.sarif
           category: trivy-${{ inputs.servico }}

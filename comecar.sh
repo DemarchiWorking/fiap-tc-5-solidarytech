@@ -87,7 +87,10 @@ FALTANDO=0
 # `make bootstrap`, `make lab-up`, `make configurar-repo` e `make deploy`. Sem
 # ele o console valida tudo, grava a configuracao e so entao morre com
 # "make: command not found" — o pior momento para descobrir.
-for FERRAMENTA in git python kubectl make; do
+# `make` saiu da lista: o dispatcher ./solidary cobre os mesmos alvos, entao
+# a ausencia custa conveniencia, nao a entrega. E `python` virou `python3`,
+# que e o nome que distro moderna realmente instala.
+for FERRAMENTA in git python3 kubectl; do
   if command -v "$FERRAMENTA" >/dev/null 2>&1; then ok "$FERRAMENTA"
   else
     erro "$FERRAMENTA não encontrado"; FALTANDO=1
@@ -127,7 +130,7 @@ if [[ "$FALTANDO" -eq 1 ]]; then
   exit 1
 fi
 
-python -m pip install --quiet -r scripts/requirements-tools.txt 2>/dev/null \
+python3 -m pip install --quiet -r scripts/requirements-tools.txt 2>/dev/null \
   && ok "dependências dos gates instaladas" \
   || aviso "não consegui instalar PyYAML — alguns gates serão pulados"
 
@@ -190,8 +193,8 @@ while [[ "$CRED_VALIDA" -eq 0 ]]; do
 
   printf "\n  verificando com a AWS...\n"
   if IDENT=$(aws sts get-caller-identity --output json 2>&1); then
-    CONTA=$(python -c "import json,sys; print(json.load(sys.stdin)['Account'])" <<<"$IDENT")
-    ARN=$(python -c "import json,sys; print(json.load(sys.stdin)['Arn'])" <<<"$IDENT")
+    CONTA=$(python3 -c "import json,sys; print(json.load(sys.stdin)['Account'])" <<<"$IDENT")
+    ARN=$(python3 -c "import json,sys; print(json.load(sys.stdin)['Arn'])" <<<"$IDENT")
     ok "credencial VÁLIDA"
     printf "     conta: %s\n     %s\n" "$CONTA" "$ARN"
     AWS_CONTA="$CONTA"
@@ -386,7 +389,7 @@ ok ".env.local (permissão 600)"
 
 # Identificação nos documentos de entrega.
 if [[ -n "${INTEGRANTES:-}" ]]; then
-  INTEGRANTES="$INTEGRANTES" REPO_URL="${REPO_URL:-}" python - <<'PY'
+  INTEGRANTES="$INTEGRANTES" REPO_URL="${REPO_URL:-}" python3 - <<'PY'
 import io, os
 
 integrantes = os.environ["INTEGRANTES"].replace("\\n", "\n").strip()

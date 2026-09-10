@@ -51,6 +51,11 @@ DOCKER_BASE := docker run --rm -it \
 TF  := $(if $(shell command -v terraform 2>/dev/null),terraform,$(DOCKER_BASE) hashicorp/terraform:$(VERSAO_TERRAFORM))
 AWS := $(if $(shell command -v aws 2>/dev/null),aws,$(DOCKER_BASE) amazon/aws-cli:$(VERSAO_AWSCLI))
 
+# Distro moderna nao instala o alias `python` — so `python3`. Sete alvos
+# chamavam `python` cru, entre eles o `kubeconfig`, que roda logo depois do
+# `lab-up`: o erro aparecia com a infraestrutura ja no ar e cobrando.
+PY  := $(if $(shell command -v python3 2>/dev/null),python3,python)
+
 VERDE := \033[32m
 AMARELO := \033[33m
 RESET := \033[0m
@@ -77,7 +82,7 @@ comecar: ## COMECE AQUI — console de configuracao (credenciais, repo, grupo)
 
 .PHONY: setup
 setup: ## Instala as dependencias dos gates locais (1x por maquina)
-	@python -m pip install --quiet -r scripts/requirements-tools.txt
+	@$(PY) -m pip install --quiet -r scripts/requirements-tools.txt
 	@echo "Dependencias dos gates instaladas."
 
 .PHONY: pre-voo
@@ -89,7 +94,7 @@ check: check-academy check-observabilidade check-promql check-workflows fmt-chec
 
 .PHONY: check-observabilidade
 check-observabilidade: ## Coerencia da observabilidade (dashboards, regras de SLO, contrato da metrica)
-	@python scripts/verificar-observabilidade.py .
+	@$(PY) scripts/verificar-observabilidade.py .
 
 .PHONY: check-manifestos
 check-manifestos: ## Valida os manifestos Kubernetes (kustomize build + kubeconform)
@@ -97,15 +102,15 @@ check-manifestos: ## Valida os manifestos Kubernetes (kustomize build + kubeconf
 
 .PHONY: check-promql
 check-promql: ## Contrato entre as consultas PromQL e as metricas do codigo
-	@python scripts/verificar-promql.py .
+	@$(PY) scripts/verificar-promql.py .
 
 .PHONY: check-workflows
 check-workflows: ## Coerencia dos workflows do GitHub Actions (escopo de env, permissions, versoes)
-	@python scripts/verificar-workflows.py .
+	@$(PY) scripts/verificar-workflows.py .
 
 .PHONY: check-academy
 check-academy: ## Verifica as restricoes do AWS Academy no codigo Terraform
-	@python scripts/verificar-academy.py infra
+	@$(PY) scripts/verificar-academy.py infra
 
 .PHONY: fmt
 fmt: ## Formata o codigo Terraform
@@ -148,7 +153,7 @@ publicar-imagens: ## (1x, apos configurar-repo) Dispara a CI que constroi e publ
 
 .PHONY: relatorio
 relatorio: ## Gera o PDF do relatorio de entrega (entregavel E3)
-	@python scripts/gerar-relatorio.py
+	@$(PY) scripts/gerar-relatorio.py
 
 .PHONY: gerar-gosum
 gerar-gosum: ## Gera e versiona o go.sum do donation-service (1x, precisa de Docker)
@@ -259,8 +264,8 @@ lab-down: ## Destroi o ambiente (PRESERVA o bucket de state)
 .PHONY: kubeconfig
 kubeconfig: ## Aponta o kubectl para o cluster
 	@aws eks update-kubeconfig \
-		--region $$($(TF) -chdir=$(DIR_AMBIENTE) output -json cluster | python -c 'import json,sys;print(json.load(sys.stdin)["regiao"])') \
-		--name $$($(TF) -chdir=$(DIR_AMBIENTE) output -json cluster | python -c 'import json,sys;print(json.load(sys.stdin)["nome"])')
+		--region $$($(TF) -chdir=$(DIR_AMBIENTE) output -json cluster | $(PY) -c 'import json,sys;print(json.load(sys.stdin)["regiao"])') \
+		--name $$($(TF) -chdir=$(DIR_AMBIENTE) output -json cluster | $(PY) -c 'import json,sys;print(json.load(sys.stdin)["nome"])')
 
 .PHONY: output
 output: ## Mostra as saidas do ambiente

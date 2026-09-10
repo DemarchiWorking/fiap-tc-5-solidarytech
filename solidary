@@ -65,13 +65,25 @@ ${NEGRITO}solidary${RESET} — entrada alternativa ao Makefile (para quem nao te
   ${VERDE}fmt${RESET}           terraform fmt
   ${VERDE}relatorio${RESET}     Gera o PDF do relatorio de entrega
   ${VERDE}test-local${RESET}    Testes dos servicos (exige Docker)
-  ${VERDE}ajuda${RESET}         Esta lista
 
-Para os alvos de infraestrutura (bootstrap, lab-up, deploy, lab-down) instale o
-\`make\` — eles orquestram varios passos e o Makefile e a fonte da verdade:
+${NEGRITO}Sessao do laboratorio${RESET} (na ordem)
 
-  Windows:   winget search make
-  WSL/Linux: sudo apt install make
+  ${VERDE}bootstrap${RESET}         1x por conta: bucket de state + tabela de lock
+  ${VERDE}lab-up${RESET}            Sobe a infraestrutura e aponta o kubectl (~20 min)
+  ${VERDE}configurar-repo${RESET}   Preenche o GitOps com os valores da sua conta
+  ${VERDE}publicar-imagens${RESET}  Dispara a CI que constroi e publica as 3 imagens
+  ${VERDE}deploy${RESET}            ArgoCD assume o cluster (~8 min)
+  ${VERDE}carga${RESET}             Teste de carga k6 — sem ele os paineis ficam vazios
+  ${VERDE}status${RESET}            Estado do GitOps e dos pods
+  ${VERDE}senhas${RESET}            Credenciais do Grafana e do ArgoCD
+  ${VERDE}conformidade${RESET}      Relatorio de conformidade com o Learner Lab
+  ${VERDE}lab-down${RESET}          ${AMARELO}Destroi o ambiente — rode ao final${RESET}
+
+  ${VERDE}plan${RESET} · ${VERDE}apply${RESET} · ${VERDE}init${RESET} · ${VERDE}output${RESET} · ${VERDE}kubeconfig${RESET} · ${VERDE}dr-plan${RESET}
+
+  ${VERDE}ajuda${RESET}             Esta lista
+
+O ambiente padrao e prod-use1. Para o de DR:  AMBIENTE=dr-usw2 ./solidary plan
 AJUDA
 }
 
@@ -84,6 +96,10 @@ if command -v make >/dev/null 2>&1 && [[ "${1:-}" != "ajuda" ]]; then
 fi
 
 ALVO="${1:-ajuda}"
+
+# Mesmo default do Makefile. `AMBIENTE=dr-usw2 ./solidary plan` troca de regiao.
+AMBIENTE="${AMBIENTE:-prod-use1}"
+DIR_AMBIENTE="infra/environments/$AMBIENTE"
 FALHAS=0
 passo() { printf '\n%s\n' "${NEGRITO}$1${RESET}"; }
 resultado() {
@@ -135,6 +151,101 @@ case "$ALVO" in
     fi
     exit $FALHAS
     ;;
+
+  # -------------------------------------------------------------------------
+  # Infraestrutura. Os mesmos comandos dos alvos homonimos do Makefile.
+  # -------------------------------------------------------------------------
+  bootstrap)
+    tf -chdir=infra/bootstrap init && tf -chdir=infra/bootstrap apply || exit $?
+    printf '\n%s\n' "${AMARELO}Copie o bloco abaixo para infra/environments/*/backend.hcl${RESET}"
+    tf -chdir=infra/bootstrap output -raw bloco_backend
+    ;;
+
+  init)
+    if [[ ! -f "$DIR_AMBIENTE/backend.hcl" ]]; then
+      printf '%s\n' "${AMARELO}Falta $DIR_AMBIENTE/backend.hcl${RESET}"
+      printf '  cp %s/backend.hcl.example %s/backend.hcl\n' "$DIR_AMBIENTE" "$DIR_AMBIENTE"
+      printf "  e preencha com a saida de './solidary bootstrap'\n"
+      exit 1
+    fi
+    tf -chdir="$DIR_AMBIENTE" init -backend-config=backend.hcl
+    ;;
+
+  plan)
+    py scripts/verificar-academy.py infra || exit 1
+    "$0" init || exit 1
+    tf -chdir="$DIR_AMBIENTE" plan -out=tfplan
+    ;;
+
+  apply) tf -chdir="$DIR_AMBIENTE" apply tfplan ;;
+
+  lab-up)
+    py scripts/verificar-academy.py infra || exit 1
+    "$0" init || exit 1
+    tf -chdir="$DIR_AMBIENTE" apply -auto-approve || exit $?
+    "$0" kubeconfig || exit $?
+    printf '%s\n' "${VERDE}Infraestrutura no ar.${RESET}"
+    printf 'Proximo: %s (e commit+push), depois %s.\n' \
+      "${AMARELO}./solidary configurar-repo${RESET}" "${AMARELO}./solidary deploy${RESET}"
+    ;;
+
+  kubeconfig)
+    SAIDA_CLUSTER=$(tf -chdir="$DIR_AMBIENTE" output -json cluster) || exit $?
+    aws eks update-kubeconfig \
+      --region "$(printf '%s' "$SAIDA_CLUSTER" | py -c 'import json,sys;print(json.load(sys.stdin)["regiao"])')" \
+      --name   "$(printf '%s' "$SAIDA_CLUSTER" | py -c 'import json,sys;print(json.load(sys.stdin)["nome"])')"
+    ;;
+
+  configurar-repo) ./scripts/configurar-repo.sh "$AMBIENTE" ;;
+  deploy)          AMBIENTE="$AMBIENTE" ./scripts/bootstrap-cluster.sh ;;
+
+  publicar-imagens)
+    if ! command -v gh >/dev/null 2>&1; then
+      printf '%s\n' "${AMARELO}GitHub CLI (gh) nao encontrado.${RESET}"
+      printf '\nSem ele, dispare pela interface web: Actions > cada workflow > Run workflow\n'
+      printf '  CI - donation-service\n  CI - ngo-service\n  CI - volunteer-service\n'
+      exit 1
+    fi
+    for W in ci-donation.yml ci-ngo.yml ci-volunteer.yml; do
+      printf 'disparando %s...\n' "$W"
+      gh workflow run "$W" || exit 1
+    done
+    printf '\nAs tres pipelines foram disparadas. Acompanhe com:  gh run list\n'
+    printf 'Ao terminar, traga os commits de tag do GitOps:  git pull\n'
+    ;;
+
+  carga)
+    NOME="k6-run-$(date +%s)"
+    kubectl -n solidary-loadtest create job --from=cronjob/k6-load-test "$NOME" || exit $?
+    printf '\nJob criado: %s (fora do ArgoCD, entao roda ate o fim)\n' "$NOME"
+    printf 'Acompanhe:  kubectl -n solidary-loadtest logs -f job/%s\n' "$NOME"
+    ;;
+
+  status)
+    printf '%s\n' "== ArgoCD =="; kubectl -n argocd get applications
+    printf '\n%s\n' "== Pods =="; kubectl get pods -A | grep -E "solidary|monitoring|ingress|velero|argocd"
+    ;;
+
+  senhas)
+    printf 'Grafana  admin / '
+    kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; printf '\n'
+    printf 'ArgoCD   admin / '
+    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; printf '\n'
+    printf 'URL base: http://'
+    kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; printf '\n'
+    ;;
+
+  output)       tf -chdir="$DIR_AMBIENTE" output ;;
+  conformidade) tf -chdir="$DIR_AMBIENTE" output conformidade_aws_academy ;;
+
+  lab-down)
+    printf '%s\n' "${AMARELO}Destruindo $AMBIENTE. O bucket de state NAO e afetado.${RESET}"
+    tf -chdir="$DIR_AMBIENTE" destroy -auto-approve
+    ;;
+
+  dr-plan)   AMBIENTE=dr-usw2 "$0" plan ;;
+  dr-up)     AMBIENTE=dr-usw2 "$0" lab-up ;;
+  dr-down)   AMBIENTE=dr-usw2 "$0" lab-down ;;
 
   test-local)
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then

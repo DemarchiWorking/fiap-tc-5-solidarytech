@@ -23,7 +23,7 @@ resources:
 images:
 - name: ngo-service
   newName: 227007723638.dkr.ecr.us-east-1.amazonaws.com/solidarytech/ngo-service
-  newTag: f064e04fad4ffa17857b328424cc608752941b44
+  newTag: 2208e9a2e847059b447ba4651543612e924a9dab
 
 commonAnnotations:
   solidarytech.io/gerenciado-por: argocd

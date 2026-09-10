@@ -119,6 +119,19 @@ spec:
             # primeira chamada busca metadados da instancia.
             periodSeconds: 5
             failureThreshold: 30
+            # timeoutSeconds EXPLICITO. O default do Kubernetes e 1s, e cada
+            # tentativa aqui paga um interpretador Python novo importando
+            # boto3 e o OpenTelemetry — nunca cabe em um segundo. Sem esta
+            # linha, TODA tentativa expirava:
+            #
+            #   Startup probe failed: command timed out:
+            #   "python worker.py --probe" timed out after 1s
+            #
+            # O container era morto antes de ficar pronto, em laco: 15
+            # reinicios seguidos. O generoso failureThreshold acima nao ajuda
+            # em nada quando o que falha e o relogio de CADA tentativa. Vale o
+            # mesmo 10s da liveness logo abaixo, que ja tinha o campo.
+            timeoutSeconds: 10
 
           livenessProbe:
             exec:

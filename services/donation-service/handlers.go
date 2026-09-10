@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -240,14 +241,19 @@ func (a *App) Routes() http.Handler {
 	mux.HandleFunc("GET /health", a.Health)
 	mux.HandleFunc("GET /ready", a.Ready)
 
-	// WithRouteTag nomeia o span com o TEMPLATE da rota. Sem ele, o nome do span
-	// seria o caminho concreto e o APM criaria uma operacao distinta por
-	// requisicao — explosao de cardinalidade do lado do APM, o mesmo problema
-	// que `http.route` evita do lado do Prometheus.
+	// O span precisa levar o TEMPLATE da rota, e nao o caminho concreto: sem
+	// isso o APM cria uma operacao distinta por requisicao — a mesma explosao
+	// de cardinalidade que `http.route` evita do lado do Prometheus.
+	//
+	// Isto era feito com `otelhttp.WithRouteTag`, que nao existe mais. A funcao
+	// foi removida porque virou redundante: desde o Go 1.22 o ServeMux expoe o
+	// template em `http.Request.Pattern`, e o otelhttp le esse campo sozinho
+	// para preencher `http.route`. O teste TestRoutesCriaSpanDeServidor cobre
+	// exatamente isso — se uma versao futura parar de ler o Pattern, ele quebra.
 	mux.Handle("POST /donations",
-		otelhttp.WithRouteTag("/donations", a.instrument("/donations", http.HandlerFunc(a.CreateDonation))))
+		a.instrument("/donations", http.HandlerFunc(a.CreateDonation)))
 	mux.Handle("GET /donations",
-		otelhttp.WithRouteTag("/donations", a.instrument("/donations", http.HandlerFunc(a.ListDonations))))
+		a.instrument("/donations", http.HandlerFunc(a.ListDonations)))
 
 	return otelhttp.NewHandler(mux, ServiceName,
 		// As probes nao geram span: o kubelet bate a cada 10s e encheria o APM
@@ -274,6 +280,17 @@ func (a *App) instrument(route string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+
+		// `http.route` no span de servidor, com o TEMPLATE da rota. Sem ele o
+		// APM nomeia a operacao pelo caminho concreto e cria uma operacao
+		// distinta por requisicao — a mesma explosao de cardinalidade que o
+		// atributo evita do lado do Prometheus.
+		//
+		// Isto ja foi `otelhttp.WithRouteTag`, removida na contrib v0.71.
+		// Marcar aqui nao depende de qual helper a contrib oferece: o template
+		// e o mesmo que ja rotula a metrica duas linhas abaixo, entao painel e
+		// trace nao podem divergir.
+		trace.SpanFromContext(r.Context()).SetAttributes(semconv.HTTPRoute(route))
 
 		next.ServeHTTP(rec, r)
 

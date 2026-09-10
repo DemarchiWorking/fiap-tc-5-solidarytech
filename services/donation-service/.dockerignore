@@ -10,3 +10,6 @@ Dockerfile
 *.out
 coverage*
 db/
+
+# Binario compilado localmente: 35 MB inuteis no contexto de build.
+donation-service

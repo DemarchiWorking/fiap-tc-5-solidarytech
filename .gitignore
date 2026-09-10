@@ -71,3 +71,13 @@ Thumbs.db
 # Markdown, em segundos. O PDF ao lado dele SIM e versionado — e o entregavel
 # E3, e quem avalia pode receber so o link do repositorio.
 docs/relatorio/RELATORIO-FASE5.html
+
+# Binarios compilados dentro do diretorio do servico.
+#
+# `go build .` (sem -o) grava o executavel com o nome do DIRETORIO, ali mesmo.
+# Um `git add services/donation-service` depois disso leva 35 MB de ELF para o
+# repositorio sem ninguem perceber — e para dentro do contexto de build da
+# imagem junto.
+services/donation-service/donation-service
+services/ngo-service/ngo-service
+services/volunteer-service/volunteer-service

@@ -221,6 +221,7 @@ module "bucket_loki" {
   source = "../../modules/storage"
 
   nome       = "${var.prefixo}-loki-${local.sufixo_conta}"
+  regiao     = var.regiao
   finalidade = "observabilidade-logs"
 
   # Chunk do Loki e imutavel por construcao: versionar so multiplicaria o custo
@@ -241,6 +242,7 @@ module "bucket_velero" {
   }
 
   nome       = "${var.prefixo}-velero-${local.sufixo_conta}"
+  regiao     = var.regiao_dr
   finalidade = "disaster-recovery"
 
   # Aqui o versionamento importa: protege o backup contra sobrescrita ou

@@ -96,19 +96,54 @@ locals {
 # Bucket do state
 ###############################################################################
 
-resource "aws_s3_bucket" "state" {
-  bucket = local.bucket_state
+# ---------------------------------------------------------------------------
+# POR QUE O BUCKET NAO E UM `aws_s3_bucket`
+#
+# O AWS Academy Learner Lab aplica uma Service Control Policy que NEGA
+# explicitamente `s3:GetBucketObjectLockConfiguration`:
+#
+#   AccessDenied ... with an explicit deny in a service control policy:
+#   arn:aws:organizations::775907582195:policy/.../p-n56aqaux
+#
+# E o provider AWS chama essa API em TODA leitura de `aws_s3_bucket` — na
+# criacao, em cada plan e em cada refresh. O recurso, portanto, e inutilizavel
+# nesta conta: o bucket ate e criado, e o apply morre logo depois, ao tentar
+# le-lo de volta. Testado e reproduzido nos providers 5.100.0 e 6.64.0; nao ha
+# argumento para desligar essa leitura.
+#
+# A saida preserva o essencial — a configuracao continua sendo IaC:
+#
+#   * o bucket e CRIADO pela AWS CLI, de forma idempotente;
+#   * versionamento, criptografia, bloqueio de acesso publico e ciclo de vida
+#     seguem como recursos Terraform, porque cada um le uma API diferente que a
+#     SCP permite (verificado um a um);
+#   * `data "aws_s3_bucket"` fornece o ARN, e tambem funciona — ele le menos
+#     que o resource.
+#
+# Ver ADR-013.
+# ---------------------------------------------------------------------------
+#
+# Sem provisioner de destroy aqui, de proposito: este bucket guarda o state de
+# TODA a infraestrutura e precisa sobreviver ao ciclo diario de lab-up e
+# lab-down. Remove-lo e uma decisao manual.
+resource "terraform_data" "bucket_state" {
+  input = local.bucket_state
 
-  # force_destroy = false de proposito: um `terraform destroy` acidental aqui
-  # levaria junto o state de TODA a infraestrutura. O bucket precisa sobreviver
-  # ao ciclo diario de lab-up / lab-down.
-  force_destroy = false
+  provisioner "local-exec" {
+    command = <<-CMD
+      aws s3api head-bucket --bucket ${self.input} 2>/dev/null \
+        || aws s3api create-bucket --bucket ${self.input} --region us-east-1
+    CMD
+  }
+}
 
-  tags = { Name = local.bucket_state }
+data "aws_s3_bucket" "state" {
+  bucket     = local.bucket_state
+  depends_on = [terraform_data.bucket_state]
 }
 
 resource "aws_s3_bucket_versioning" "state" {
-  bucket = aws_s3_bucket.state.id
+  bucket = data.aws_s3_bucket.state.id
   versioning_configuration {
     # Versionamento e a rede de seguranca do state: um apply corrompido ou um
     # `terraform state rm` equivocado sao reversiveis restaurando a versao
@@ -118,7 +153,7 @@ resource "aws_s3_bucket_versioning" "state" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
-  bucket = aws_s3_bucket.state.id
+  bucket = data.aws_s3_bucket.state.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -133,7 +168,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
 }
 
 resource "aws_s3_bucket_public_access_block" "state" {
-  bucket = aws_s3_bucket.state.id
+  bucket = data.aws_s3_bucket.state.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -142,7 +177,7 @@ resource "aws_s3_bucket_public_access_block" "state" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "state" {
-  bucket = aws_s3_bucket.state.id
+  bucket = data.aws_s3_bucket.state.id
 
   rule {
     id     = "expirar-versoes-antigas-do-state"
@@ -197,7 +232,7 @@ resource "aws_dynamodb_table" "lock" {
 
 output "bucket_state" {
   description = "Nome do bucket S3 do state. Copie para environments/*/backend.tf."
-  value       = aws_s3_bucket.state.id
+  value       = data.aws_s3_bucket.state.id
 }
 
 output "tabela_lock" {
@@ -210,7 +245,7 @@ output "bloco_backend" {
   value       = <<-EOT
     terraform {
       backend "s3" {
-        bucket         = "${aws_s3_bucket.state.id}"
+        bucket         = "${data.aws_s3_bucket.state.id}"
         key            = "prod-use1/terraform.tfstate"
         region         = "${var.regiao}"
         dynamodb_table = "${aws_dynamodb_table.lock.name}"

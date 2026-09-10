@@ -16,6 +16,19 @@
 # precisa nascer na regiao secundaria.
 ###############################################################################
 
+variable "regiao" {
+  description = <<-EOT
+    Regiao do bucket.
+
+    Necessaria porque a criacao acontece pela AWS CLI (ver o cabecalho do
+    recurso `terraform_data.bucket`), e o `create-bucket` precisa saber onde
+    criar. O bucket do Velero vive em us-west-2 de proposito: backup na mesma
+    regiao do cluster nao protege contra falha regional.
+  EOT
+  type        = string
+  default     = "us-east-1"
+}
+
 variable "nome" {
   description = "Nome do bucket. Deve ser globalmente unico em toda a AWS."
   type        = string
@@ -67,18 +80,78 @@ variable "tags" {
   default     = {}
 }
 
-resource "aws_s3_bucket" "principal" {
-  bucket        = var.nome
-  force_destroy = var.forcar_destroy
+# ---------------------------------------------------------------------------
+# POR QUE O BUCKET NAO E UM `aws_s3_bucket`
+#
+# O AWS Academy Learner Lab aplica uma Service Control Policy que NEGA
+# explicitamente `s3:GetBucketObjectLockConfiguration`:
+#
+#   AccessDenied ... with an explicit deny in a service control policy:
+#   arn:aws:organizations::775907582195:policy/.../p-n56aqaux
+#
+# E o provider AWS chama essa API em TODA leitura de `aws_s3_bucket` — na
+# criacao, em cada plan e em cada refresh. O recurso, portanto, e inutilizavel
+# nesta conta: o bucket ate e criado, e o apply morre logo depois, ao tentar
+# le-lo de volta. Testado e reproduzido nos providers 5.100.0 e 6.64.0; nao ha
+# argumento para desligar essa leitura.
+#
+# A saida preserva o essencial — a configuracao continua sendo IaC:
+#
+#   * o bucket e CRIADO pela AWS CLI, de forma idempotente;
+#   * versionamento, criptografia, bloqueio de acesso publico e ciclo de vida
+#     seguem como recursos Terraform, porque cada um le uma API diferente que a
+#     SCP permite (verificado um a um);
+#   * `data "aws_s3_bucket"` fornece o ARN, e tambem funciona — ele le menos
+#     que o resource.
+#
+# Ver ADR-013.
+# ---------------------------------------------------------------------------
+#
+# A regiao vem por variavel porque o bucket do Velero vive em us-west-2: backup
+# guardado na mesma regiao do cluster nao protege contra falha regional. E
+# us-east-1 e o unico caso em que `create-bucket` NAO aceita
+# LocationConstraint — a AWS trata essa regiao como padrao.
+resource "terraform_data" "bucket" {
+  input = {
+    nome   = var.nome
+    regiao = var.regiao
+    limpar = var.forcar_destroy
+  }
 
-  tags = merge(var.tags, {
-    Name      = var.nome
-    Component = var.finalidade
-  })
+  provisioner "local-exec" {
+    command = <<-CMD
+      set -e
+      if ! aws s3api head-bucket --bucket ${self.input.nome} 2>/dev/null; then
+        if [ "${self.input.regiao}" = "us-east-1" ]; then
+          aws s3api create-bucket --bucket ${self.input.nome} --region us-east-1
+        else
+          aws s3api create-bucket --bucket ${self.input.nome} --region ${self.input.regiao} \
+            --create-bucket-configuration LocationConstraint=${self.input.regiao}
+        fi
+      fi
+    CMD
+  }
+
+  # No destroy o bucket precisa sair junto, senao `make lab-down` deixa lixo
+  # cobrando. `when = destroy` so enxerga `self`, por isso a flag viaja no input.
+  provisioner "local-exec" {
+    when       = destroy
+    on_failure = continue
+    command    = <<-CMD
+      if [ "${self.input.limpar}" = "true" ]; then
+        aws s3 rb "s3://${self.input.nome}" --force --region ${self.input.regiao}
+      fi
+    CMD
+  }
+}
+
+data "aws_s3_bucket" "principal" {
+  bucket     = var.nome
+  depends_on = [terraform_data.bucket]
 }
 
 resource "aws_s3_bucket_public_access_block" "principal" {
-  bucket = aws_s3_bucket.principal.id
+  bucket = data.aws_s3_bucket.principal.id
 
   # Os quatro bloqueios ligados. Bucket com log de aplicacao ou backup de
   # cluster jamais deve ser publico, e a configuracao padrao da AWS nao e
@@ -90,7 +163,7 @@ resource "aws_s3_bucket_public_access_block" "principal" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "principal" {
-  bucket = aws_s3_bucket.principal.id
+  bucket = data.aws_s3_bucket.principal.id
 
   rule {
     # Desliga ACLs por completo: a autorizacao passa a ser so por politica,
@@ -101,7 +174,7 @@ resource "aws_s3_bucket_ownership_controls" "principal" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "principal" {
-  bucket = aws_s3_bucket.principal.id
+  bucket = data.aws_s3_bucket.principal.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -114,7 +187,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "principal" {
 }
 
 resource "aws_s3_bucket_versioning" "principal" {
-  bucket = aws_s3_bucket.principal.id
+  bucket = data.aws_s3_bucket.principal.id
 
   versioning_configuration {
     # "Disabled", e nao "Suspended": Suspended so e valido para bucket que JA
@@ -125,7 +198,7 @@ resource "aws_s3_bucket_versioning" "principal" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "principal" {
-  bucket = aws_s3_bucket.principal.id
+  bucket = data.aws_s3_bucket.principal.id
 
   # Uploads multipart interrompidos ficam cobrando storage invisivelmente: nao
   # aparecem na listagem de objetos, mas aparecem na fatura. Regra sempre
@@ -174,15 +247,15 @@ resource "aws_s3_bucket_lifecycle_configuration" "principal" {
 
 output "nome" {
   description = "Nome do bucket."
-  value       = aws_s3_bucket.principal.id
+  value       = data.aws_s3_bucket.principal.id
 }
 
 output "arn" {
   description = "ARN do bucket."
-  value       = aws_s3_bucket.principal.arn
+  value       = data.aws_s3_bucket.principal.arn
 }
 
 output "regiao" {
   description = "Regiao do bucket."
-  value       = aws_s3_bucket.principal.region
+  value       = data.aws_s3_bucket.principal.region
 }

@@ -461,3 +461,73 @@ ecossistema de charts do projeto — o que minimiza o risco de API removida.
 `terraform validate` passava, a política do Academy passava — e o ambiente custaria 2,8× o previsto.
 Datas de fim de suporte são uma dependência tão real quanto uma biblioteca, e só aparecem quando
 alguém as consulta.
+
+
+---
+
+## ADR-013
+
+### Buckets S3 criados pela AWS CLI, configurados por Terraform
+
+**Status:** Aceito · **Data:** 2026-09-10 · **Descoberto em execução real no Learner Lab**
+
+**Contexto.** No primeiro `terraform apply` contra a conta do lab, o bootstrap falhou:
+
+```
+Error: reading S3 Bucket (solidarytech-tfstate-...) object lock configuration:
+api error AccessDenied: User: .../voclabs/... is not authorized to perform:
+s3:GetBucketObjectLockConfiguration ... with an explicit deny in a service
+control policy: arn:aws:organizations::775907582195:policy/.../p-n56aqaux
+```
+
+O AWS Academy aplica uma **Service Control Policy que nega explicitamente**
+`s3:GetBucketObjectLockConfiguration`. E o provider AWS chama essa API em **toda
+leitura** de `aws_s3_bucket` — na criação, em cada `plan` e em cada refresh.
+
+O efeito é cruel: o bucket **é criado**, e o apply morre logo depois, ao tentar lê-lo
+de volta. O recurso fica órfão e o state, inconsistente.
+
+Testado e reproduzido nos providers **5.100.0 e 6.64.0**. Não existe argumento para
+desligar essa leitura, e a SCP não é editável por quem usa o lab. Ou seja:
+**`aws_s3_bucket` é inutilizável nesta conta.**
+
+**Decisão.** Separar criação de configuração:
+
+| Camada | Como | Por quê funciona |
+|---|---|---|
+| Criação do bucket | `terraform_data` com `local-exec` chamando `aws s3api create-bucket`, idempotente via `head-bucket` | A CLI não lê object lock |
+| Versionamento, criptografia, bloqueio público, ciclo de vida | Recursos Terraform normais | Cada um lê uma API distinta, **todas permitidas** — verificado uma a uma |
+| ARN e região | `data "aws_s3_bucket"` | O data source lê menos que o resource, e passa |
+
+**Por que dentro do Terraform e não num script à parte.** Os nomes dos buckets
+derivam do sufixo da conta (`${var.prefixo}-velero-${local.sufixo_conta}`). Um
+script externo precisaria recalcular essa lógica, e duas fontes de verdade para
+um nome é como se cria um bug que só aparece na segunda conta. Com
+`terraform_data`, o nome continua sendo computado num lugar só, e `terraform
+apply` segue como comando único.
+
+**Consequências.**
+
+*Positivas:*
+
+- A configuração de segurança dos buckets **continua sendo IaC**, revisável em PR.
+  Nada foi movido para o console.
+- `terraform plan` volta a ser limpo e idempotente — verificado.
+
+*Negativas, assumidas:*
+
+- Exige a **AWS CLI** onde o Terraform roda. Já era pré-requisito do projeto
+  (`aws eks update-kubeconfig` não é containerizável), então não acrescenta
+  dependência nova.
+- O bucket não aparece como recurso gerenciado no `state list`. Quem for auditar
+  precisa saber disso — daí este ADR.
+- `local-exec` não é reversível como um recurso nativo: o `destroy` depende de um
+  provisioner `when = destroy`, que só existe no módulo `storage` (onde
+  `forcar_destroy` é verdadeiro). O bucket de **state** não tem esse provisioner
+  de propósito: ele guarda o state de toda a infraestrutura e precisa sobreviver
+  ao ciclo diário de `lab-up` / `lab-down`.
+
+**A lição.** Nenhum gate estático pegaria isso — o código é HCL válido, o
+`terraform validate` passa, e a política do Academy também. Restrição de SCP só
+aparece quando se chama a API de verdade. É o segundo achado desta entrega que só
+a execução revelou; o primeiro foi o custo de extended support do EKS (ADR-012).

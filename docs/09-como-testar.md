@@ -16,7 +16,56 @@ são do ambiente provisionado, não exemplos.
 
 ---
 
-## 0. Antes de tudo — apontar o `kubectl`
+## 0a. ONDE rodar — leia antes de qualquer comando
+
+**Todos os comandos deste documento rodam no WSL (Ubuntu), não no CMD nem no
+PowerShell.** As ferramentas do projeto foram instaladas sem `sudo`, dentro do
+`$HOME` do WSL — `kubectl`, `aws`, `terraform`, `helm`, `k6`. E o kubeconfig do
+cluster vive lá.
+
+```bash
+wsl
+```
+
+Depois, dentro do WSL:
+
+```bash
+tc5          # alias para a raiz do projeto
+```
+
+**Como saber que você está no lugar certo:**
+
+```bash
+kubectl get nodes
+```
+
+Se vier a lista de nós, está certo. Se vier
+
+```
+Unable to connect to the server: dial tcp [::1]:8080
+```
+
+você está no `kubectl` do Windows, que não conhece este cluster. Se vier
+`'aws' is not recognized` ou `'grep' is not recognized`, está no CMD.
+
+> **Por que isso engana tanto:** o Windows *tem* um `kubectl` no PATH (vem com
+> o Docker Desktop). Ele responde ao comando, tenta `localhost:8080` e falha
+> com uma mensagem de rede — que parece problema de cluster, e é problema de
+> shell.
+
+Se um terminal WSL novo não achar as ferramentas, o `~/.bashrc` está sem a
+linha do PATH:
+
+```bash
+export PATH="$HOME/.ferramentas-tc5/bin:$PATH"
+```
+
+Notação: `$BASE` e `$HOME` são sintaxe de shell POSIX. No CMD seria `%BASE%`, e
+não é o caso aqui — no CMD nada disto funciona.
+
+---
+
+## 0b. Apontar o `kubectl`
 
 ```bash
 ./solidary kubeconfig      # ou: make kubeconfig

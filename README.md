@@ -6,6 +6,11 @@ Plataforma que conecta **ONGs**, **doadores** e **voluntários**, operada com
 maturidade **SRE · FinOps · ITSM/AIOps · Segurança e DR** sobre **AWS (EKS)** —
 provisionada 100% por **Terraform** e entregue por **GitOps (ArgoCD)**.
 
+> 📌 **Onde a entrega está:** [`ESTADO-DA-ENTREGA.md`](ESTADO-DA-ENTREGA.md)
+> — o que está pronto e validado, o que falta e o que fazer agora.
+> Para testar cada parte com comandos e parâmetros:
+> [`docs/10-validacao-passo-a-passo.md`](docs/10-validacao-passo-a-passo.md).
+
 > Roda inteiramente no **AWS Academy Learner Lab**, o ambiente gratuito que a
 > FIAP disponibiliza. Isso não é detalhe de execução: é a restrição que moldou a
 > arquitetura, e cada contorno está documentado com o desenho de produção ao lado.

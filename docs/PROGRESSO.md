@@ -1,32 +1,20 @@
 # Progresso — TCC Fase 5 · SolidaryTech na AWS
 
-> ## ⏱️ Retomada rápida — leia esta seção primeiro
+> ## ⏱️ Retomada rápida
 >
-> Este arquivo é longo e cronológico. O que você precisa para continuar de onde
-> parou está aqui, em uma tela.
-
-### Onde estamos
-
-| Frente | Estado |
-|---|---|
-| **F0** Fundação (Docker, K8s, IaC, CI/CD, GitOps, Observabilidade, APM) | Completa em código |
-| **F1** SRE (3 SLIs, SLOs, dashboard, MTTR) | Completa — o SLI de frescor voltou a funcionar |
-| **F2** FinOps (tags, rightsizing, forecast) | Completa — painel passou a consultar OpenCost de verdade |
-| **F3** ITSM/AIOps (AIOps, ciclo de incidente, self-healing) | Código completo; **um elo depende de configuração no New Relic** |
-| **F4** DR (PCN, Velero, warm standby) | Completa em código |
-
-### O que falta, e de quem depende
-
-| Pendência | Depende de | Como resolver |
-|---|---|---|
-| `docker build --target test` nas 3 imagens · `make smoke` | **Você** | O serviço `com.docker.service` está parado e exige elevação. Abra o Docker Desktop uma vez, aceitando o UAC, e rode `make test-local && make smoke` |
-| `make` não existe nesta máquina | **Você** | `winget search make` (Windows) ou `sudo apt install make` (WSL). Sem ele **nenhum** comando do guia roda, nem o `./comecar.sh` |
-| `terraform plan` / `apply` | Sessão do Learner Lab | `make pre-voo` diz se a credencial está válida |
-| `go test -race` | gcc/cgo | Já coberto pelo estágio `test` do Dockerfile, que instala `gcc musl-dev` |
-| Nomes, RMs e **links** do repositório e do vídeo | **Você** | `docs/relatorio/RELATORIO-DE-ENTREGA.md` §1 · depois `make relatorio` |
-| Notificação de incidentes operando | Credenciais | `./comecar.sh` etapa 6, ou `PAGERDUTY_ROUTING_KEY` e `CHATOPS_WEBHOOK_URL` no ambiente |
-| Disparo automático do self-heal | Config no New Relic | Passo a passo em `docs/05-itsm-aiops/README.md` |
-| Prints de evidência | Cluster no ar | `docs/07-evidencias/README.md` diz qual print cobre qual requisito |
+> **O status da entrega mora em [`ESTADO-DA-ENTREGA.md`](../ESTADO-DA-ENTREGA.md)**,
+> na raiz do repositório: o que está pronto, o que falta, de quem depende cada
+> pendência e como retomar numa sessão nova.
+>
+> Este arquivo aqui é o **log cronológico** — o que foi feito, em que ordem, e
+> por quê. Útil para entender uma decisão; não é onde olhar para saber o estado
+> atual.
+>
+> A seção de retomada que existia aqui foi removida porque envelheceu: dizia
+> que o self-heal dependia de configuração no New Relic (o APM passou a ser o
+> Datadog, ADR-004), que o Docker local era bloqueio (as imagens são
+> construídas pela CI) e que `make` era obrigatório (o dispatcher `./solidary`
+> cobre os mesmos alvos). Duas fontes de verdade divergindo é pior que uma só.
 
 ### Para o dia da gravação
 

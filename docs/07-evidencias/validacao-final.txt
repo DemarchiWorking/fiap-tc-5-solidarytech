@@ -2,32 +2,38 @@ VALIDACAO FINAL DA ENTREGA — tudo medido, nada estimado
 =======================================================================
 
 === A. SESSAO ===
-  PDT 14:44  (termina 17:50)
+  PDT 15:07  (termina 17:50)
   conta 227007723638
   NLB   http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com
 
 === B. GIT ===
-  HEAD 421dd9f  ·  origin/main 421dd9f
+  HEAD c427a4b  ·  origin/main c427a4b
   arvore: 1 modificacao(oes)
-  commits hoje: 54
+  commits hoje: 56
 
 === C. APLICACOES ===
   solidary-donation   donation-service-5fd9d7ffdd-gdvpw              Running    r=0
   solidary-donation   donation-service-5fd9d7ffdd-r5wh4              Running    r=0
-  solidary-loadtest   k6-run-1789073683-86qs2                        Completed  r=0
+  solidary-loadtest   k6-run-1789077632-wsfdg                        Completed  r=0
   solidary-ngo        ngo-service-5574fc5fbf-htc9r                   Running    r=0
   solidary-ngo        ngo-service-5574fc5fbf-wdcvq                   Running    r=0
   solidary-volunteer  volunteer-service-7496469c95-fs8dz             Running    r=0
   solidary-volunteer  volunteer-service-7496469c95-kvgk8             Running    r=0
   solidary-volunteer  volunteer-worker-584b74df84-27kk9              Running    r=0
+  solidary-volunteer  volunteer-worker-584b74df84-4xp2w              Running    r=0
+  solidary-volunteer  volunteer-worker-584b74df84-94c29              Running    r=0
   solidary-volunteer  volunteer-worker-584b74df84-hp2kd              Running    r=0
+  solidary-volunteer  volunteer-worker-584b74df84-n8mx8              Running    r=0
+  solidary-volunteer  volunteer-worker-584b74df84-vs66s              Running    r=0
 
 === D. ARGOCD ===
-       15 Synced Healthy
+        1 OutOfSync Healthy
+       14 Synced Healthy
+  FORA: velero OutOfSync Healthy
 
 === E. APIs (pelo endereco publico) ===
   /ngo/health      HTTP 200
-  /ngo/ngos        HTTP 200
+  /ngo/ngos        HTTP 000
   /donations       HTTP 200
   /volunteers/1    HTTP 200
   POST /donations  HTTP 201
@@ -40,17 +46,17 @@ VALIDACAO FINAL DA ENTREGA — tudo medido, nada estimado
 
 === G. SLIs ===
   slo:donation_disponibilidade_erro:ratio_rate5m   0
-  slo:donation_latencia:p95                        0.004812277562713065
+  slo:donation_latencia:p95                        0.007814632783322709
   slo:donation_frescor_erro:ratio_rate1h           0
   regras: 255 totais, 0 com problema
   alvos:  27 ativos, 0 down
 
 === H. APM ===
-  otelcol_exporter_sent_spans{exporter="datadog"} 63019
+  otelcol_exporter_sent_spans{exporter="datadog"} 115316
 
 === I. BACKUP / DR / TAGS / IAM ===
   BSL default Available
-  backups: 7
+  backups: 8
   CostCenter=NGO-Core        42 recursos
   Project=SolidaryTech       42 recursos
   Environment=Production     42 recursos

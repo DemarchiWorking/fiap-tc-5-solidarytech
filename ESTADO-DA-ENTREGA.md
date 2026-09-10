@@ -4,7 +4,7 @@
 > está pronto**, **o que falta** e **o que fazer agora**. Tudo o que está
 > afirmado abaixo foi medido no ambiente provisionado, não estimado.
 
-**Última validação:** 10/09/2026 · commit `421dd9f` · conta `227007723638` ·
+**Última validação:** 10/09/2026 · commit `c427a4b` · conta `227007723638` ·
 região `us-east-1`
 
 ---
@@ -19,10 +19,11 @@ região `us-east-1`
 | **APIs** | `/ngo/health` `/ngo/ngos` `/donations` `/volunteers/1` → **200** · `POST /donations` → **201** |
 | **SLIs** | disponibilidade `0` erro · frescor `0` erro · latência p95 ~5 ms sob carga |
 | **Observabilidade** | 255 regras (**0 com problema**) · 27 alvos (**0 down**) |
+| **Painéis** | **18/18** consultas do Grafana devolvendo dado |
 | **APM** | **62.952 spans** entregues ao Datadog, 0 falhas |
 | **Backup** | BSL `Available` · 7 backups · dados no S3 |
 | **FinOps** | 42 recursos com as 3 tags obrigatórias |
-| **Entregáveis** | 23 documentos · 10 evidências de terminal · PDF 361 KB |
+| **Entregáveis** | 24 documentos · 11 evidências de terminal · PDF 361 KB |
 
 **O que falta é apresentação, não engenharia.**
 
@@ -48,7 +49,7 @@ região `us-east-1`
 |---|---|---|
 | 3 SLIs (o enunciado pede 2) | ✅ | disponibilidade, latência, **frescor da fila** |
 | SLO por SLI + SLA contratual | ✅ | [`sli-slo-sla.md`](docs/03-sre/sli-slo-sla.md) |
-| Dashboard SRE com error budget | ✅ | Grafana → *SolidaryTech · SRE / SLO* |
+| Dashboard SRE com error budget | ✅ | **18/18 consultas validadas contra o Prometheus**, não só o JSON |
 | **Chaos drill executado** | ✅ | **MTTD medido: 76 s** — [`mttr-chaos-drill.md`](docs/03-sre/mttr-chaos-drill.md) |
 | **Error budget em ação** | ✅ | incidente real: detecção → correção → recuperação |
 
@@ -142,10 +143,16 @@ precisaram do ambiente rodando sob carga.
 | 8 | **4 CVEs reais** | Gate do Trivy barrando `x/crypto`, `pgx`, `grpc` |
 | 9 | **`trivy-action@0.28.0` não existe mais** | Job morria em "Set up job", sem dizer qual ação |
 | 10 | **`gosec` não compila com Go 1.26** | SAST reprovava sem existir achado |
+| 11 | **Painel de erro 5xx vazio sem erro** | Gráfico de erros mostrando "No data" com a plataforma saudável |
 
 **O padrão:** `kustomize`, `kubeconform`, `terraform validate` e os cinco gates
 locais validam **a forma**. Nenhum executa um cluster. Um HPA sintaticamente
-perfeito que nunca escala passa por todos.
+perfeito que nunca escala passa por todos — e um painel sintaticamente perfeito
+que renderiza vazio também.
+
+Os defeitos 1, 2, 3, 5, 6, 7 e 11 só apareceram **executando**: sob carga, com
+o cluster no ar, consultando o Prometheus de verdade. Os defeitos 4, 8, 9 e 10
+só apareceram quando a pipeline **rodou pela primeira vez** neste repositório.
 
 ---
 

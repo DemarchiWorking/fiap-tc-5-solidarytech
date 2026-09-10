@@ -1,0 +1,34 @@
+APM E DISTRIBUTED TRACING — capturado no cluster
+2026-09-10 20:13 UTC  ·  commit 2245d06
+=======================================================================
+
+APM: Datadog (site us5), por continuidade com a Fase 4 — ADR-004.
+Exporter nativo do OTel Collector: nenhum agente proprietario no cluster.
+A chave vem do Secret apm-credentials, materializado pelo bootstrap a
+partir de variavel de ambiente — nunca versionada.
+
+1. O COLLECTOR VALIDOU A CHAVE NA SUBIDA
+   API key validation successful.
+
+2. SPANS RECEBIDOS E EXPORTADOS  (metricas do proprio Collector, porta 8888)
+   otelcol_exporter_sent_spans{exporter="datadog"} 7144
+   otelcol_receiver_accepted_spans{receiver="otlp",transport="grpc"} 1153
+   otelcol_receiver_accepted_spans{receiver="otlp",transport="http"} 5991
+
+   send_failed e enqueue_failed ausentes ou em zero significam que todo
+   span aceito foi entregue ao Datadog.
+
+3. O PIPELINE DE TRACES
+   aplicacao --(OTLP)--> Collector --(exporter datadog)--> Datadog APM
+
+   O donation-service instrumenta o servidor HTTP com otelhttp e propaga
+   o contexto na publicacao ao SQS; o volunteer-worker continua o mesmo
+   trace ao consumir. E o trace ponta a ponta que o requisito pede:
+   donation-service -> SQS -> volunteer-worker.
+
+4. CORRELACAO LOG <-> TRACE  (F0.5a)
+   As linhas de log saem em JSON com trace_id e span_id. Amostra real:
+
+5. ALVO DO PROMETHEUS PARA O COLLECTOR
+   ServiceMonitor aponta para a porta: metrics
+   Portas do Service: jaeger-compact jaeger-grpc jaeger-thrift metrics otlp otlp-http zipkin 

@@ -20,11 +20,34 @@ controller:
       service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
       service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
       service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-      # Health check no /healthz do proprio nginx. Sem isto o NLB usa TCP, que
-      # considera saudavel um nginx que aceita conexao mas devolve 503.
-      service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "http"
-      service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/healthz"
-      service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "10254"
+      # NAO declare healthcheck-port/protocol/path aqui.
+      #
+      # Estas tres anotacoes existiam, apontando para a porta 10254 com o
+      # argumento de que o /healthz do nginx e melhor que um check TCP. O
+      # argumento e correto; a porta, nao: 10254 e a porta de METRICAS do
+      # CONTAINER. O pod nao usa hostNetwork, entao no IP do no ela responde
+      # `Connection refused` — em todos os nos, sempre.
+      #
+      # O efeito era caro e silencioso:
+      #
+      #   1. os 3 alvos ficavam `unhealthy` (Target.FailedHealthChecks);
+      #   2. com TODOS insalubres, o NLB entra em fail-open e manda trafego
+      #      para os 3;
+      #   3. so 2 nos tem pod do controller, e `externalTrafficPolicy: Local`
+      #      DESCARTA o pacote no terceiro;
+      #   4. resultado medido: 15% das requisicoes externas em timeout, sem
+      #      nada aparecer no log do nginx nem nas metricas — porque o pacote
+      #      morria antes de chegar ao servico.
+      #
+      # Com `externalTrafficPolicy: Local`, o Kubernetes JA aloca um
+      # `healthCheckNodePort` e responde HTTP nele: 200 nos nos com pod, 503
+      # nos sem. Medido neste cluster, na porta 31018: 200, 200, 503 — que e
+      # exatamente o que o comentario abaixo descreve como comportamento
+      # desejado. O provider in-tree usa esse porto sozinho quando nao ha
+      # anotacao mandando o contrario.
+      #
+      # Ou seja: o raciocinio do comentario abaixo sempre esteve certo, e estas
+      # anotacoes o contradiziam.
 
     # Preserva o IP real do cliente. DENTRO do mapa `service` — na versao
     # anterior estava como `service.externalTrafficPolicy`, uma chave literal

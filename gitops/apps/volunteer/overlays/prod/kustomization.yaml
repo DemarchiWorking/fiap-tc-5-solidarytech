@@ -4,27 +4,27 @@ kind: Kustomization
 namespace: solidary-volunteer
 
 resources:
-  - ../../base
-  - ingress.yaml
-  - hpa.yaml
-  - pdb.yaml
-  - networkpolicy.yaml
-  - worker-deployment.yaml
-  - worker-pdb.yaml
+- ../../base
+- ingress.yaml
+- hpa.yaml
+- pdb.yaml
+- networkpolicy.yaml
+- worker-deployment.yaml
+- worker-pdb.yaml
 
 # A pipeline reescreve `newTag` com o SHA de 40 caracteres do commit
 # (`kustomize edit set image`) e faz commit neste repositorio. E a ponte formal
 # entre CI e CD: o deploy nasce de um commit, nunca de um `kubectl` humano.
 #
 # `newName` recebe o registry ECR real por `make configurar-repo`.
-images:
-  - name: volunteer-service
-    newName: 227007723638.dkr.ecr.us-east-1.amazonaws.com/solidarytech/volunteer-service
     # `latest` e um MARCADOR, nao uma tag publicavel: o ECR e IMMUTABLE e a
     # pipeline so publica a tag com o SHA do commit. Enquanto este valor estiver
     # aqui, nenhuma imagem correspondente existe no registry — quem substitui e
     # o job `update-gitops`, no fim da CI. Ver Passo 3.5 do COMO-SUBIR.md.
-    newTag: latest
+images:
+- name: volunteer-service
+  newName: 227007723638.dkr.ecr.us-east-1.amazonaws.com/solidarytech/volunteer-service
+  newTag: f064e04fad4ffa17857b328424cc608752941b44
 
 commonAnnotations:
   solidarytech.io/gerenciado-por: argocd

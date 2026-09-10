@@ -30,10 +30,23 @@ amarelo()  { printf '\033[33m%s\033[0m\n' "$1"; }
 vermelho() { printf '\033[31m%s\033[0m\n' "$1"; }
 passo()    { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
+# Terraform nativo quando existir; container so como alternativa. O Makefile
+# ja preferia o binario nativo — manter duas politicas para a mesma
+# ferramenta so cobra o preco numa maquina sem daemon Docker, e no pior
+# momento possivel.
 tf() {
-  docker run --rm -v "$RAIZ":/wk -w /wk -v "$HOME/.aws":/root/.aws:ro \
-    hashicorp/terraform:1.9 -chdir="infra/environments/$AMBIENTE" "$@"
+  if command -v terraform >/dev/null 2>&1; then
+    terraform -chdir="infra/environments/$AMBIENTE" "$@"
+  else
+    docker run --rm -v "$RAIZ":/wk -w /wk -v "$HOME/.aws":/root/.aws:ro \
+      hashicorp/terraform:1.9 -chdir="infra/environments/$AMBIENTE" "$@"
+  fi
 }
+
+# `python` nao existe em distro moderna — so `python3`. Sem este envelope o
+# script morre com "command not found" no meio do fluxo, com o cluster ja
+# no ar e cobrando por hora.
+py() { command -v python3 >/dev/null 2>&1 && python3 "$@" || python "$@"; }
 
 # ---------------------------------------------------------------------------
 passo "1/8  Conferindo a sessao do AWS Academy"
@@ -53,7 +66,7 @@ passo "2/8  Lendo as saidas do Terraform e configurando o kubectl"
 
 SAIDAS=$(tf output -json)
 ler() {
-  printf '%s' "$SAIDAS" | python -c "
+  printf '%s' "$SAIDAS" | py -c "
 import json,sys
 d=json.load(sys.stdin)
 for p in sys.argv[1].split('.'):
@@ -106,11 +119,11 @@ passo "5/8  Materializando Secrets e ConfigMaps"
 DB_SENHA=$(aws secretsmanager get-secret-value \
   --secret-id "$SECRET_ARN" --region "$REGIAO" \
   --query SecretString --output text \
-  | python -c "import json,sys; print(json.load(sys.stdin)['password'])")
+  | py -c "import json,sys; print(json.load(sys.stdin)['password'])")
 
 # URL-encode: a senha gerada pelo Terraform contem caracteres especiais que
 # quebrariam a URI de conexao se inseridos crus.
-DB_SENHA_ENC=$(python -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$DB_SENHA")
+DB_SENHA_ENC=$(py -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$DB_SENHA")
 
 criar_secret_db() {
   local NS="$1" NOME="$2" BANCO="$3"
@@ -136,7 +149,7 @@ done
 
 # Senha do Grafana: gerada aqui, guardada so no cluster.
 if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
-  GRAFANA_SENHA=$(python -c "import secrets; print(secrets.token_urlsafe(18))")
+  GRAFANA_SENHA=$(py -c "import secrets; print(secrets.token_urlsafe(18))")
   kubectl -n monitoring create secret generic grafana-admin \
     --from-literal=admin-user=admin \
     --from-literal=admin-password="$GRAFANA_SENHA" >/dev/null

@@ -30,43 +30,80 @@ falha()   { printf "  ${VERMELHO}✗${RESET}  %s\n" "$1"; BLOQUEIOS=$((BLOQUEIOS
 aviso()   { printf "  ${AMARELO}!${RESET}  %s\n" "$1"; AVISOS=$((AVISOS+1)); }
 dica()    { printf "     ${AZUL}→${RESET} %s\n" "$1"; }
 
+# Terraform nativo quando existir; container so como alternativa — a mesma
+# politica do Makefile. Antes, a secao inteira de Terraform ficava atras de
+# um `docker info`: numa maquina com terraform instalado e sem Docker, o
+# pre-voo dizia GO sem ter validado uma linha de infraestrutura.
+tem_terraform() { command -v terraform >/dev/null 2>&1 || docker info >/dev/null 2>&1; }
+tf() {
+  if command -v terraform >/dev/null 2>&1; then
+    terraform "$@"
+  else
+    docker run --rm -v "$RAIZ":/wk -w /wk hashicorp/terraform:1.9 "$@"
+  fi
+}
+
+# `python` nao existe em distro moderna — so `python3`. Sem este envelope o
+# script morre com "command not found" no meio do fluxo, com o cluster ja
+# no ar e cobrando por hora.
+py() { command -v python3 >/dev/null 2>&1 && python3 "$@" || python "$@"; }
+
 printf "\n${NEGRITO}PRÉ-VOO — SolidaryTech / AWS Academy Learner Lab${RESET}\n"
 printf "%s\n" "$(date '+%Y-%m-%d %H:%M')"
 
 # ===========================================================================
 secao "1. Ferramentas na máquina"
 
-# `make` entra na lista porque TODO comando deste projeto passa por ele —
-# inclusive o proprio ./comecar.sh, que chama `make bootstrap` na primeira
-# etapa. Ele nao vem no Git for Windows nem na imagem padrao do WSL, entao a
-# ausencia e comum e o sintoma e opaco: "make: command not found" no meio de um
-# console que ja tinha validado credencial e regiao.
-for FERRAMENTA in git python make; do
+# Só estas duas são bloqueio. `make` saiu da lista: o dispatcher `./solidary`
+# expõe os mesmos alvos sem ele, então a ausência custa conveniência, não a
+# entrega. Mantê-lo como bloqueio reprovava máquinas onde tudo funciona.
+for FERRAMENTA in git python3; do
   if command -v "$FERRAMENTA" >/dev/null 2>&1; then
     ok "$FERRAMENTA"
   else
     falha "$FERRAMENTA não encontrado"
-    if [[ "$FERRAMENTA" == "make" ]]; then
-    printf "      Todo o projeto e dirigido pelo Makefile — sem ele nenhum\n"
-    printf "      comando deste guia funciona.\n"
-    printf "      Windows:  winget search make   (instale GnuWin32.Make ou ezwinports.make)\n"
-    printf "      WSL/Linux: sudo apt install make\n"
-    printf "      macOS:     ja vem com as Command Line Tools do Xcode\n"
-    fi
   fi
 done
 
+if command -v make >/dev/null 2>&1; then
+  ok "make"
+else
+  aviso "make não encontrado — use ./solidary <alvo> no lugar de make <alvo>"
+  dica "Windows: winget search make  ·  WSL/Linux: sudo apt install make"
+fi
+
 # Docker precisa estar RODANDO, não apenas instalado. É a distinção que mais
 # custa tempo: o binário responde, o daemon não.
+#
+# Mas ele só é BLOQUEIO quando é a única forma de rodar Terraform, kubectl e
+# aws. Com os três nativos na máquina, o que sobra para o Docker é construir
+# imagem localmente e o `make smoke` — e as imagens da entrega saem da CI, onde
+# o runner tem daemon próprio. Tratar isso como bloqueio dava NO-GO em máquina
+# onde a subida inteira funciona.
+FALTA_NATIVO=""
+for N in terraform kubectl aws; do
+  command -v "$N" >/dev/null 2>&1 || FALTA_NATIVO="$FALTA_NATIVO $N"
+done
+
 if ! command -v docker >/dev/null 2>&1; then
-  falha "docker não encontrado"
-  dica "Instale o Docker Desktop"
+  if [[ -n "$FALTA_NATIVO" ]]; then
+    falha "docker não encontrado, e falta(m) o(s) binário(s) nativo(s):$FALTA_NATIVO"
+    dica "Instale o Docker Desktop, ou instale os binários acima"
+  else
+    aviso "docker não encontrado — build local de imagem e 'make smoke' indisponíveis"
+    dica "As imagens da entrega são construídas pela CI, não aqui"
+  fi
 elif docker info >/dev/null 2>&1; then
   ok "docker rodando ($(docker version --format '{{.Server.Version}}' 2>/dev/null))"
 else
-  falha "docker instalado, mas o DAEMON ESTÁ PARADO"
-  dica "Abra o Docker Desktop e espere o ícone ficar verde"
-  dica "Terraform, kubectl e os builds rodam em container — nada funciona sem ele"
+  if [[ -n "$FALTA_NATIVO" ]]; then
+    falha "docker instalado, mas o DAEMON ESTÁ PARADO — e falta(m):$FALTA_NATIVO"
+    dica "Abra o Docker Desktop e espere o ícone ficar verde"
+  else
+    aviso "daemon do Docker parado — build local de imagem e 'make smoke' indisponíveis"
+    dica "Terraform, kubectl e aws rodam nativos aqui; a subida não depende do Docker"
+    dica "Para 'make publicar-imagens' pela CI, o daemon local também é dispensável"
+  fi
 fi
 
 if command -v aws >/dev/null 2>&1; then
@@ -113,8 +150,8 @@ else
   fi
 
   if IDENTIDADE=$(aws sts get-caller-identity --output json 2>/dev/null); then
-    CONTA=$(printf '%s' "$IDENTIDADE" | python -c "import json,sys; print(json.load(sys.stdin)['Account'])")
-    ARN=$(printf '%s' "$IDENTIDADE" | python -c "import json,sys; print(json.load(sys.stdin)['Arn'])")
+    CONTA=$(printf '%s' "$IDENTIDADE" | py -c "import json,sys; print(json.load(sys.stdin)['Account'])")
+    ARN=$(printf '%s' "$IDENTIDADE" | py -c "import json,sys; print(json.load(sys.stdin)['Arn'])")
     ok "sessão ATIVA — conta $CONTA"
     printf "        %s\n" "$ARN"
 
@@ -274,15 +311,15 @@ fi
 # ===========================================================================
 secao "7. Gates de código (sem nuvem, sem custo)"
 
-if python scripts/verificar-academy.py infra >/tmp/pv-academy.log 2>&1; then
+if py scripts/verificar-academy.py infra >/tmp/pv-academy.log 2>&1; then
   ok "policy do AWS Academy — nenhum recurso bloqueado no Terraform"
 else
   falha "policy do AWS Academy REPROVOU"
   sed 's/^/        /' /tmp/pv-academy.log | tail -12
 fi
 
-if python -c "import yaml" 2>/dev/null; then
-  if python scripts/verificar-observabilidade.py . >/tmp/pv-obs.log 2>&1; then
+if py -c "import yaml" 2>/dev/null; then
+  if py scripts/verificar-observabilidade.py . >/tmp/pv-obs.log 2>&1; then
     ok "observabilidade coerente (dashboards, regras de SLO, contrato de métrica)"
   else
     falha "gate de observabilidade REPROVOU"
@@ -294,31 +331,28 @@ else
   # verificado a coerencia da observabilidade. Gate que pode ser pulado em
   # silencio nao e gate.
   falha "PyYAML ausente — o gate de observabilidade NAO rodou"
-  echo "        Instale com:  make setup   (ou: python -m pip install pyyaml)"
+  echo "        Instale com:  make setup   (ou: py -m pip install pyyaml)"
   dica "pip install pyyaml"
 fi
 
-if docker info >/dev/null 2>&1; then
+if tem_terraform; then
   printf "  ${AZUL}…${RESET}  validando o Terraform (pode levar ~1 min)\n"
-  if docker run --rm -v "$RAIZ":/wk -w /wk hashicorp/terraform:1.9 \
-       fmt -check -recursive infra/ >/dev/null 2>&1; then
+  if tf fmt -check -recursive infra/ >/dev/null 2>&1; then
     ok "terraform fmt"
   else
     aviso "terraform fmt aponta arquivos desformatados"
     dica "make fmt"
   fi
 
-  if docker run --rm -v "$RAIZ":/wk -w /wk hashicorp/terraform:1.9 \
-       -chdir=infra/environments/prod-use1 init -backend=false -input=false >/dev/null 2>&1 && \
-     docker run --rm -v "$RAIZ":/wk -w /wk hashicorp/terraform:1.9 \
-       -chdir=infra/environments/prod-use1 validate >/tmp/pv-tf.log 2>&1; then
+  if tf -chdir=infra/environments/prod-use1 init -backend=false -input=false >/dev/null 2>&1 && \
+     tf -chdir=infra/environments/prod-use1 validate >/tmp/pv-tf.log 2>&1; then
     ok "terraform validate (prod-use1)"
   else
     falha "terraform validate REPROVOU"
     sed 's/^/        /' /tmp/pv-tf.log | tail -15
   fi
 else
-  aviso "Docker parado — terraform fmt/validate e os builds não foram verificados"
+  aviso "sem Terraform (nem binário nativo, nem Docker) — fmt/validate não rodaram"
 fi
 
 # ===========================================================================

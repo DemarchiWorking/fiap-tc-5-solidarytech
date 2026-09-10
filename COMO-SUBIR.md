@@ -17,6 +17,11 @@ de troubleshooting está no fim.
 > Rode `./comecar.sh` também no início de **cada sessão do lab**: as credenciais
 > do Academy expiram em ~4 h e ele detecta isso em segundos.
 
+> **Sem `make` na máquina?** Todo `make <alvo>` deste documento tem o equivalente
+> `./solidary <alvo>`, com o mesmo nome e o mesmo efeito — o dispatcher chama os
+> mesmos scripts, e delega ao `make` quando ele existe. `./solidary` sozinho lista
+> os alvos. `make` não vem no Git for Windows nem na imagem padrão do WSL.
+
 ---
 
 > Se preferir o caminho manual: **responda as perguntas da Parte 1**, cada uma
@@ -165,21 +170,40 @@ drill de DR (**F4.2**) rodarem.
 
 ```bash
 # Publica automaticamente as credenciais da sessão atual
-make sync-creds
+make sync-creds          # ou: ./solidary sync-creds  (mesmo script)
 ```
 
 Isso exige o [GitHub CLI](https://cli.github.com) autenticado (`gh auth login`).
 Manualmente, em **Settings → Secrets and variables → Actions**:
 
-| Tipo | Nome | Valor |
-|---|---|---|
-| Secret | `AWS_ACCESS_KEY_ID` | do `~/.aws/credentials` |
-| Secret | `AWS_SECRET_ACCESS_KEY` | idem |
-| Secret | `AWS_SESSION_TOKEN` | idem |
-| Variable | `AWS_REGION` | `us-east-1` |
-| Variable | `EKS_CLUSTER` | `solidarytech-prod-eks` |
-| Variable | `TF_STATE_BUCKET` | saída do `make bootstrap` |
-| Variable | `TF_LOCK_TABLE` | `SolidaryTech-tfstate-lock` |
+**Aba Secrets — as três que destravam a publicação das imagens:**
+
+| Nome | Valor |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | do `~/.aws/credentials` |
+| `AWS_SECRET_ACCESS_KEY` | idem |
+| `AWS_SESSION_TOKEN` | idem |
+
+São exatamente as três que o `make sync-creds` publica. Com elas, os três
+workflows de CI constroem, publicam no ECR e commitam a tag no GitOps.
+
+**Aba Variables — só o `terraform.yml` usa:**
+
+| Nome | Valor |
+|---|---|
+| `TF_STATE_BUCKET` | saída do `make bootstrap` |
+| `TF_LOCK_TABLE` | `SolidaryTech-tfstate-lock` |
+
+> Esta tabela já listou `AWS_REGION` e `EKS_CLUSTER` como Variables. **Nenhum
+> workflow lê as duas** — a região é constante no `ci-servico.yml`
+> (`AWS_REGION: us-east-1`) e o nome do cluster vem do `env` de quem precisa
+> dele. Configurá-las não fazia mal, mas mandava o leitor preencher dois campos
+> inertes e sugeria que a região era ajustável por variável, quando não é: para
+> mudar de região, muda-se o `env` do workflow.
+
+`SONAR_TOKEN` (Secret) e `SONAR_ORG` (Variable) são opcionais. Sem eles o passo
+do SonarCloud é pulado; gosec e bandit rodam incondicionalmente, então o
+requisito de SAST (**F0.3b**) continua com evidência.
 
 > ⚠️ **Estas credenciais expiram junto com a sessão do lab (~4 h).** Rode
 > `make sync-creds` no início de cada sessão, antes de disparar qualquer

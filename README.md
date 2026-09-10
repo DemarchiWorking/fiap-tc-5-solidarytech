@@ -29,6 +29,11 @@ Rode-o também no **início de cada sessão**: as credenciais do Learner Lab exp
 em ~4 h, e ele detecta isso em segundos — em vez de o `terraform apply` falhar 20
 minutos depois.
 
+> **Sem `make` na máquina?** Todo `make <alvo>` deste documento tem o equivalente
+> `./solidary <alvo>`, com o mesmo nome e o mesmo efeito — o dispatcher chama os
+> mesmos scripts, e delega ao `make` quando ele existe. `./solidary` sozinho lista
+> os alvos. `make` não vem no Git for Windows nem na imagem padrão do WSL.
+
 **Pré-requisitos:** Docker Desktop **rodando**, `aws` CLI, `kubectl`, `git`,
 `python`. O Terraform roda em container.
 

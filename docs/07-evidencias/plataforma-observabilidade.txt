@@ -1,0 +1,96 @@
+PLATAFORMA E OBSERVABILIDADE — capturado no cluster real
+2026-09-10 15:54 UTC  ·  solidarytech-prod-eks  ·  commit d1a191c
+=======================================================================
+
+1. VELERO AUTENTICA SEM IRSA  (o ponto de risco do desenho)
+
+   O Learner Lab nao permite criar OIDC provider, entao nao ha IRSA: o
+   Velero usa o instance profile do no, via IMDS (ADR-001). Se a aposta
+   estivesse errada, a BackupStorageLocation ficaria em Unavailable.
+
+   NAME      PHASE       LAST VALIDATED   AGE   DEFAULT
+   default   Available   8s               14m   true
+
+   NAME                        STATUS    SCHEDULE    LASTBACKUP   AGE   PAUSED
+   velero-diario               Enabled   0 3 * * *                14m   
+   velero-horario-aplicacoes   Enabled   0 * * * *                14m   
+
+2. REGRAS DE SLO — carregadas E AVALIANDO SEM ERRO
+
+   Uma regra com PromQL invalida e aceita pelo CRD e so falha na
+   avaliacao: o sintoma seria um painel vazio no dia da apresentacao,
+   indistinguivel de 'nao houve trafego'. Abaixo, o health que o proprio
+   Prometheus reporta em /api/v1/rules.
+
+   == solidarytech.aplicacao
+      ok   alerting  PodEmCrashLoop
+      ok   alerting  DeploymentSemReplicaDisponivel
+      ok   alerting  HPANoLimiteMaximo
+      ok   alerting  ErrosNoProcessamentoDeEventos
+
+   == solidarytech.infraestrutura
+      ok   alerting  NoComPoucaMemoria
+      ok   alerting  DiscoDoPrometheusEnchendo
+      ok   alerting  ArgoCDApplicationDegradada
+      ok   alerting  BackupDoVeleroAtrasado
+
+   == solidarytech.slo.alertas
+      ok   alerting  DonationOrcamentoErroQueimaCritica
+      ok   alerting  DonationOrcamentoErroQueimaAlta
+      ok   alerting  DonationLatenciaQueimaCritica
+      ok   alerting  OrcamentoErroQuaseEsgotado
+      ok   alerting  OrcamentoErroEsgotado
+      ok   alerting  FilaDeDoacoesAtrasada
+
+   == solidarytech.slo.donation.disponibilidade
+      ok   recording slo:donation_disponibilidade_erro:ratio_rate5m
+      ok   recording slo:donation_disponibilidade_erro:ratio_rate30m
+      ok   recording slo:donation_disponibilidade_erro:ratio_rate1h
+      ok   recording slo:donation_disponibilidade_erro:ratio_rate6h
+      ok   recording slo:donation_disponibilidade_erro:ratio_rate7d
+      ok   recording slo:donation_disponibilidade:error_budget_restante
+      ok   recording slo:donation_disponibilidade:burn_rate1h
+      ok   recording slo:donation_disponibilidade:burn_rate6h
+
+   == solidarytech.slo.donation.frescor_da_fila
+      ok   recording slo:donation_frescor_erro:ratio_rate1h
+      ok   recording slo:donation_frescor_erro:ratio_rate7d
+      ok   recording slo:donation_frescor:error_budget_restante
+
+   == solidarytech.slo.donation.latencia
+      ok   recording slo:donation_latencia_erro:ratio_rate5m
+      ok   recording slo:donation_latencia_erro:ratio_rate1h
+      ok   recording slo:donation_latencia_erro:ratio_rate6h
+      ok   recording slo:donation_latencia_erro:ratio_rate7d
+      ok   recording slo:donation_latencia:error_budget_restante
+      ok   recording slo:donation_latencia:burn_rate1h
+      ok   recording slo:donation_latencia:burn_rate6h
+      ok   recording slo:donation_latencia:p95
+      ok   recording slo:donation_latencia:p99
+
+   grupos totais no Prometheus: 37  ·  grupos SolidaryTech: 6
+   regras com health != ok: 0
+
+3. DASHBOARDS PROVISIONADOS POR GITOPS
+   dashboard-finops
+   dashboard-sre-slo
+   (mais 24 dashboards padrao do kube-prometheus-stack)
+
+4. ALERTMANAGER COM OS SECRETS MONTADOS
+   alertmanager-kube-prometheus-stack-alertmanager-0   2/2   Running   0     14m
+   Os Secrets alertmanager-pagerduty e alertmanager-chatops sao criados
+   sempre, mesmo sem valor: um Secret referenciado que nao existe prende o
+   pod em ContainerCreating e leva junto a evidencia dos alertas.
+
+5. FINOPS — OpenCost
+   monitoring           opencost-68c74ffb54-q895s                                  1/1   Running            2 (13m ago)   14m
+
+6. POSTURA DOS NAMESPACES DE APLICACAO
+   solidary-ngo         NetworkPolicy=1  HPA=1  PDB=1
+   solidary-donation    NetworkPolicy=1  HPA=1  PDB=1
+   solidary-volunteer   NetworkPolicy=1  HPA=1  PDB=2
+
+7. STORAGECLASS PADRAO
+   gp2             kubernetes.io/aws-ebs   Delete   WaitForFirstConsumer   false   74m
+   gp3 (default)   ebs.csi.aws.com         Delete   WaitForFirstConsumer   true    15m
+   O gp2 perde o papel de padrao no bootstrap; o gp3 assume.

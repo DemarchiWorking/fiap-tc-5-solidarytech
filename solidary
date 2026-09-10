@@ -60,6 +60,8 @@ ${NEGRITO}solidary${RESET} — entrada alternativa ao Makefile (para quem nao te
 
   ${VERDE}comecar${RESET}       Console de primeira execucao (credenciais e configuracao)
   ${VERDE}pre-voo${RESET}       Veredito GO / NO-GO antes de subir
+  ${VERDE}sync-creds${RESET}    Publica as credenciais da sessao nos secrets do GitHub
+  ${VERDE}whoami${RESET}        Confirma que a sessao do lab esta ativa
   ${VERDE}check${RESET}         Todos os gates locais
   ${VERDE}validate${RESET}      terraform validate nos dois ambientes
   ${VERDE}fmt${RESET}           terraform fmt
@@ -111,6 +113,8 @@ case "$ALVO" in
   ajuda|help|-h|--help) ajuda ;;
 
   comecar) ./comecar.sh ;;
+  sync-creds) ./scripts/sync-aws-creds.sh ;;
+  whoami) aws sts get-caller-identity ;;
   pre-voo) ./scripts/pre-voo.sh ;;
   relatorio) py scripts/gerar-relatorio.py ;;
 

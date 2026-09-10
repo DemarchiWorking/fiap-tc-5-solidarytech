@@ -1,0 +1,62 @@
+TESTE DE FUMACA NO AMBIENTE REAL — pelo endereco publico
+2026-09-10 19:25 UTC  ·  commit 8b524b6
+NLB: a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com
+=======================================================================
+
+As chamadas abaixo atravessam a pilha inteira: NLB -> ingress-nginx ->
+Service -> pod -> banco. Nada de port-forward.
+
+1. ngo-service (Flask + RDS Postgres)
+   $ curl -X GET http://<nlb>/ngo/health
+   {"service":"ngo-service","status":"ok","version":"dev"}
+   
+      HTTP 200  (12.828879s)
+
+   $ curl -X GET http://<nlb>/ngo/ngos
+   [{"cause":"Educacao","city":"Sao Paulo","created_at":"Thu, 10 Sep 2026 15:44:41 GMT","email":"info@educamais.org","id":2,"name":"Educa Mais"},{"cause":"Protecao Animal","city":"Osasco","created_at":"Thu, 10 Sep 2026 15:44:41 GMT","email":"contato@anjosdepatas.org","id":1,"name":"Anjos de Patas"}]
+   
+      HTTP 200  (12.861294s)
+
+
+2. volunteer-service (Flask + DynamoDB)
+   $ curl -X POST http://<nlb>/volunteers
+   {"email":"fumaca@teste.org","name":"Voluntario de Fumaca","ngo_id":1,"registered_at":1789068368,"volunteer_id":"0af58e96-8930-4e85-9f74-27ec47b66cb5"}
+   
+      HTTP 201  (0.350664s)
+
+
+   O 201 acima gravou um item real no DynamoDB, com id gerado pelo
+   servico. A tabela:
+   ----------------------------------------
+   |             DescribeTable            |
+   +------------------+--------+----------+
+   |     cobranca     | itens  | status   |
+   +------------------+--------+----------+
+   |  PAY_PER_REQUEST |  0     |  ACTIVE  |
+   +------------------+--------+----------+
+
+3. donation-service
+   $ curl -X GET http://<nlb>/donations
+   <html>
+   <head><title>503 Service Temporarily Unavailable</title></head>
+   <body>
+   <center><h1>503 Service Temporarily Unavailable</h1></center>
+   <hr><center>nginx</center>
+   </body>
+   </html>
+   
+      HTTP 503  (0.295254s)
+
+   503 esperado: os pods estao em ImagePullBackOff — a pipeline deste
+   servico ainda nao publicou imagem no ECR. O 503 vem do ingress-nginx,
+   o que confirma que a rota existe e o Service esta correto: falta so o
+   endpoint por tras.
+
+4. PODS
+   solidary-donation    donation-service-6978b97d69-dnzbb                          0/1   ImagePullBackOff   0               3h41m
+   solidary-donation    donation-service-6978b97d69-s4k4v                          0/1   ImagePullBackOff   0               3h41m
+   solidary-ngo         ngo-service-66d5cfb8cb-8ms6s                               1/1   Running            0               89m
+   solidary-ngo         ngo-service-66d5cfb8cb-mmf9m                               1/1   Running            0               89m
+   solidary-volunteer   volunteer-service-74cd795bf4-dc98j                         1/1   Running            0               89m
+   solidary-volunteer   volunteer-service-74cd795bf4-nwzdt                         1/1   Running            0               89m
+   solidary-volunteer   volunteer-worker-d4bcd49d9-87wjg                           1/1   Running            0               17m

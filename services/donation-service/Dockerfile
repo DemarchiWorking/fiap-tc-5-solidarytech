@@ -50,7 +50,22 @@ WORKDIR /src
 # Necessario para o modo VCS do Go e para verificar checksums via TLS.
 RUN apk add --no-cache ca-certificates git
 
-COPY --from=deps /go/pkg/mod /go/pkg/mod
+# Os modulos NAO sao copiados do estagio deps.
+#
+# Aqui estava o erro que impedia a imagem de existir:
+#
+#   [build 4/7] COPY --from=deps /go/pkg/mod /go/pkg/mod
+#   ERROR: failed to calculate checksum: "/go/pkg/mod": not found
+#
+# O `deps` baixa os modulos sob `--mount=type=cache,target=/go/pkg/mod`, e um
+# cache mount NAO vira camada: ele existe so enquanto aquele RUN roda. Quando o
+# estagio termina, `/go/pkg/mod` esta vazio na imagem resultante — nao havia o
+# que copiar.
+#
+# Nem e preciso copiar: o `go build` abaixo monta o MESMO cache, entao encontra
+# os modulos que o `deps` baixou. Com o cache frio ele baixa de novo, que e o
+# comportamento correto — e o go.sum copiado logo abaixo garante que sejam
+# exatamente as mesmas versoes.
 COPY . .
 
 # go.mod e go.sum vem do estagio deps, ja resolvidos. Este COPY vem DEPOIS do

@@ -166,7 +166,14 @@ spec:
               cpu: 100m
               memory: 96Mi
             limits:
-              cpu: 400m
+              # 800m, e nao 400m. O alerta CPUThrottlingHigh disparou para o
+              # worker com o limite anterior: o processo era estrangulado no
+              # pico, e throttling num consumidor de fila vira lag — ou seja,
+              # ataca justamente o SLI que este componente sustenta.
+              #
+              # Limite alto nao desperdica: limite nao reserva nada, so define
+              # o teto. Quem dimensiona o agendamento e o request (100m).
+              cpu: 800m
               memory: 256Mi
 
           volumeMounts:

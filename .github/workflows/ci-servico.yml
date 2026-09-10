@@ -357,8 +357,11 @@ jobs:
           output: trivy.sarif
           severity: CRITICAL,HIGH,MEDIUM
 
+      # v4: a v3 do codeql-action entrou em fim de vida — ainda resolve, mas
+      # passa a avisar e depois a falhar. Trocar agora evita repetir a licao
+      # da trivy-action, que so apareceu quando a tag antiga sumiu.
       - name: Enviar ao GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy.sarif

@@ -23,7 +23,7 @@ resources:
 images:
 - name: donation-service
   newName: 227007723638.dkr.ecr.us-east-1.amazonaws.com/solidarytech/donation-service
-  newTag: f0a70e07ffdb3c12363799ff7d46007dbf32d79e
+  newTag: a94ef37087a2e82f22d27aa54852b01056463c32
 
 commonAnnotations:
   solidarytech.io/gerenciado-por: argocd

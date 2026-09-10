@@ -1,0 +1,64 @@
+DISPONIBILIDADE EXTERNA — 15% de timeout, causa raiz e correcao
+2026-09-10 22:23 UTC  ·  commit 1a601ab
+=======================================================================
+
+O SINTOMA
+
+  20 chamadas ao endereco publico: 17 ok, 3 em timeout de 12s, sem
+  sequer completar o TCP (time_connect = 0).
+
+  As MESMAS 20 chamadas por dentro do cluster, direto no pod: 20/20 ok.
+  A aplicacao estava perfeita. O caminho externo, nao.
+
+  E o mais grave: o SLI de disponibilidade marcava 100%. Ele mede o que
+  CHEGA ao servico — e o pacote morria antes. Um ponto cego que so
+  aparece medindo de fora.
+
+A CAUSA RAIZ
+
+  O values do ingress-nginx declarava:
+      aws-load-balancer-healthcheck-port: "10254"
+
+  10254 e a porta de METRICAS do CONTAINER. O pod nao usa hostNetwork,
+  entao no IP do NO ela nao existe. Medido, nos tres nos:
+      10.0.24.202:10254 -> Connection refused
+      10.0.4.129:10254  -> Connection refused
+      10.0.7.154:10254  -> Connection refused
+
+  Consequencia em cadeia:
+      1. os 3 alvos ficam unhealthy (Target.FailedHealthChecks)
+      2. com TODOS insalubres, o NLB entra em fail-open e usa os 3
+      3. so 2 nos tem pod do controller
+      4. externalTrafficPolicy: Local DESCARTA o pacote no terceiro
+
+  Um dos dois IPs publicos do NLB estava efetivamente morto:
+      34.236.196.31 -> HTTP 200
+      52.20.45.198  -> HTTP 000
+
+A CORRECAO
+
+  Remover as tres anotacoes de health check. Com externalTrafficPolicy:
+  Local o Kubernetes JA aloca um healthCheckNodePort e responde HTTP
+  nele. Medido na porta 31018, antes mesmo da correcao:
+      10.0.24.202:31018 -> HTTP 200   (no com pod)
+      10.0.4.129:31018  -> HTTP 200   (no com pod)
+      10.0.7.154:31018  -> HTTP 503   (no sem pod — correto)
+
+  O mecanismo certo ja estava la, funcionando, e a anotacao o substituia
+  por um que nao podia funcionar.
+
+DEPOIS — medido agora
+
+  30 chamadas externas: 30 ok, 0 falha
+
+  cada IP publico do NLB:
+      34.236.196.31    HTTP 200
+      52.20.45.198     HTTP 200
+
+  saude dos alvos do NLB:
+      i-079bdcccfe92f50b3	initial
+      i-0bbc8f14abd17ba27	healthy
+      i-0f84f358b39883ef1	healthy
+      i-0f84f358b39883ef1	healthy
+      i-0bbc8f14abd17ba27	healthy
+      i-079bdcccfe92f50b3	initial

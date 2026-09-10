@@ -16,7 +16,7 @@ região `us-east-1`
 | **Infraestrutura** | 65 recursos por Terraform · **0 recursos IAM** |
 | **Aplicações** | 3 serviços + worker · **9 pods**, 0 restarts |
 | **GitOps** | **15/15** Applications `Synced` / `Healthy` |
-| **APIs** | `/ngo/health` `/ngo/ngos` `/donations` `/volunteers/1` → **200** · `POST /donations` → **201** |
+| **APIs** | 30/30 chamadas externas OK · `POST /donations` → **201** |
 | **SLIs** | disponibilidade `0` erro · frescor `0` erro · latência p95 ~5 ms sob carga |
 | **Observabilidade** | 255 regras (**0 com problema**) · 27 alvos (**0 down**) |
 | **Painéis** | **18/18** consultas do Grafana devolvendo dado |
@@ -144,6 +144,7 @@ precisaram do ambiente rodando sob carga.
 | 9 | **`trivy-action@0.28.0` não existe mais** | Job morria em "Set up job", sem dizer qual ação |
 | 10 | **`gosec` não compila com Go 1.26** | SAST reprovava sem existir achado |
 | 11 | **Painel de erro 5xx vazio sem erro** | Gráfico de erros mostrando "No data" com a plataforma saudável |
+| 12 | **Health check do NLB numa porta inexistente** | **15 % das requisições externas em timeout** — e o SLI marcando 100 % |
 
 **O padrão:** `kustomize`, `kubeconform`, `terraform validate` e os cinco gates
 locais validam **a forma**. Nenhum executa um cluster. Um HPA sintaticamente
@@ -153,6 +154,15 @@ que renderiza vazio também.
 Os defeitos 1, 2, 3, 5, 6, 7 e 11 só apareceram **executando**: sob carga, com
 o cluster no ar, consultando o Prometheus de verdade. Os defeitos 4, 8, 9 e 10
 só apareceram quando a pipeline **rodou pela primeira vez** neste repositório.
+
+**O defeito 12 é de uma terceira categoria, e a mais incômoda: só aparece
+medindo de FORA.** O health check do NLB apontava para a porta de métricas do
+container, que não existe no nó. Todos os alvos ficavam `unhealthy`, o NLB
+entrava em *fail-open* e mandava tráfego para um nó sem pod do ingress, onde
+`externalTrafficPolicy: Local` descartava o pacote. Resultado: **15 % de
+timeout para o usuário, com o SLI de disponibilidade em 100 %** — porque ele
+mede o que *chega* ao serviço, e o pacote morria antes. Depois da correção:
+30/30 chamadas externas OK, os dois IPs do NLB respondendo.
 
 ---
 

@@ -33,12 +33,26 @@ verde()    { printf '\033[32m%s\033[0m\n' "$1"; }
 amarelo()  { printf '\033[33m%s\033[0m\n' "$1"; }
 vermelho() { printf '\033[31m%s\033[0m\n' "$1"; }
 
+# Terraform nativo quando existir; container so como alternativa.
+#
+# Este script forcava `docker run`, enquanto o Makefile ja preferia o binario
+# nativo — duas politicas para a mesma ferramenta. A divergencia so aparece
+# numa maquina sem daemon Docker, e no pior momento: o `make configurar-repo`
+# morre no meio do fluxo, com a infraestrutura ja no ar e cobrando.
 tf() {
-  docker run --rm \
-    -v "$RAIZ":/wk -w /wk \
-    -v "$HOME/.aws":/root/.aws:ro \
-    hashicorp/terraform:1.9 -chdir="infra/environments/$AMBIENTE" "$@"
+  if command -v terraform >/dev/null 2>&1; then
+    terraform -chdir="infra/environments/$AMBIENTE" "$@"
+  else
+    docker run --rm \
+      -v "$RAIZ":/wk -w /wk \
+      -v "$HOME/.aws":/root/.aws:ro \
+      hashicorp/terraform:1.9 -chdir="infra/environments/$AMBIENTE" "$@"
+  fi
 }
+
+# `python` nao existe em muitas distros modernas — so `python3`. Sem isto o
+# script morre com "command not found" ao interpretar as saidas do Terraform.
+py() { command -v python3 >/dev/null 2>&1 && python3 "$@" || python "$@"; }
 
 # ---------------------------------------------------------------------------
 # 1. Ler os valores
@@ -57,7 +71,7 @@ if ! SAIDAS=$(tf output -json 2>/dev/null); then
 fi
 
 ler() {
-  printf '%s' "$SAIDAS" | python -c "
+  printf '%s' "$SAIDAS" | py -c "
 import json, sys
 dados = json.load(sys.stdin)
 caminho = sys.argv[1].split('.')
@@ -106,7 +120,7 @@ echo "==> Reescrevendo os manifestos do GitOps"
 REPO_URL="$REPO_URL" REPO_WEB="$REPO_WEB" ECR_REGISTRY="$ECR_REGISTRY" \
 LOKI_BUCKET="$LOKI_BUCKET" VELERO_BUCKET="$VELERO_BUCKET" \
 AWS_REGION="$AWS_REGION" DR_REGION="$DR_REGION" RAIZ="$RAIZ" \
-python - <<'PY'
+py - <<'PY'
 import io, os
 
 raiz = os.environ["RAIZ"]

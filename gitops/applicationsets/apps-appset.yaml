@@ -19,7 +19,7 @@ spec:
 
   generators:
     - git:
-        repoURL: __REPO_URL__
+        repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
         revision: HEAD
         directories:
           - path: gitops/apps/*/overlays/prod
@@ -33,7 +33,7 @@ spec:
       project: default
 
       source:
-        repoURL: __REPO_URL__
+        repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
         targetRevision: HEAD
         path: "{{ .path.path }}"
 

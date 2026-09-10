@@ -224,7 +224,7 @@ spec:
             description: >-
               Taxa de erro 5xx em {{ $value | humanizePercentage }} na ultima hora.
               Ao ritmo atual, o orcamento de 7 dias acaba em ~12 horas.
-            runbook_url: "__REPO_WEB__/blob/main/docs/05-itsm-aiops/runbooks/donation-taxa-de-erro.md"
+            runbook_url: "https://github.com/DemarchiWorking/fiap-tc-5-solidarytech/blob/main/docs/05-itsm-aiops/runbooks/donation-taxa-de-erro.md"
             # Consumido pelo webhook de self-healing: define QUAL Deployment
             # reiniciar. A allowlist do workflow valida o valor.
             servico_afetado: "donation-service"
@@ -242,7 +242,7 @@ spec:
             slo: disponibilidade
           annotations:
             summary: "donation-service consumindo error budget acima do sustentavel"
-            runbook_url: "__REPO_WEB__/blob/main/docs/05-itsm-aiops/runbooks/donation-taxa-de-erro.md"
+            runbook_url: "https://github.com/DemarchiWorking/fiap-tc-5-solidarytech/blob/main/docs/05-itsm-aiops/runbooks/donation-taxa-de-erro.md"
 
         - alert: DonationLatenciaQueimaCritica
           expr: |
@@ -257,7 +257,7 @@ spec:
           annotations:
             summary: "Latencia do donation-service fora do SLO"
             description: "p95 atual: {{ with query \"slo:donation_latencia:p95\" }}{{ . | first | value | humanizeDuration }}{{ end }}"
-            runbook_url: "__REPO_WEB__/blob/main/docs/05-itsm-aiops/runbooks/donation-latencia.md"
+            runbook_url: "https://github.com/DemarchiWorking/fiap-tc-5-solidarytech/blob/main/docs/05-itsm-aiops/runbooks/donation-latencia.md"
             servico_afetado: "donation-service"
 
         - alert: OrcamentoErroQuaseEsgotado

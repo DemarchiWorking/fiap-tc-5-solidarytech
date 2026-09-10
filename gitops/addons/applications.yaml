@@ -4,9 +4,13 @@
 # oficial e os `values.yaml` deste repositorio Git. A configuracao fica
 # versionada e revisavel em PR, sem manter um fork do chart.
 #
-# `__REPO_URL__` e substituido por `make configurar-repo`, que le a URL do
-# remote do Git. Nao ha URL fixa aqui de proposito: cada grupo publica em seu
-# proprio repositorio.
+# Os `repoURL` abaixo sao preenchidos por `make configurar-repo`, que le a URL
+# do remote do Git. O repositorio nasce com um marcador no lugar da URL, de
+# proposito: cada grupo publica no seu proprio repositorio.
+#
+# O texto acima descreve o marcador sem escreve-lo. Quando ele aparecia aqui
+# literalmente, o proprio `configurar-repo` trocava a mencao do comentario
+# pela URL e a frase passava a dizer o contrario do que explica.
 #
 # SYNC-WAVES: o kube-prometheus-stack vai na onda -1 porque ele traz as CRDs
 # ServiceMonitor e PrometheusRule. Os demais addons criam objetos DESSES tipos
@@ -31,7 +35,7 @@ spec:
       helm:
         releaseName: ingress-nginx
         valueFiles: ["$values/gitops/addons/ingress-nginx/values.yaml"]
-    - repoURL: __REPO_URL__
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
       targetRevision: HEAD
       ref: values
   destination:
@@ -63,7 +67,7 @@ spec:
       helm:
         releaseName: kube-prometheus-stack
         valueFiles: ["$values/gitops/addons/kube-prometheus-stack/values.yaml"]
-    - repoURL: __REPO_URL__
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
       targetRevision: HEAD
       ref: values
   destination:
@@ -93,7 +97,7 @@ spec:
       helm:
         releaseName: loki
         valueFiles: ["$values/gitops/addons/loki/values.yaml"]
-    - repoURL: __REPO_URL__
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
       targetRevision: HEAD
       ref: values
   destination:
@@ -122,7 +126,7 @@ spec:
       helm:
         releaseName: otel-collector
         valueFiles: ["$values/gitops/addons/otel-collector-gateway/values.yaml"]
-    - repoURL: __REPO_URL__
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
       targetRevision: HEAD
       ref: values
   destination:
@@ -151,7 +155,7 @@ spec:
       helm:
         releaseName: otel-collector-logs
         valueFiles: ["$values/gitops/addons/otel-collector-logs/values.yaml"]
-    - repoURL: __REPO_URL__
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
       targetRevision: HEAD
       ref: values
   destination:
@@ -180,7 +184,7 @@ spec:
       helm:
         releaseName: opencost
         valueFiles: ["$values/gitops/addons/opencost/values.yaml"]
-    - repoURL: __REPO_URL__
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
       targetRevision: HEAD
       ref: values
   destination:
@@ -209,7 +213,7 @@ spec:
       helm:
         releaseName: velero
         valueFiles: ["$values/gitops/addons/velero/values.yaml"]
-    - repoURL: __REPO_URL__
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
       targetRevision: HEAD
       ref: values
   destination:
@@ -232,7 +236,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: __REPO_URL__
+    repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
     targetRevision: HEAD
     path: gitops/addons/observabilidade-config
   destination:

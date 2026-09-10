@@ -18,7 +18,7 @@ resources:
 # `newName` recebe o registry ECR real por `make configurar-repo`.
 images:
   - name: ngo-service
-    newName: __ECR_REGISTRY__/solidarytech/ngo-service
+    newName: 227007723638.dkr.ecr.us-east-1.amazonaws.com/solidarytech/ngo-service
     # `latest` e um MARCADOR, nao uma tag publicavel: o ECR e IMMUTABLE e a
     # pipeline so publica a tag com o SHA do commit. Enquanto este valor estiver
     # aqui, nenhuma imagem correspondente existe no registry — quem substitui e

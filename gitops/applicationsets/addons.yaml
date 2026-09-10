@@ -15,7 +15,7 @@ spec:
   project: default
 
   source:
-    repoURL: __REPO_URL__
+    repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
     targetRevision: HEAD
     path: gitops/addons
 

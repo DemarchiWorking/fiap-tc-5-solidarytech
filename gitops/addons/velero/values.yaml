@@ -32,11 +32,11 @@ configuration:
   backupStorageLocation:
     - name: default
       provider: aws
-      bucket: __VELERO_BUCKET__
+      bucket: solidarytech-prod-velero-723638
       default: true
       config:
         # Regiao do BUCKET, nao do cluster. Cross-region de proposito.
-        region: __DR_REGION__
+        region: us-west-2
 
   volumeSnapshotLocation:
     - name: default
@@ -45,7 +45,7 @@ configuration:
         # Snapshot de EBS e regional: fica em us-east-1, junto dos volumes.
         # Copiar snapshot entre regioes e um passo explicito do runbook de DR,
         # nao algo que o Velero faz sozinho.
-        region: __AWS_REGION__
+        region: us-east-1
 
 credentials:
   # Ver cabecalho. Esta linha e o que torna o Velero viavel no Learner Lab.

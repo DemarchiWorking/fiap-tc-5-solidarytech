@@ -27,11 +27,11 @@ loki:
   storage:
     type: s3
     bucketNames:
-      chunks: __LOKI_BUCKET__
-      ruler: __LOKI_BUCKET__
-      admin: __LOKI_BUCKET__
+      chunks: solidarytech-prod-loki-723638
+      ruler: solidarytech-prod-loki-723638
+      admin: solidarytech-prod-loki-723638
     s3:
-      region: __AWS_REGION__
+      region: us-east-1
       # s3ForcePathStyle e endpoint ficam vazios: o cliente resolve o endpoint
       # padrao da AWS sozinho.
       #

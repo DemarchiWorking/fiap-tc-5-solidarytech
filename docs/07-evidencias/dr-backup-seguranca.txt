@@ -1,0 +1,74 @@
+DR, BACKUP E SEGURANCA — capturado no ambiente real
+2026-09-10 16:03 UTC  ·  conta 227007723638  ·  commit f1f5026
+=======================================================================
+
+1. BACKUP REAL DO VELERO  (F4.2a)
+
+   Disparado com kubectl (o CR Backup e um objeto como outro qualquer).
+   O que isto prova alem do backup: sem IRSA, o Velero autenticou no S3
+   pelo instance profile do no, via IMDS. E a aposta central do ADR-001.
+
+   NAME                                       AGE
+   manual-20260910125906                      3m56s
+   velero-horario-aplicacoes-20260910160004   4s
+
+   phase                  Completed
+   startTimestamp         2026-09-10T15:59:13Z
+   completionTimestamp    2026-09-10T15:59:25Z
+   expiration             2026-09-17T15:59:13Z
+
+   Objetos gravados no bucket (nao so o CR — o dado saiu do cluster):
+     2026-09-10 12:59:25   27 Bytes manual-20260910125906-itemoperations.json.gz
+     2026-09-10 12:59:23   42.9 KiB manual-20260910125906-logs.gz
+     2026-09-10 12:59:26   29 Bytes manual-20260910125906-podvolumebackups.json.gz
+     2026-09-10 12:59:25    6.9 KiB manual-20260910125906-resource-list.json.gz
+     2026-09-10 12:59:25   49 Bytes manual-20260910125906-results.gz
+     2026-09-10 12:59:25  442 Bytes manual-20260910125906-volumeinfo.json.gz
+     2026-09-10 12:59:26  387 Bytes manual-20260910125906-volumesnapshots.json.gz
+     2026-09-10 12:59:25  712.5 KiB manual-20260910125906.tar.gz
+     2026-09-10 12:59:26    4.5 KiB velero-backup.json
+
+   Agendamentos ativos:
+     NAME                        STATUS    SCHEDULE    LASTBACKUP   AGE   PAUSED
+     velero-diario               Enabled   0 3 * * *                23m   
+     velero-horario-aplicacoes   Enabled   0 * * * *   3m12s        23m   
+
+2. REGIAO SECUNDARIA SOBE COM UM COMANDO  (F4.2b)
+
+   $ AMBIENTE=dr-usw2 ./solidary plan     (equivale a 'make dr-plan')
+   O plano roda limpo contra us-west-2, sem gastar credito. Trecho das
+   saidas planejadas:
+
+
+3. NETWORKPOLICIES  (F4.3)
+   NAMESPACE            NAME                                              POD-SELECTOR                                              AGE
+   argocd               argocd-application-controller-network-policy      app.kubernetes.io/name=argocd-application-controller      25m
+   argocd               argocd-applicationset-controller-network-policy   app.kubernetes.io/name=argocd-applicationset-controller   25m
+   argocd               argocd-dex-server-network-policy                  app.kubernetes.io/name=argocd-dex-server                  25m
+   argocd               argocd-notifications-controller-network-policy    app.kubernetes.io/name=argocd-notifications-controller    25m
+   argocd               argocd-redis-network-policy                       app.kubernetes.io/name=argocd-redis                       25m
+   argocd               argocd-repo-server-network-policy                 app.kubernetes.io/name=argocd-repo-server                 25m
+   argocd               argocd-server-network-policy                      app.kubernetes.io/name=argocd-server                      25m
+   solidary-donation    donation-service                                  app=donation-service                                      18m
+   solidary-ngo         ngo-service                                       app=ngo-service                                           18m
+   solidary-volunteer   volunteer-service                                 app=volunteer-service                                     18m
+
+4. SEGREDOS FORA DO GIT  (F4.3)
+
+   Os Secrets do banco sao materializados no bootstrap a partir do AWS
+   Secrets Manager. Nenhuma senha passa pelo repositorio.
+
+   solidary-ngo         ngo-db           Opaque
+   solidary-donation    donation-db      Opaque
+
+   Segredo correspondente no AWS Secrets Manager:
+     ---------------------------------------------
+     |                ListSecrets                |
+     +-------------------------------+-----------+
+     |             nome              |  rotacao  |
+     +-------------------------------+-----------+
+     |  solidarytech-prod/rds/master |  None     |
+     +-------------------------------+-----------+
+
+   Busca por senha em texto puro no repositorio GitOps:
+     nenhuma — so referencias a Secret (existingSecret / secretKeyRef)

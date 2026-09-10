@@ -14,6 +14,10 @@ Cada bloco traz o comando, **o que conferir na saída** e **qual requisito
 aquilo comprova**. Se algo não bater com o descrito, pare — seguir adiante com
 um passo quebrado só empurra o problema para um lugar mais caro.
 
+> **Sem `make`?** Todo `make <alvo>` aqui tem o equivalente `./solidary <alvo>`,
+> com o mesmo nome e o mesmo efeito. `make` não vem no Git for Windows nem na
+> imagem padrão do WSL.
+
 > ⏱️ **Orçamento de tempo.** Do zero ao ambiente pronto para gravar: ~50 min,
 > dos quais ~20 são o Terraform e ~8 o ArgoCD convergindo. O ambiente custa
 > **US$ 6,73/dia** — não deixe ligado depois da gravação.
@@ -33,11 +37,16 @@ workflows (5), manifestos e `terraform fmt`.
 crédito descobrindo isso.
 
 ```bash
-make pre-voo
+./solidary pre-voo        # ou `make pre-voo`
 ```
 
-**Confira:** veredito **GO**. Se vier NO-GO, ele diz exatamente o que falta —
-`make`, Docker rodando, `aws` CLI, credencial com os **três** campos.
+**Confira:** veredito **GO**. Se vier NO-GO, ele diz exatamente o que falta.
+
+Só é bloqueio o que impede a subida: `git`, `python3`, `aws` CLI, `kubectl` e a
+credencial com os **três** campos. `make` e o daemon do Docker aparecem como
+**aviso**, não bloqueio — o dispatcher `./solidary` cobre os mesmos alvos, e o
+Docker local só serve para build de imagem e `make smoke`, já que as imagens da
+entrega são construídas pela CI.
 
 > A credencial do Learner Lab tem **três** partes: `aws_access_key_id`,
 > `aws_secret_access_key` e `aws_session_token`. Copiar só as duas primeiras é
@@ -66,15 +75,24 @@ Estes três comandos são o que responde, com evidência, a pergunta *"vocês
 criaram alguma role?"*:
 
 ```bash
-# 1. Nenhum recurso IAM no state — a lista tem de sair VAZIA
-terraform -chdir=infra/environments/prod-use1 state list | grep -i iam || echo "nenhum recurso IAM"
+# 1. Nenhum RECURSO IAM no state — a lista tem de sair VAZIA
+terraform -chdir=infra/environments/prod-use1 state list \
+  | grep -E '(^|\.)aws_iam_' | grep -v '^data\.' | grep -v '\.data\.' \
+  || echo "nenhum recurso IAM"
 
-# 2. A LabRole é lida, não criada
+# 2. A LabRole é LIDA, não criada — estes data sources são esperados
+terraform -chdir=infra/environments/prod-use1 state list | grep 'data\..*aws_iam_role'
 aws iam get-role --role-name LabRole --query 'Role.Arn' --output text
 
 # 3. O relatório de conformidade que o próprio Terraform emite
-make conformidade
+make conformidade         # ou ./solidary conformidade
 ```
+
+> ⚠️ **O filtro precisa separar recurso de data source.** Um `grep -i iam`
+> simples casa com `data.aws_iam_role.lab`, que é a *leitura* da LabRole
+> existente — exatamente o que o lab exige. Rodado ao vivo, imprimiria uma linha
+> com "iam" no meio e diria o **contrário** do que esta seção promete. Os dois
+> `grep -v` acima removem os data sources, no topo e aninhados em módulo.
 
 **Prova:** a Regra do AWS Academy, e é o slide que evita a pergunta na banca.
 

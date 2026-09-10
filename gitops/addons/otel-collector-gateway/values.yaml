@@ -154,7 +154,19 @@ config:
         # O proprio Collector expoe metricas: fila cheia, dado descartado, erro
         # de exportacao. Sem observar o observador, uma falha de telemetria e
         # invisivel — parece simplesmente que "nao houve trafego".
-        address: 0.0.0.0:8888
+        #
+        # Era `address: 0.0.0.0:8888`, a forma antiga. O Collector que vem no
+        # chart 0.172.1 recusa a chave e nem sobe:
+        #   'migration.MetricsConfigV030' has invalid keys: address
+        # — CrashLoopBackOff, e com ele todo o pipeline de telemetria. A forma
+        # atual e declarar um reader de pull com exporter Prometheus; a porta
+        # 8888 continua a mesma, entao o ServiceMonitor abaixo nao muda.
+        readers:
+          - pull:
+              exporter:
+                prometheus:
+                  host: 0.0.0.0
+                  port: 8888
 
 # ServiceMonitor para o Prometheus raspar as metricas do proprio Collector.
 serviceMonitor:

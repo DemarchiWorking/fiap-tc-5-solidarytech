@@ -48,10 +48,21 @@ spec:
       # HPA sobe de novo, o ArgoCD derruba de novo. Flapping — e o maxReplicas
       # de 10 nunca e atingido de forma estavel, entao o teste de carga nao
       # produz a evidencia de rightsizing nem de SLO sob pico.
+      # O HPA e dono de spec.replicas. Sem ignorar este campo, ArgoCD e HPA
+      # brigam: um escala, o outro reverte.
+      #
+      # Aqui estava `jqPathExpressions: ["$.spec.replicas"]` — sintaxe de
+      # JSONPath, nao de jq. O `$` inicial nao existe em jq, e o ArgoCD
+      # respondia "failed to create diff normalizer: unexpected token $" para
+      # as QUATRO Applications de aplicacao. Elas ficavam em SYNC=Unknown e
+      # nunca sincronizavam: o defeito nao aparece em kustomize build, nem em
+      # kubeconform, nem em `terraform validate` — so com o ArgoCD no ar.
+      #
+      # `jsonPointers` evita a classe inteira: e RFC 6901, sem dialeto.
       ignoreDifferences:
         - group: apps
           kind: Deployment
-          jqPathExpressions: ["$.spec.replicas"]
+          jsonPointers: ["/spec/replicas"]
 
       syncPolicy:
         automated:

@@ -144,12 +144,29 @@ spec:
             # fila e piora justamente a latencia que a probe deveria proteger.
             failureThreshold: 3
 
+          # Dimensionado pela MEDICAO, com carga rodando — nao por estimativa.
+          #
+          # O request era 50m. Sob o pico do k6, o HPA leu 404% de utilizacao,
+          # ou seja ~200m por pod: o request estava quatro vezes abaixo do uso
+          # real. Isso nao aparece como erro em lugar nenhum — o pod nao e
+          # morto, porque o LIMIT (300m) nao era atingido. O que se degrada e o
+          # AGENDAMENTO: o scheduler acreditava que quatro workers custavam
+          # 200m quando custavam 800m, e podia empilha-los num no que nao
+          # aguentava.
+          #
+          # 100m e o meio termo defensavel: o dobro do uso em regime (1-10m em
+          # ociosidade, ~67m no pod mais quente logo apos o pico) e metade do
+          # pico. Deixa o HPA com espaco para reagir — com request igual ao
+          # pico, a utilizacao nunca passaria de 100% e o HPA nunca escalaria.
+          #
+          # Memoria medida: 57-59Mi por pod, estavel. O request de 96Mi ja
+          # estava correto e nao muda.
           resources:
             requests:
-              cpu: 50m
+              cpu: 100m
               memory: 96Mi
             limits:
-              cpu: 300m
+              cpu: 400m
               memory: 256Mi
 
           volumeMounts:

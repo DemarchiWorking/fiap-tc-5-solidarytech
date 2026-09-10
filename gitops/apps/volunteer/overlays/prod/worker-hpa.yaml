@@ -41,10 +41,16 @@ spec:
     kind: Deployment
     name: volunteer-worker
   # min=1: fora de campanha a fila e quase vazia, e uma replica da conta.
-  # max=4: com 3 nos t3.medium e 50m de request, cabe folgado junto com a stack
-  # de observabilidade e os seis pods dos servicos HTTP.
+  #
+  # max=6: o primeiro valor foi 4, e a carga mostrou que era justo — o HPA
+  # bateu no teto e ficou em 404% de utilizacao, escalando ate onde podia. O
+  # SLO foi atendido assim mesmo (100% dos eventos dentro de 60s), mas sem
+  # margem: qualquer pico maior que o testado voltaria a acumular fila.
+  #
+  # 6 replicas x 100m de request = 600m, contra 5.790m alocaveis nos tres nos,
+  # hoje em ~55% de uso. Cabe.
   minReplicas: 1
-  maxReplicas: 4
+  maxReplicas: 6
   metrics:
     - type: Resource
       resource:

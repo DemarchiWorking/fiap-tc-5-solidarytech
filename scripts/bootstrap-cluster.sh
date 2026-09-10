@@ -159,18 +159,25 @@ fi
 
 # Chave do APM. Opcional: sem ela o cluster sobe e o Prometheus/Loki funcionam;
 # apenas o envio de traces ao New Relic fica desligado.
-if [[ -n "${NEW_RELIC_LICENSE_KEY:-}" ]]; then
-  kubectl -n monitoring create secret generic apm-credentials \
-    --from-literal=NEW_RELIC_LICENSE_KEY="$NEW_RELIC_LICENSE_KEY" \
-    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  verde "Credencial do APM configurada"
+# O Secret carrega as chaves dos DOIS APMs. O pipeline de traces usa um so
+# (Datadog, por ADR-004), mas manter as duas chaves aqui torna a troca de
+# backend uma mudanca de duas linhas no values, sem mexer no bootstrap.
+#
+# Criado SEMPRE, mesmo sem valor: `extraEnvsFrom` marca o Secret como
+# `optional: true`, mas o exporter referencia `${env:DD_API_KEY}` e um
+# Collector sem a variavel definida nao sobe.
+kubectl -n monitoring create secret generic apm-credentials \
+  --from-literal=DD_API_KEY="${DD_API_KEY:-nao-configurada}" \
+  --from-literal=NEW_RELIC_LICENSE_KEY="${NEW_RELIC_LICENSE_KEY:-nao-configurada}" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+if [[ -n "${DD_API_KEY:-}" ]]; then
+  verde "Credencial do APM (Datadog) configurada"
 else
-  amarelo "NEW_RELIC_LICENSE_KEY nao definida — traces nao serao enviados ao APM."
-  echo "         Prometheus, Grafana e Loki funcionam normalmente."
-  echo "         Para ligar:  export NEW_RELIC_LICENSE_KEY=... && ./scripts/bootstrap-cluster.sh"
-  kubectl -n monitoring create secret generic apm-credentials \
-    --from-literal=NEW_RELIC_LICENSE_KEY="nao-configurada" \
-    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  amarelo "DD_API_KEY nao definida — traces nao chegam ao APM."
+  echo "         Prometheus, Grafana e Loki funcionam normalmente; o que fica"
+  echo "         sem evidencia e o Distributed Tracing (Fundacao) e o AIOps."
+  echo "         Para ligar:  export DD_API_KEY=... && ./scripts/bootstrap-cluster.sh"
 fi
 
 # Identidade do cluster para a telemetria.

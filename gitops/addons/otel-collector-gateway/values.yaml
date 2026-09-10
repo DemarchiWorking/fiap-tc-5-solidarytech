@@ -116,20 +116,34 @@ config:
       tls:
         insecure: true
 
-    # 3) Traces -> APM SaaS (New Relic). Endpoint OTLP nativo: nenhum agente
+    # 3) Traces -> APM SaaS. Exporter nativo do Collector: nenhum agente
     #    proprietario roda no cluster.
-    otlphttp/newrelic:
-      endpoint: https://otlp.nr-data.net
-      headers:
-        api-key: ${env:NEW_RELIC_LICENSE_KEY}
+    #
+    #    Datadog, e nao New Relic, por continuidade com a Fase 4 (ADR-004): a
+    #    conta educacional que existe e esta ativa e a de la. Trocar de APM
+    #    aqui e mudar duas linhas — o codigo das aplicacoes nao sabe qual
+    #    backend recebe o trace, porque exporta OTLP puro. E exatamente esse o
+    #    ganho de ter o Collector no meio.
+    #
+    #    A chave vem do Secret `apm-credentials`, criado pelo bootstrap a
+    #    partir de variavel de ambiente. A Fase 4 commitou a DD_API_KEY em
+    #    texto puro no values.yaml deste mesmo componente, e o ADR-004 de la
+    #    registra isso como "risco real, nao hipotetico".
+    datadog:
+      api:
+        key: ${env:DD_API_KEY}
+        site: us5.datadoghq.com
+        # Nao derrubar o Collector se a chave estiver ausente ou invalida:
+        # perder o APM e ruim, perder a pipeline inteira de telemetria —
+        # metricas e logs junto — e pior.
+        fail_on_invalid_key: false
 
-    # Alternativa Datadog, mantida versionada e COMENTADA (ADR-004). Trocar de
-    # APM e descomentar este bloco e ajustar o pipeline de traces — zero
-    # mudanca em codigo de aplicacao.
-    # datadog:
-    #   api:
-    #     key: ${env:DD_API_KEY}
-    #     site: us5.datadoghq.com
+    # Alternativa New Relic, versionada e comentada. Trocar de APM e
+    # descomentar aqui e ajustar o pipeline de traces abaixo.
+    # otlphttp/newrelic:
+    #   endpoint: https://otlp.nr-data.net
+    #   headers:
+    #     api-key: ${env:NEW_RELIC_LICENSE_KEY}
 
     debug:
       verbosity: basic
@@ -139,7 +153,7 @@ config:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlphttp/newrelic]
+        exporters: [datadog]
       metrics:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]

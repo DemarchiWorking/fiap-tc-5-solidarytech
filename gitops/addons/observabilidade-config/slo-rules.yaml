@@ -38,35 +38,50 @@ spec:
     # =======================================================================
     - name: solidarytech.slo.donation.disponibilidade
       interval: 30s
+      # `or vector(0)` nos numeradores, e nao so `clamp_min` no denominador.
+      #
+      # O clamp protege contra divisao por zero. O que faltava era proteger
+      # contra AUSENCIA DE SERIE: `rate(...{status_class="5xx"})` nao devolve
+      # zero quando nao existe erro 5xx — devolve vazio, e vazio dividido por
+      # qualquer coisa continua vazio.
+      #
+      # Com zero erros — o caso saudavel — nenhuma serie era gravada, e o
+      # painel mostrava "No data" no SLI de disponibilidade e no error budget.
+      # Indistinguivel de "a metrica nao existe" ou "o servico caiu", que e a
+      # leitura mais perigosa num painel de SRE: o operador acredita que esta
+      # cego quando na verdade esta tudo bem.
+      #
+      # Medido no cluster com carga: latencia e frescor tinham valor, e a
+      # disponibilidade era a unica sem dado — justamente porque nao houve erro.
       rules:
         - record: slo:donation_disponibilidade_erro:ratio_rate5m
           expr: |
-            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[5m]))
+            (sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[5m])) or vector(0))
             /
             clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[5m])), 1e-9)
 
         - record: slo:donation_disponibilidade_erro:ratio_rate30m
           expr: |
-            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[30m]))
+            (sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[30m])) or vector(0))
             /
             clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[30m])), 1e-9)
 
         - record: slo:donation_disponibilidade_erro:ratio_rate1h
           expr: |
-            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[1h]))
+            (sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[1h])) or vector(0))
             /
             clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[1h])), 1e-9)
 
         - record: slo:donation_disponibilidade_erro:ratio_rate6h
           expr: |
-            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[6h]))
+            (sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[6h])) or vector(0))
             /
             clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[6h])), 1e-9)
 
         # Taxa de erro sobre a janela inteira do SLO.
         - record: slo:donation_disponibilidade_erro:ratio_rate7d
           expr: |
-            sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[7d]))
+            (sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service",status_class="5xx"}[7d])) or vector(0))
             /
             clamp_min(sum(rate(solidary_http_server_duration_seconds_count{service_name="donation-service"}[7d])), 1e-9)
 

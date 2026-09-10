@@ -1,0 +1,63 @@
+CONVERGENCIA DO GITOPS — capturada no cluster real
+2026-09-10 15:46 UTC  ·  cluster solidarytech-prod-eks  ·  us-east-1
+Commit do repositorio: f7fd3d3
+=======================================================================
+
+1. APPLICATIONS DO ARGOCD
+   Um unico 'kubectl apply' foi executado neste projeto: o app-of-apps.
+   Tudo abaixo nasceu de commit.
+
+   NAME                     SYNC STATUS   HEALTH STATUS
+   app-donation             Synced        Progressing
+   app-loadtest             Synced        Healthy
+   app-ngo                  Synced        Progressing
+   app-volunteer            Synced        Progressing
+   bootstrap                Synced        Healthy
+   cluster-addons           Synced        Healthy
+   ingress-nginx            Synced        Healthy
+   kube-prometheus-stack    Synced        Healthy
+   loki                     Synced        Healthy
+   observabilidade-config   Synced        Healthy
+   opencost                 Synced        Healthy
+   otel-collector-gateway   Synced        Healthy
+   otel-collector-logs      Synced        Healthy
+   velero                   Synced        Healthy
+
+2. ADDONS DE PLATAFORMA — pods
+   argocd           7/7 Running
+   ingress-nginx    2/2 Running
+   monitoring       15/15 Running
+   velero           1/1 Running
+
+3. APLICACOES — estado e por que
+   solidary-donation    db-init-donation-q68vw                                     0/1   Completed          0               2m39s
+   solidary-donation    donation-service-6978b97d69-dnzbb                          0/1   ImagePullBackOff   0               2m28s
+   solidary-donation    donation-service-6978b97d69-s4k4v                          0/1   ImagePullBackOff   0               2m28s
+   solidary-ngo         db-init-ngo-hlctn                                          0/1   Completed          0               2m39s
+   solidary-ngo         ngo-service-75b5d55db6-cgj9d                               0/1   ImagePullBackOff   0               2m29s
+   solidary-ngo         ngo-service-75b5d55db6-tqwjb                               0/1   ImagePullBackOff   0               2m29s
+   solidary-volunteer   volunteer-service-7bcdf75c9b-9wnmr                         0/1   ImagePullBackOff   0               2m41s
+   solidary-volunteer   volunteer-service-7bcdf75c9b-rgjfm                         0/1   ImagePullBackOff   0               2m41s
+   solidary-volunteer   volunteer-worker-67f4f9f989-fx246                          0/1   ImagePullBackOff   0               2m41s
+
+   As tres aplicacoes estao em ImagePullBackOff porque os repositorios do
+   ECR ainda estao vazios — a tag e publicada pela pipeline de CI, nao pela
+   maquina do operador. Contagem de imagens por repositorio:
+     ngo-service          0 imagem(ns)
+     donation-service     0 imagem(ns)
+     volunteer-service    0 imagem(ns)
+
+   Os Jobs db-init terminaram com Completed: a conexao com o RDS, o Secret
+   vindo do Secrets Manager e a NetworkPolicy do namespace estao corretos.
+
+4. ENDERECO PUBLICO
+   NLB: a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com
+   ArgoCD  http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com/argocd/
+   Grafana http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com/grafana/
+
+5. INGRESSES PUBLICADOS
+   argocd               argocd-server                   nginx   *     a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com   80    8m9s
+   monitoring           kube-prometheus-stack-grafana   nginx   *     a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com   80    7m28s
+   solidary-donation    donation-service                nginx   *     a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com   80    2m34s
+   solidary-ngo         ngo-service                     nginx   *     a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com   80    2m35s
+   solidary-volunteer   volunteer-service               nginx   *     a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com   80    2m47s

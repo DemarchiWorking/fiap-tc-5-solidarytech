@@ -183,6 +183,20 @@ config:
                   port: 8888
 
 # ServiceMonitor para o Prometheus raspar as metricas do proprio Collector.
+# A porta 8888 precisa existir no SERVICE, e nao so no pod.
+#
+# O chart so a publica quando `ports.metrics.enabled` e true. Sem isto, o
+# ServiceMonitor abaixo aponta para `port: metrics` — uma porta que o Service
+# nao tem — e o Prometheus fica SEM ALVO NENHUM para o Collector. O sintoma e
+# mudo: nenhum erro, nenhum alerta, so ausencia.
+#
+# E justamente a metrica que sustenta "observar o observador": fila cheia,
+# span descartado, falha de exportacao. Sem ela, uma falha de telemetria e
+# invisivel — parece que nao houve trafego.
+ports:
+  metrics:
+    enabled: true
+
 serviceMonitor:
   enabled: true
   extraLabels:

@@ -1,0 +1,110 @@
+INVENTARIO DA INFRAESTRUTURA — consultado na AWS
+2026-09-10 15:04 UTC  ·  conta 227007723638  ·  us-east-1
+Requisito F0.2: Cluster + Bancos + Mensageria + Rede, 100% por Terraform
+===========================================================================
+
+CLUSTER (EKS)
+  ------------------------------------------------------------------------------------------
+  |                                     DescribeCluster                                    |
+  +----------+-----------------------------------------------------------------------------+
+  |  criado  |  2026-09-10T11:32:20.085000-03:00                                           |
+  |  endpoint|  https://B99A9D75C3FBE2202AB463572EB439F9.gr7.us-east-1.eks.amazonaws.com   |
+  |  nome    |  solidarytech-prod-eks                                                      |
+  |  status  |  ACTIVE                                                                     |
+  |  versao  |  1.34                                                                       |
+  +----------+-----------------------------------------------------------------------------+
+
+  node group:
+  -------------------------------------------------------------------
+  |                        DescribeNodegroup                        |
+  +------------+-----------+--------+------+----------+-------------+
+  | capacidade | desejado  | disco  | max  | status   |    tipo     |
+  +------------+-----------+--------+------+----------+-------------+
+  |  ON_DEMAND |  3        |  None  |  4   |  ACTIVE  |  t3.medium  |
+  +------------+-----------+--------+------+----------+-------------+
+
+  addons instalados:
+    aws-ebs-csi-driver
+    coredns
+    kube-proxy
+    vpc-cni
+
+BANCO DE DADOS (RDS)
+  ----------------------------
+  |    DescribeDBInstances   |
+  +----------+---------------+
+  |  cifrado |  True         |
+  |  classe  |  db.t3.micro  |
+  |  engine  |  postgres     |
+  |  multiaz |  False        |
+  |  publico |  False        |
+  |  status  |  available    |
+  |  versao  |  16.13        |
+  +----------+---------------+
+
+MENSAGERIA (SQS)
+  solidarytech-prod-donation-events
+    {
+        "ApproximateNumberOfMessages": "0",
+        "VisibilityTimeout": "30",
+        "RedrivePolicy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:us-east-1:227007723638:solidarytech-prod-donation-events-dlq\",\"maxReceiveCount\":3}"
+    }
+  solidarytech-prod-donation-events-dlq
+    {
+        "ApproximateNumberOfMessages": "0",
+        "VisibilityTimeout": "30"
+    }
+
+NoSQL (DynamoDB)
+  ------------------------------------------------------------------
+  |                          DescribeTable                         |
+  +------------------+--------+--------------------------+---------+
+  |     cobranca     | itens  |          nome            | status  |
+  +------------------+--------+--------------------------+---------+
+  |  PAY_PER_REQUEST |  0     |  SolidaryTechVolunteers  |  ACTIVE |
+  +------------------+--------+--------------------------+---------+
+
+REGISTRY (ECR)
+  ------------------------------------------------------------
+  |                   DescribeRepositories                   |
+  +---------------+----------------------------------+-------+
+  | mutabilidade  |              nome                | scan  |
+  +---------------+----------------------------------+-------+
+  |  IMMUTABLE    |  solidarytech/volunteer-service  |  True |
+  |  IMMUTABLE    |  solidarytech/ngo-service        |  True |
+  |  IMMUTABLE    |  solidarytech/donation-service   |  True |
+  +---------------+----------------------------------+-------+
+
+REDE (VPC)
+  -------------------------------------------------------
+  |                    DescribeVpcs                     |
+  +--------------+------------+-------------------------+
+  |     cidr     |  estado    |           id            |
+  +--------------+------------+-------------------------+
+  |  10.0.0.0/16 |  available |  vpc-011bf614cab8efb50  |
+  +--------------+------------+-------------------------+
+  subnets:
+  -----------------------------------------------------------------------
+  |                           DescribeSubnets                           |
+  +------------+---------------+----------------------------+-----------+
+  |     az     |     cidr      |            id              |  publica  |
+  +------------+---------------+----------------------------+-----------+
+  |  us-east-1b|  10.0.16.0/20 |  subnet-07157c0a85328e939  |  True     |
+  |  us-east-1a|  10.0.32.0/20 |  subnet-00a743435a07390ff  |  False    |
+  |  us-east-1b|  10.0.48.0/20 |  subnet-077bb2d64c72c37ae  |  False    |
+  |  us-east-1a|  10.0.0.0/20  |  subnet-06734ea0bb7539a32  |  True     |
+  +------------+---------------+----------------------------+-----------+
+  VPC endpoints (Gateway — gratuitos):
+  --------------------------------------------------------------
+  |                    DescribeVpcEndpoints                    |
+  +-----------+------------------------------------+-----------+
+  |  estado   |              servico               |   tipo    |
+  +-----------+------------------------------------+-----------+
+  |  available|  com.amazonaws.us-east-1.dynamodb  |  Gateway  |
+  |  available|  com.amazonaws.us-east-1.s3        |  Gateway  |
+  +-----------+------------------------------------+-----------+
+
+ARMAZENAMENTO (S3)
+  solidarytech-prod-loki-723638            versionamento=None       cifra=AES256
+  solidarytech-prod-velero-723638          versionamento=Enabled    cifra=AES256
+  solidarytech-tfstate-9649781b            versionamento=Enabled    cifra=AES256

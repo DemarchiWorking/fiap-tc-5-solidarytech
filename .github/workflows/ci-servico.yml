@@ -327,13 +327,18 @@ jobs:
           #
           # Sem isto, "Build da imagem: failure" era tudo que se sabia de fora,
           # e depurar exigia abrir o passo logado no navegador.
-          set -o pipefail
+          # `set +e` e obrigatorio: o shell padrao de um `run:` do Actions e
+          # `bash -e`, entao o pipeline que falha ABORTA o script na hora — o
+          # `if` abaixo nunca chegava a rodar, e a anotacao nunca era emitida.
+          # Foi o que aconteceu na primeira tentativa desta instrumentacao.
+          set +e
           docker build \
             --target runtime \
             --build-arg VERSION=${{ github.sha }} \
             -t ${{ inputs.servico }}:${{ github.sha }} \
             ${{ inputs.caminho }} 2>&1 | tee /tmp/build.log
           rc=${PIPESTATUS[0]}
+          set -e
           if [ "$rc" -ne 0 ]; then
             {
               echo "::error title=Build da imagem falhou::$(tail -c 3000 /tmp/build.log | tr '\n' ' | ' | tail -c 900)"

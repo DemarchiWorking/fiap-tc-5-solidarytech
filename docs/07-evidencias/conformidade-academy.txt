@@ -1,0 +1,65 @@
+EVIDENCIA DE CONFORMIDADE — AWS Academy Learner Lab
+Capturada em 2026-09-10 14:55 UTC no ambiente real
+Conta: 227007723638
+======================================================================
+
+1. NENHUM RECURSO IAM FOI CRIADO
+
+   O filtro distingue RESOURCE de DATA SOURCE: um data.aws_iam_role e
+   leitura da LabRole existente, que e exatamente o que o lab exige.
+
+   $ terraform state list | grep -E '(^|\.)aws_iam_' | grep -v '^data\.' | grep -v '\.data\.'
+     (vazio — nenhum recurso IAM gerenciado)
+
+   Data sources de IAM (leitura, permitida):
+     data.aws_iam_role.lab
+     module.eks.data.aws_iam_role.lab
+
+2. A LabRole E LIDA, NAO CRIADA
+   $ aws iam get-role --role-name LabRole --query Role.Arn
+     arn:aws:iam::227007723638:role/LabRole
+
+3. RELATORIO DE CONFORMIDADE EMITIDO PELO PROPRIO TERRAFORM
+   {
+     "capacidade_das_instancias" = "ON_DEMAND (Spot nao e liberado no lab)"
+     "conta" = "227007723638"
+     "disco_por_no_gb" = 30
+     "instancias_maximas" = 4
+     "irsa" = "indisponivel — pods autenticam pelo IMDS do no (ADR-001)"
+     "oidc_providers_criados" = 0
+     "rds_multi_az" = "false (nao suportado no lab)"
+     "regiao_dr" = "us-west-2"
+     "regiao_primaria" = "us-east-1"
+     "role_utilizada" = "LabRole"
+     "roles_iam_criadas" = 0
+     "teto_disco_do_lab_gb" = 100
+     "teto_instancias_do_lab" = 9
+     "teto_vcpu_do_lab" = 32
+     "vcpu_maximo_do_node_group" = 8
+   }
+
+4. VERSAO DO KUBERNETES — suporte PADRAO, sem tarifa de extended support
+   servidor: v1.34.10-eks-cb19647
+   (1.34: suporte padrao ate 02/12/2026 — ver ADR-012)
+
+5. NOS DO CLUSTER
+   ip-10-0-24-202.ec2.internal Ready v1.34.10-eks-cb19647
+   ip-10-0-4-129.ec2.internal Ready v1.34.10-eks-cb19647
+   ip-10-0-7-154.ec2.internal Ready v1.34.10-eks-cb19647
+
+6. TAGS OBRIGATORIAS (requisito F2.1)
+   Recursos com CostCenter=NGO-Core:
+     44
+   Recursos com Project=SolidaryTech:
+     44
+
+7. RECURSOS PROVISIONADOS POR IaC (requisito F0.2)
+   total no state: 65
+     aws_eks_cluster          1
+     aws_eks_node_group       1
+     aws_db_instance          1
+     aws_sqs_queue            2
+     aws_dynamodb_table       1
+     aws_ecr_repository       3
+     aws_vpc                  1
+     aws_subnet               4

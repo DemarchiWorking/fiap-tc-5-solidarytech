@@ -18,7 +18,50 @@
 # e falhariam com `no matches for kind "ServiceMonitor"` na primeira passada.
 # Converge sozinho pela reconciliacao de 3 min, mas gera 10-20 minutos de
 # vermelho no painel — pessimo justamente durante a gravacao do video.
+#
+# O metrics-server vai na onda -2, antes de todos. Ele nao traz CRD nenhuma: a
+# razao e outra e mais silenciosa. Os HPAs das aplicacoes dependem da API
+# `metrics.k8s.io`, e sem ela nao falham — apenas ficam em `<unknown>` para
+# sempre, escalando nunca. Chegar depois nao quebra nada visivel, e e
+# exatamente por isso que precisa chegar antes.
 
+# ------------------------------------- metrics-server (a Metrics API do k8s)
+#
+# O EKS nao instala. Sem ele, `kubectl top` nao responde e TODO HPA do cluster
+# fica em `<unknown>` — declarado, listado, e incapaz de escalar. Ver o
+# porque completo em `metrics-server/values.yaml`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+  annotations:
+    # Onda -2: antes de tudo. Os HPAs das aplicacoes dependem desta API, e a
+    # ausencia dela nao produz erro — produz silencio.
+    argocd.argoproj.io/sync-wave: "-2"
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  sources:
+    - repoURL: https://kubernetes-sigs.github.io/metrics-server/
+      chart: metrics-server
+      targetRevision: 3.14.0
+      helm:
+        releaseName: metrics-server
+        valueFiles: ["$values/gitops/addons/metrics-server/values.yaml"]
+    - repoURL: https://github.com/DemarchiWorking/fiap-tc-5-solidarytech.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { selfHeal: true, prune: true }
+    syncOptions: ["CreateNamespace=true"]
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
+---
 # ------------------------------------------------- ingress-nginx (entrada)
 apiVersion: argoproj.io/v1alpha1
 kind: Application

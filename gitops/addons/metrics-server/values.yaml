@@ -1,0 +1,75 @@
+# metrics-server — a Metrics API do Kubernetes
+#
+# POR QUE ESTE ADDON EXISTE
+#
+# O EKS nao instala o metrics-server. Sem ele nao existe `metrics.k8s.io`, e a
+# consequencia e silenciosa: os HorizontalPodAutoscaler continuam sendo
+# aceitos, criados e listados — apenas nunca escalam.
+#
+#   $ kubectl get hpa -A
+#   donation-service    cpu: <unknown>/70%   2  10  2
+#   ngo-service         cpu: <unknown>/70%   2   6  2
+#   volunteer-service   cpu: <unknown>/70%   2   6  2
+#
+#   $ kubectl top nodes
+#   error: Metrics API not available
+#
+# `<unknown>` e o sintoma inteiro. Nenhum evento, nenhum alerta, nenhum pod em
+# erro. Os tres HPAs deste projeto ficaram decorativos por toda a fase — e a
+# premissa do enunciado e justamente absorver "picos de acesso imprevisiveis".
+#
+# Nada disso aparece nos gates: `kustomize build`, `kubeconform`,
+# `terraform validate` e os cinco gates locais validam a FORMA do HPA. Nenhum
+# deles executa um cluster, e um HPA sintaticamente perfeito que nunca escala
+# passa por todos.
+
+# O EKS entrega o certificado do kubelet assinado por uma CA propria, que o
+# metrics-server nao valida por padrao — ele sobe, fica Running, e nao coleta
+# nada. O sintoma e IDENTICO ao de nao ter o addon (`<unknown>`), o que torna
+# facil declarar vitoria cedo: o pod esta saudavel, logo parece resolvido.
+#
+# `--kubelet-insecure-tls` e a solucao usada em praticamente toda instalacao
+# em EKS. O trafego continua em TLS; o que se dispensa e a verificacao do
+# certificado do kubelet, dentro da rede do cluster.
+args:
+  - --kubelet-insecure-tls
+  # A ordem importa: o EKS resolve o no por IP interno, e InternalDNS pode nao
+  # existir. Sem esta lista, a coleta falha por resolucao de nome.
+  - --kubelet-preferred-address-types=InternalIP,Hostname,InternalDNS,ExternalDNS
+  # 15s e o intervalo que o HPA espera encontrar. Mais alto atrasa a reacao ao
+  # pico; mais baixo pesa no apiserver sem ganho pratico.
+  - --metric-resolution=15s
+
+# Nos t3.medium com a stack de observabilidade ja instalada. O metrics-server e
+# barato: guarda uma janela curta em memoria e nao persiste nada.
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+# Uma replica basta: a Metrics API e best-effort por desenho, e o HPA tolera
+# uma lacuna de coleta. Duas replicas em 3 nos t3.medium custariam mais do que
+# entregam.
+replicas: 1
+
+# O Prometheus raspa o proprio metrics-server. Sem isto, ficaria de fora do
+# unico lugar onde se enxerga o cluster inteiro — e uma falha de coleta
+# voltaria a ser invisivel, que e exatamente o problema que este addon resolve.
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: kube-prometheus-stack
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

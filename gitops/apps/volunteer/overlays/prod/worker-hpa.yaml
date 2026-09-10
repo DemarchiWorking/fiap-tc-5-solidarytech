@@ -1,0 +1,65 @@
+# HPA do volunteer-worker — o consumidor da fila.
+#
+# POR QUE ELE PRECISA DE UM HPA PROPRIO
+#
+# O overlay ja tinha HPA para o `volunteer-service`, e o projeto tinha para os
+# tres serviços HTTP. O worker ficou de fora — e e justamente ele quem sustenta
+# o terceiro SLI, o de FRESCOR DA FILA.
+#
+# O teste de carga mostrou o preco disso. Com uma unica replica de 50m de CPU
+# de request, dos 8.755 eventos gerados:
+#
+#     lag <= 60s     6.137 eventos   (70,1%)
+#     lag  > 60s     2.618 eventos   (29,9%)   <- estouro do SLO
+#     lag medio      39,7 s
+#
+# O SLO de frescor e 99,5% em 7 dias. Quase 30% fora do alvo levou o error
+# budget para -42, ou seja, estourado em mais de quarenta vezes.
+#
+# A causa nao e o codigo do worker: e capacidade. O produtor escalava (na
+# intencao — ver a nota sobre o metrics-server) e o consumidor nao. O k6 tem um
+# estagio comentado como "PICO — dispara o HPA"; o pico chegava, o produtor
+# absorvia, e a fila crescia atras de um consumidor fixo.
+#
+# ESCALAR POR CPU E UMA APROXIMACAO, E VALE DIZER QUAL
+#
+# A metrica honesta para um consumidor de fila e a PROFUNDIDADE DA FILA, nao a
+# CPU: um worker bloqueado em I/O tem CPU baixa com a fila crescendo. Fazer
+# isso direito pede KEDA, que e mais um componente no cluster.
+#
+# Por CPU funciona aqui porque este worker e limitado por CPU e nao por espera:
+# a medicao sob carga mostrou 77m de uso contra 50m de request — ele satura o
+# proprio request. Fica registrado como debito conhecido, e nao como escolha
+# silenciosa.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: volunteer-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: volunteer-worker
+  # min=1: fora de campanha a fila e quase vazia, e uma replica da conta.
+  # max=4: com 3 nos t3.medium e 50m de request, cabe folgado junto com a stack
+  # de observabilidade e os seis pods dos servicos HTTP.
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      # 30s, metade da janela dos servicos HTTP. Uma fila que cresce nao se
+      # resolve sozinha: cada segundo de espera vira lag acumulado que ja conta
+      # contra o SLO, mesmo depois que a capacidade chega.
+      stabilizationWindowSeconds: 30
+    scaleDown:
+      # Desce bem devagar — 10 min. Encolher logo apos o pico e o erro classico
+      # de consumidor de fila: o backlog ainda esta sendo drenado quando a
+      # capacidade sai, e o lag volta a subir sem que o trafego tenha voltado.
+      stabilizationWindowSeconds: 600

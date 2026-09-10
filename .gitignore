@@ -29,6 +29,14 @@ backend.hcl
 credentials
 *.pem
 *.key
+*.ppk
+
+# Arquivos que o painel do AWS Academy oferece para download. O
+# ssourl.txt e o pior deles: e uma URL de login no console com token
+# embutido — quem tiver o link entra na conta enquanto a sessao durar.
+labsuser.ppk
+labsuser.pem
+ssourl.txt
 kubeconfig*
 
 # Gerados por ./comecar.sh — contem credenciais e identificacao.

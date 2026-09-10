@@ -25,7 +25,7 @@ FIAP PosTech · DevOps & Arquitetura Cloud · Setembro de 2026
 
 | Item | Link |
 |---|---|
-| **Repositório** (E3.2) | *a preencher* |
+| **Repositório** (E3.2) | https://github.com/DemarchiWorking/fiap-tc-5-solidarytech |
 | **Vídeo** (E3.2) | *a preencher* |
 
 ---

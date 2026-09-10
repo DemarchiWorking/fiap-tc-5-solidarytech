@@ -277,8 +277,31 @@ def montar_html(md: str, tem_pendencia: bool) -> str:
     )
 
 
+def interop_do_wsl() -> bool:
+    """No WSL, da para executar um .exe do Windows?
+
+    Depende do binfmt_misc WSLInterop estar registrado. Quando o interop esta
+    desligado — configuracao comum em ambiente corporativo — chamar o .exe
+    devolve "Exec format error", e nao vale a pena nem tentar.
+    """
+    return os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop")
+
+
+def caminho_para_windows(caminho: str) -> str:
+    r"""Traduz /home/... em C:\... para entregar a um programa Windows."""
+    try:
+        r = subprocess.run(["wslpath", "-w", caminho],
+                           capture_output=True, timeout=10)
+        if r.returncode == 0:
+            return r.stdout.decode().strip()
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return caminho
+
+
 def achar_navegador() -> str | None:
     """Edge ou Chrome, em qualquer sistema."""
+    no_wsl = os.path.exists("/proc/sys/fs/binfmt_misc")
     candidatos = [
         os.environ.get("NAVEGADOR_PDF", ""),
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
@@ -288,6 +311,16 @@ def achar_navegador() -> str | None:
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     ]
+    # Os mesmos executaveis vistos de dentro do WSL — so entram na lista se o
+    # interop estiver ligado; senao seriam encontrados e nao poderiam rodar.
+    if interop_do_wsl():
+        candidatos += [
+            "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+            "/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe",
+            "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
+            "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+        ]
+
     for c in candidatos:
         if c and os.path.exists(c):
             return c
@@ -323,17 +356,29 @@ def main() -> int:
     navegador = achar_navegador()
     if not navegador:
         print(f"{AMARELO}Nenhum Edge/Chrome encontrado para gerar o PDF.{RESET}")
-        print(f"  Abra {os.path.relpath(SAIDA_HTML, RAIZ)} no navegador e use")
+        if os.path.exists("/mnt/c/Windows") and not interop_do_wsl():
+            print("  Voce esta no WSL com o interop do Windows DESLIGADO: o Edge")
+            print("  esta instalado, mas nao pode ser executado daqui.")
+            print("  Rode o gerador pelo PowerShell:")
+            print("    python scripts/gerar-relatorio.py")
+        print(f"  Ou abra {os.path.relpath(SAIDA_HTML, RAIZ)} no navegador e use")
         print("  Ctrl+P > Salvar como PDF. O CSS de impressao ja esta aplicado.")
         return 0
+
+    # Navegador do Windows chamado de dentro do WSL: ele nao entende caminho
+    # POSIX, entao os dois lados vao traduzidos.
+    windows = navegador.startswith("/mnt/")
+    destino_pdf = caminho_para_windows(SAIDA_PDF) if windows else SAIDA_PDF
+    origem_html = (caminho_para_windows(SAIDA_HTML).replace("\\", "/")
+                   if windows else SAIDA_HTML.replace(os.sep, "/"))
 
     # --no-pdf-header-footer: sem isso o Chrome carimba URL e data em cada
     # pagina, o que num documento de entrega parece descuido.
     comando = [
         navegador, "--headless", "--disable-gpu", "--no-sandbox",
         "--no-pdf-header-footer",
-        f"--print-to-pdf={SAIDA_PDF}",
-        "file:///" + SAIDA_HTML.replace(os.sep, "/"),
+        f"--print-to-pdf={destino_pdf}",
+        "file:///" + origem_html,
     ]
     try:
         r = subprocess.run(comando, capture_output=True, timeout=120)

@@ -262,27 +262,28 @@ else
 fi
 
 # ===========================================================================
-titulo "4 de 7 · APM (New Relic)"
+titulo "4 de 7 · APM (Datadog)"
 
-printf "  Sem a chave do New Relic, dois requisitos ${N}não são demonstráveis${X}:\n"
+printf "  Sem a chave do APM, dois requisitos ${N}ficam sem evidência${X}:\n"
 printf "    ${R}F0.5b${X}  Distributed Tracing no APM\n"
-printf "    ${R}F3.1${X}   AIOps — detecção automática de anomalias\n\n"
+printf "    ${R}F3.1${X}   AIOps — detecção automática de anomalias (Watchdog)\n\n"
 printf "  Prometheus, Grafana e Loki funcionam normalmente sem ela.\n"
-printf "  Plano gratuito e ${N}perpétuo${X}, sem cartão: ${C}https://newrelic.com/signup${X}\n"
-printf "  Copie a ${N}License Key${X} (não a User Key, não a Insights Key).\n\n"
+printf "  Conta do grupo (herdada da Fase 4, ADR-004), site ${N}us5${X}:\n"
+printf "    ${C}https://us5.datadoghq.com${X} → Organization Settings → API Keys\n"
+printf "  Copie a ${N}API Key${X} (não a Application Key).\n\n"
 
-if [[ -n "${NEW_RELIC_LICENSE_KEY:-}" ]]; then
-  ok "chave já configurada (${NEW_RELIC_LICENSE_KEY:0:6}…${NEW_RELIC_LICENSE_KEY: -4})"
-  confirmar "Trocar a chave?" && NEW_RELIC_LICENSE_KEY=""
+if [[ -n "${DD_API_KEY:-}" ]]; then
+  ok "chave já configurada (${DD_API_KEY:0:6}…${DD_API_KEY: -4})"
+  confirmar "Trocar a chave?" && DD_API_KEY=""
 fi
 
-if [[ -z "${NEW_RELIC_LICENSE_KEY:-}" ]]; then
-  read -r -s -p "  License Key (ENTER para pular): " CHAVE_NR; echo
-  if [[ -n "$CHAVE_NR" ]]; then
-    NEW_RELIC_LICENSE_KEY="$CHAVE_NR"
+if [[ -z "${DD_API_KEY:-}" ]]; then
+  read -r -s -p "  API Key (ENTER para pular): " CHAVE_DD; echo
+  if [[ -n "$CHAVE_DD" ]]; then
+    DD_API_KEY="$CHAVE_DD"
     ok "chave registrada"
   else
-    aviso "pulado — F0.5b e F3.1 ficarão sem evidência"
+    aviso "pulado — se o Secret apm-credentials já existir no cluster, o APM segue funcionando"
   fi
 fi
 
@@ -379,7 +380,7 @@ ok ".solidarytech.conf"
 # Segredos em arquivo separado, com permissão restrita e fora do Git.
 {
   printf '# Segredos — NUNCA versionado (ver .gitignore)\n'
-  [[ -n "${NEW_RELIC_LICENSE_KEY:-}" ]] && printf 'NEW_RELIC_LICENSE_KEY=%s\n' "$NEW_RELIC_LICENSE_KEY"
+  [[ -n "${DD_API_KEY:-}" ]]            && printf 'DD_API_KEY=%s\n' "$DD_API_KEY"
   [[ -n "${SONAR_TOKEN:-}" ]]           && printf 'SONAR_TOKEN=%s\n' "$SONAR_TOKEN"
   [[ -n "${PAGERDUTY_ROUTING_KEY:-}" ]] && printf 'PAGERDUTY_ROUTING_KEY=%s\n' "$PAGERDUTY_ROUTING_KEY"
   [[ -n "${CHATOPS_WEBHOOK_URL:-}" ]]   && printf 'CHATOPS_WEBHOOK_URL=%s\n' "$CHATOPS_WEBHOOK_URL"
@@ -439,7 +440,7 @@ titulo "Resumo"
 printf "  Conta AWS ........ %s\n" "${AWS_CONTA:-—}"
 printf "  Região ........... %s (DR: %s)\n" "$AWS_REGIAO" "$AWS_REGIAO_DR"
 printf "  Repositório ...... %s\n" "${REPO_URL:-${R}não configurado${X}}"
-printf "  New Relic ........ %s\n" "$([[ -n "${NEW_RELIC_LICENSE_KEY:-}" ]] && echo "configurado" || echo "não — F0.5b e F3.1 sem evidência")"
+printf "  Datadog (APM) .... %s\n" "$([[ -n "${DD_API_KEY:-}" ]] && echo "configurado" || echo "não informado — ok se o Secret já existir no cluster")"
 printf "  SonarCloud ....... %s\n" "$([[ -n "${SONAR_TOKEN:-}" ]] && echo "configurado" || echo "não")"
 printf "  Integrantes ...... %s\n" "$([[ -n "${INTEGRANTES:-}" ]] && printf '%b' "$INTEGRANTES" | grep -c '^|' || echo 0)"
 
@@ -465,7 +466,7 @@ if ! confirmar "Subir tudo agora?"; then
   exit 0
 fi
 
-export NEW_RELIC_LICENSE_KEY="${NEW_RELIC_LICENSE_KEY:-}"
+export DD_API_KEY="${DD_API_KEY:-}"
 export AWS_REGION="$AWS_REGIAO"
 
 titulo "Etapa 1 de 5 · Backend do Terraform"

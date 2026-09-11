@@ -127,17 +127,25 @@ justamente o requisito. Justificativa completa no
 [ADR-004](docs/02-arquitetura/adr/README.md#adr-004).
 
 **Como obter (gratuito, perpétuo, sem cartão):**
-1. <https://newrelic.com/signup> — plano **Free**: 100 GB/mês, APM completo e
-   Applied Intelligence
-2. Copie a **License Key** (não a User Key, não a Insights Key)
+O APM é o **Datadog**, herdado da Fase 4 ([ADR-004](docs/02-arquitetura/adr/README.md)).
+A conta educacional do grupo já existe e está ativa — não é trial.
+
+1. <https://us5.datadoghq.com> — repare no **us5**: a região tem página de
+   login própria, e `app.datadoghq.com` é outra organização
+2. **Organization Settings → API Keys** → copie a **API Key**
+   (não a Application Key)
 
 **O que fazer com ela:**
 ```bash
-export NEW_RELIC_LICENSE_KEY="sua-license-key-aqui"
+export DD_API_KEY="sua-api-key-aqui"
 ```
 
 > Defina **antes** de rodar `make deploy`. Se esquecer, rode `make deploy` de
 > novo com a variável exportada — o script é idempotente.
+>
+> **Só é necessário na primeira subida.** O bootstrap materializa a chave no
+> Secret `apm-credentials`, que sobrevive enquanto o cluster existir. Nas
+> sessões seguintes, o APM continua funcionando sem exportar nada.
 >
 > A chave nunca entra no Git: vira um `Secret` no cluster, criado pelo script.
 
@@ -286,7 +294,7 @@ dobra a vida útil do crédito.
 | A1 | Credenciais AWS Academy (3 campos) | 🔴 **Sim** | AWS Details → AWS CLI → Show |
 | A2 | Repositório GitHub publicado | 🔴 **Sim** | github.com/new |
 | A3 | Nomes, RMs e usernames | 🔴 **Sim** | Com o grupo |
-| B1 | New Relic License Key | 🟡 Muito recomendado | newrelic.com/signup (grátis) |
+| B1 | Datadog API Key (APM) | 🟡 Muito recomendado | us5.datadoghq.com → Organization Settings → API Keys · conta do grupo, herdada da Fase 4 |
 | B2 | `SONAR_TOKEN` + `SONAR_ORG` | 🟡 Recomendado | sonarcloud.io |
 | B3 | Secrets AWS no GitHub | 🟡 Recomendado | `make sync-creds` |
 | C1 | Webhook de alertas | 🟢 Opcional | PagerDuty / Discord |
@@ -458,7 +466,7 @@ git pull
 ## Passo 4 — Entregar o cluster ao ArgoCD (~8 min)
 
 ```bash
-export NEW_RELIC_LICENSE_KEY="sua-chave"   # se tiver (B1)
+export DD_API_KEY="sua-api-key"   # só na 1a subida — ver B1
 make deploy
 ```
 

@@ -25,8 +25,8 @@ subir o cluster duas vezes.
 | `f0-argocd.png` | Interface do ArgoCD com todas as Applications `Synced` / `Healthy` | F0.4 |
 | `f0-commit-da-pipeline.png` | O commit que o job `update-gitops` fez, trocando a tag da imagem | F0.4 |
 | `f0-pods-running.png` | `kubectl get pods -A` com os 3 serviços e o worker em `Running` | F0.1b |
-| `f0-trace-distribuido.png` | Trace no New Relic atravessando `donation-service` → SQS → `volunteer-worker` | F0.5b |
-| `f0-service-map.png` | Service Map do New Relic com os serviços e suas dependências | F0.5b |
+| `f0-trace-distribuido.png` | Trace no **Datadog** (APM → Traces) atravessando `donation-service` → SQS → `volunteer-worker` | F0.5b |
+| `f0-service-map.png` | Service Map do **Datadog** (APM → Service Map) com os serviços e suas dependências | F0.5b |
 | `f0-trace-id-no-loki.png` | Busca no Loki por um `trace_id` visto no APM, mostrando a linha de log correspondente | F0.5a |
 
 ## SRE (F1)

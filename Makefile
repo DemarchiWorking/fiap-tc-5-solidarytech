@@ -121,10 +121,18 @@ fmt-check: ## Falha se o codigo nao estiver formatado
 	@$(TF) fmt -check -recursive infra/
 
 .PHONY: validate
-validate: ## terraform validate nos dois ambientes
+validate: ## terraform validate nos dois ambientes (nao precisa de credencial)
+	@# O `init` roda SO quando falta.
+	@#
+	@# `terraform validate` nao precisa de credencial: checa sintaxe, tipos e
+	@# referencias. Mas o `init` do provider AWS VALIDA a credencial, e o token
+	@# do Learner Lab expira em ~4h. Rodar o init sempre fazia este gate
+	@# reprovar o CODIGO por um problema de SESSAO — justamente de manha,
+	@# antes de abrir o lab, que e quando alguem roda `make check`.
 	@for amb in prod-use1 dr-usw2; do \
 		echo -e "$(VERDE)== validate $$amb ==$(RESET)"; \
-		$(TF) -chdir=infra/environments/$$amb init -backend=false -input=false >/dev/null && \
+		test -d infra/environments/$$amb/.terraform/modules || \
+			$(TF) -chdir=infra/environments/$$amb init -backend=false -input=false >/dev/null 2>&1 || true; \
 		$(TF) -chdir=infra/environments/$$amb validate || exit 1; \
 	done
 

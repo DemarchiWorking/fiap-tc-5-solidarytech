@@ -157,8 +157,9 @@ if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
   echo "  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d"
 fi
 
-# Chave do APM. Opcional: sem ela o cluster sobe e o Prometheus/Loki funcionam;
-# apenas o envio de traces ao New Relic fica desligado.
+# Chave do APM. Opcional: sem ela o cluster sobe e Prometheus, Grafana e Loki
+# funcionam; so o envio de traces ao APM fica desligado.
+#
 # O Secret carrega as chaves dos DOIS APMs. O pipeline de traces usa um so
 # (Datadog, por ADR-004), mas manter as duas chaves aqui torna a troca de
 # backend uma mudanca de duas linhas no values, sem mexer no bootstrap.

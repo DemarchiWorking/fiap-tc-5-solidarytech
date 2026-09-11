@@ -255,13 +255,19 @@ fi
 # ===========================================================================
 secao "6. Credenciais opcionais (custam pontos se faltarem)"
 
-if [[ -n "${NEW_RELIC_LICENSE_KEY:-}" ]]; then
-  ok "NEW_RELIC_LICENSE_KEY definida"
+# APM: Datadog, herdado da Fase 4 (ADR-004). A chave NAO precisa estar no
+# ambiente a cada sessao — o bootstrap a materializa no Secret
+# `apm-credentials`, que sobrevive enquanto o cluster existir. Exportar
+# DD_API_KEY so e necessario na PRIMEIRA subida, ou para trocar a chave.
+if [[ -n "${DD_API_KEY:-}" ]]; then
+  ok "DD_API_KEY definida — o bootstrap vai (re)materializar o Secret do APM"
+elif kubectl -n monitoring get secret apm-credentials >/dev/null 2>&1; then
+  ok "APM configurado no cluster (Secret apm-credentials presente)"
 else
-  aviso "NEW_RELIC_LICENSE_KEY não definida"
-  dica "Sem ela, F0.5b (Distributed Tracing) e F3.1 (AIOps) NÃO são demonstráveis"
-  dica "Grátis e perpétuo: https://newrelic.com/signup"
-  dica "export NEW_RELIC_LICENSE_KEY=... (antes do 'make deploy')"
+  aviso "DD_API_KEY não definida e o Secret do APM não existe no cluster"
+  dica "Sem ela, F0.5b (Distributed Tracing) e F3.1 (AIOps) ficam sem evidência"
+  dica "Datadog → Organization Settings → API Keys (site us5)"
+  dica "export DD_API_KEY=... (antes do './solidary deploy')"
 fi
 
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
@@ -344,12 +350,30 @@ if tem_terraform; then
     dica "make fmt"
   fi
 
-  if tf -chdir=infra/environments/prod-use1 init -backend=false -input=false >/dev/null 2>&1 && \
-     tf -chdir=infra/environments/prod-use1 validate >/tmp/pv-tf.log 2>&1; then
+  # O `init` roda SO quando falta, e sua falha por credencial NAO reprova.
+  #
+  # Este script existe para ser rodado ANTES de abrir a sessao do lab — e antes
+  # da sessao o token esta sempre expirado. `terraform validate` nao precisa de
+  # credencial (checa sintaxe, tipos e referencias), mas o `init` do provider
+  # AWS valida. Rodar o init incondicionalmente dava NO-GO por um motivo que
+  # nao e problema: o codigo esta valido, a sessao e que nao comecou.
+  DIR_TF=infra/environments/prod-use1
+  : > /tmp/pv-tf.log
+  if [[ ! -d "$DIR_TF/.terraform/modules" ]]; then
+    tf -chdir="$DIR_TF" init -backend=false -input=false >/tmp/pv-init.log 2>&1 || true
+  fi
+
+  if [[ ! -d "$DIR_TF/.terraform/modules" ]] && grep -qi "expiredtoken\|credential" /tmp/pv-init.log 2>/dev/null; then
+    aviso "terraform validate não rodou — o init precisa de credencial válida"
+    dica "não é problema de código: abra a sessão do lab e rode o pré-voo de novo"
+  elif tf -chdir="$DIR_TF" validate >/tmp/pv-tf.log 2>&1; then
     ok "terraform validate (prod-use1)"
   else
     falha "terraform validate REPROVOU"
-    sed 's/^/        /' /tmp/pv-tf.log | tail -15
+    # `-s` antes do sed: o log pode estar vazio se o validate nem chegou a
+    # rodar, e ai o sed reclamaria de arquivo inexistente por cima do erro
+    # real — dois erros na tela, um deles inventado.
+    [[ -s /tmp/pv-tf.log ]] && sed 's/^/        /' /tmp/pv-tf.log | tail -15
   fi
 else
   aviso "sem Terraform (nem binário nativo, nem Docker) — fmt/validate não rodaram"

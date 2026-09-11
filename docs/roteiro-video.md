@@ -25,7 +25,7 @@
 - [ ] Dashboards SRE e FinOps com dados
 - [ ] Uma execução do `self-heal.yml` já no histórico do Actions
 - [ ] Um backup do Velero concluído (`velero backup get`)
-- [ ] Abas abertas na ordem: Grafana(SRE) · Grafana(FinOps) · ArgoCD · Actions · New Relic · Tag Editor · terminal
+- [ ] Abas abertas na ordem: Grafana(SRE) · Grafana(FinOps) · ArgoCD · Actions · Datadog (app.us5.datadoghq.com) · Tag Editor · terminal
 - [ ] Cronômetro visível
 
 > O erro mais comum é gravar com o ambiente recém-subido. Os painéis ficam vazios,
@@ -130,13 +130,14 @@ make conformidade         # relatório de conformidade com o lab
 
 ### 2.3 APM, traces e alertas (2 min) — **F0.5b, F3.1**
 
-**New Relic → Distributed Tracing**, abrir um trace de doação:
+**Datadog → APM → Traces**, abrir um trace de doação:
 
 > "Um trace só, atravessando três serviços **e uma fila SQS**. O `traceparent`
 > viaja como atributo da mensagem — sem isso, seriam dois traces desconexos."
 
 - Copiar o `trace_id` → **Grafana → Loki** → mesma requisição, linha exata de log
-- **New Relic → Alerts & AI → Anomalies**: a anomalia detectada pela IA
+- **Datadog → Watchdog**: a anomalia detectada pela IA
+- **Datadog → APM → Service Map**: as dependências entre os três serviços e a SQS
 - **Prometheus → Alerts**: as regras de burn rate configuradas
 
 ### 2.4 Dashboard SRE com SLOs calculados (2 min) — **F1.2**

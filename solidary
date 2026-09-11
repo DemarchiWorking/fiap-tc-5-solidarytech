@@ -121,10 +121,31 @@ case "$ALVO" in
   fmt) tf fmt -recursive infra/ ;;
 
   validate)
+    # O `init` roda SO quando falta, e sua falha nao reprova o ambiente.
+    #
+    # `terraform validate` nao precisa de credencial — checa sintaxe, tipos e
+    # referencias. Mas o `init` do provider AWS valida a credencial, e o token
+    # do Learner Lab expira em ~4h. Antes de abrir a sessao, que e o estado
+    # normal de manha, o init falhava com ExpiredToken e o gate reportava
+    # "validate FALHOU" — acusando o codigo por um problema de sessao.
     for AMB in prod-use1 dr-usw2; do
       passo "validate $AMB"
-      tf -chdir="infra/environments/$AMB" init -backend=false -input=false >/dev/null 2>&1
-      tf -chdir="infra/environments/$AMB" validate
+      DIR="infra/environments/$AMB"
+      if [[ ! -d "$DIR/.terraform/modules" ]]; then
+        if ! tf -chdir="$DIR" init -backend=false -input=false >/tmp/init-$AMB.log 2>&1; then
+          if grep -qi "expiredtoken\|credential" "/tmp/init-$AMB.log"; then
+            printf '  %s %s\n' "${AMARELO}pulado${RESET}" \
+              "$AMB — o init precisa de credencial AWS valida; o validate em si, nao"
+            printf '     %s\n' "abra a sessao do lab e rode de novo, ou ignore: nao e problema de codigo"
+            continue
+          fi
+          printf '  %s %s\n' "${VERMELHO}FALHOU${RESET}" "$AMB — init"
+          tail -5 "/tmp/init-$AMB.log" | sed 's/^/     /'
+          FALHAS=$((FALHAS + 1))
+          continue
+        fi
+      fi
+      tf -chdir="$DIR" validate
       resultado $? "$AMB"
     done
     exit $FALHAS

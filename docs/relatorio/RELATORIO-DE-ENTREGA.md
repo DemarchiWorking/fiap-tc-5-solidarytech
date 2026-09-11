@@ -67,7 +67,7 @@ Nenhuma restrição foi escondida.
 | **F0.2** | IaC (Terraform) | 21 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. **Cluster, bancos, mensageria e rede** — 100% por código |
 | **F0.3** | CI/CD DevSecOps | Pipeline reutilizável: `lint‖test` → `sonar`+`build-scan-push` → `update-gitops`. **Trivy em 2 camadas** (SCA + imagem), SBOM CycloneDX, `gitleaks` |
 | **F0.4** | GitOps | **ArgoCD** com App-of-Apps → ApplicationSet. `selfHeal` e `prune` ligados. Um único `kubectl apply` em todo o projeto |
-| **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **New Relic** com Distributed Tracing atravessando o SQS |
+| **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **Datadog** com Distributed Tracing atravessando o SQS — 115.488 spans entregues, 0 falhas |
 
 Comparativo completo das três entregas:
 [`docs/02-arquitetura/evolucao-v3-v4-v5.md`](../02-arquitetura/evolucao-v3-v4-v5.md)
@@ -333,14 +333,31 @@ Diagrama completo em [`docs/05-itsm-aiops/README.md`](../05-itsm-aiops/README.md
 
 ### AIOps
 
-**New Relic Applied Intelligence** — Anomaly Detection, Correlated Incidents e
-Golden Signals automáticos.
+**Datadog Watchdog** — detecção automática de anomalias comportamentais,
+correlação de eventos e Golden Signals.
 
-A escolha sobre o Datadog está no [ADR-004](../02-arquitetura/adr/README.md):
-o trial do Datadog dura 14 dias e o hackathon dura 2 meses; seu free tier
-permanente **não inclui APM**, que é o requisito.
+A escolha está no [ADR-004](../02-arquitetura/adr/README.md), e é de
+**continuidade**: a conta educacional ativa do grupo é a do Datadog, criada na
+Fase 4. Trocar de APM aqui custaria uma conta nova e nenhum ganho — as
+aplicações exportam **OTLP puro** e não sabem qual backend recebe o trace. É
+esse o ganho de ter o Collector no meio: o backend é uma linha de
+configuração.
 
-**Evidências:** *(print da anomalia detectada + execução do self-heal)*
+O caminho contrário também está aberto e versionado: o bloco do exporter
+`otlphttp/newrelic` continua no `values.yaml` do Collector, comentado.
+
+**Evidência medida**, sem depender da interface — as métricas do próprio
+Collector:
+
+```
+otelcol_exporter_sent_spans{exporter="datadog"}   115488
+otelcol_exporter_send_failed_spans                (ausente = zero)
+API key validation successful.
+```
+
+Detalhes em [`apm-tracing.txt`](../07-evidencias/apm-tracing.txt).
+
+**Evidências visuais:** *(print do Watchdog + trace atravessando o SQS)*
 
 ---
 

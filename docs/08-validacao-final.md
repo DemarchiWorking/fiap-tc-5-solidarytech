@@ -148,8 +148,8 @@ métrica. Os painéis de SLO ficam vazios, o error budget não tem o que calcula
 e a IA do APM não tem linha de base para aprender. Um vídeo gravado com o
 ambiente ocioso *prova que nada funciona*.
 
-Enquanto roda, configure no New Relic: **Alerts & AI → Anomaly detection** para
-os três serviços.
+Enquanto roda, ative no Datadog: **Watchdog** para os três serviços
+(app.us5.datadoghq.com — repare no site `us5`).
 
 **Prova:** pré-requisito de **F1** e **F3.1**.
 
@@ -168,7 +168,7 @@ make senhas               # credenciais e URL base
 - Prometheus → Rules, com as regras de SLO ativas;
 - busca no Loki por um `trace_id` que você viu no APM.
 
-**Confira, no New Relic:** o trace atravessando `donation-service` → SQS →
+**Confira, no Datadog:** o trace atravessando `donation-service` → SQS →
 `volunteer-worker`, e o Service Map com as dependências.
 
 **Prova:** **F0.5** (observabilidade + APM com tracing distribuído), **F1.1** e

@@ -29,7 +29,7 @@ provisionada 100% por **Terraform** e entregue por **GitOps (ArgoCD)**.
 ```
 
 O **console de primeira execução** pergunta apenas o que só você tem —
-credenciais do AWS Academy, repositório Git, chave do New Relic, nomes e RMs do
+credenciais do AWS Academy, repositório Git, chave do Datadog, nomes e RMs do
 grupo —, **valida cada resposta na hora** e, ao final, oferece subir o ambiente
 inteiro em 5 etapas (~35 min).
 
@@ -114,7 +114,7 @@ passa a mentir** — sem erro, sem log, sem sintoma.
 │                    otel-collector (gateway)  +  otel-collector-logs      │
 │                        ├─▶ Prometheus ─▶ Grafana (SRE · FinOps)         │
 │                        ├─▶ Loki (S3)                                    │
-│                        └─▶ New Relic (APM · Applied Intelligence)       │
+│                        └─▶ Datadog (APM · Watchdog)                     │
 │  OpenCost · Velero ─▶ S3 (us-west-2) · ArgoCD                           │
 └──────────────────────────────────────────────────────────────────────────┘
       RDS PostgreSQL   ·   DynamoDB   ·   SQS + DLQ   ·   ECR

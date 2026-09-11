@@ -18,7 +18,7 @@ slo:donation_latencia:p99
 
 ## 2. Onde o tempo está sendo gasto
 
-O trace responde isso diretamente. New Relic → APM → `donation-service` →
+O trace responde isso diretamente. Datadog → APM → `donation-service` →
 transação mais lenta → **breakdown por span**:
 
 | Span dominante | Causa provável | Ação |

@@ -148,7 +148,7 @@ e o `smoke-local.sh`. Os gates que **não** dependem de Docker estão todos verd
 | Regiões | `us-east-1` (prod) · `us-west-2` (DR) |
 | Cluster | EKS 1.34, node group `t3.medium` × 3 |
 | IAM | **`LabRole`** por `data source` — nunca `resource` |
-| APM | New Relic (Datadog atrás de flag — ADR-004) |
+| APM | Datadog, site us5 (New Relic versionado e comentado — ADR-004) |
 | Código-fonte | `dougls/hackathon-DCLT` @ `79f5c20de1f039ae9c43c3ef4c09ad89362f5f1a` |
 | Custo | ≈ US$ 6,73/dia · US$ 202/mês |
 | Referência (Fase 4) | `../../challenge-etapa-4/fiap-tc-3-gitops` (somente leitura) |

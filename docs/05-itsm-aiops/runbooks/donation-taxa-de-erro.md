@@ -58,7 +58,7 @@ curl -s localhost:8082/ready | python -m json.tool
 
 ## 3. Correlacionar com o trace
 
-No New Relic, filtrar transações com erro do `donation-service`, copiar o
+No Datadog (APM → Traces), filtrar por erro no `donation-service`, copiar o
 `trace_id` e buscar no Loki:
 
 ```logql

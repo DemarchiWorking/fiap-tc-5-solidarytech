@@ -15,7 +15,7 @@
 ├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │   ┌─ Determinística ──────────┐      ┌─ Preditiva (AIOps) ─────────────┐  │
-│   │ Prometheus                │      │ New Relic Applied Intelligence  │  │
+│   │ Prometheus                │      │ Datadog Watchdog                │  │
 │   │ burn rate de error budget │      │ anomalia comportamental         │  │
 │   │ "o SLO está sendo violado"│      │ "isto não é o normal deste      │  │
 │   │                           │      │  serviço a esta hora"           │  │
@@ -108,16 +108,22 @@ workflow imprime esse lembrete no summary da execução.
 > *"ative as funcionalidades de Inteligência Artificial da sua ferramenta de APM
 > para detectar anomalias comportamentais automáticas"*
 
-### Ferramenta: New Relic Applied Intelligence
+### Ferramenta: Datadog Watchdog
 
-A escolha está justificada no [ADR-004](../02-arquitetura/adr/README.md#adr-004).
-Resumindo o essencial: o trial do Datadog dura **14 dias** e o hackathon dura
-**2 meses** — o ambiente expiraria antes da entrega. E o free tier permanente do
-Datadog **não inclui APM**, que é justamente o requisito. O do New Relic é
-perpétuo e inclui APM completo **e** Applied Intelligence.
+A escolha está no [ADR-004](../02-arquitetura/adr/README.md#adr-004), e é de
+**continuidade**: a conta educacional ativa do grupo é a do Datadog, criada na
+Fase 4 e ainda válida. Não é trial.
 
-Como toda a instrumentação é **OpenTelemetry puro**, trocar de volta é alterar um
-bloco de `values.yaml` — sem tocar em código de aplicação.
+O Watchdog faz o que o requisito pede — detecção automática de anomalias
+comportamentais, sem regra escrita à mão — e vem junto do APM que já recebe os
+traces.
+
+Como toda a instrumentação é **OpenTelemetry puro**, trocar de APM é alterar um
+bloco de `values.yaml` — sem tocar em código de aplicação. O bloco do exporter
+`otlphttp/newrelic` continua versionado e comentado no
+`otel-collector-gateway/values.yaml`, justamente para deixar esse caminho
+aberto. É esse o ganho de ter o Collector no meio: **a aplicação não sabe qual
+backend recebe o trace.**
 
 ### O que é ativado
 
@@ -142,8 +148,9 @@ make carga
 kubectl -n solidary-loadtest create job pico-$(date +%s) \
   --from=cronjob/k6-load-test
 
-# 3. New Relic → Alerts & AI → Anomalies
+# 3. Datadog → Watchdog
 #    A anomalia detectada é o print exigido pelo requisito F3.1.
+#    (app.us5.datadoghq.com — repare no site us5)
 ```
 
 > **Não basta a feature estar habilitada.** A rubrica pede evidência de
@@ -199,9 +206,11 @@ corpo com o campo `event_type`, que o Alertmanager não sabe produzir. Ligar os
 dois exigiria um tradutor rodando no cluster — mais um workload para manter, num
 cluster de 6 vCPU, e mais uma peça para falhar durante um incidente.
 
-**Por onde sai.** Pelo APM. O New Relic permite webhook com **cabeçalhos e corpo
-personalizados**, então ele fala diretamente com a API do GitHub. É o mesmo
-caminho que a Fase 4 usou com o Monitor do Datadog (`@webhook-github-selfheal`).
+**Por onde sai.** Pelo APM. O Datadog permite webhook com **cabeçalhos e corpo
+personalizados**, então ele fala diretamente com a API do GitHub — é
+literalmente o mesmo caminho da Fase 4 (`@webhook-github-selfheal`), com o
+mesmo Monitor e o mesmo `repository_dispatch` do outro lado. O workflow
+`self-heal.yml` já espera por ele.
 
 Configuração, em *Alerts → Destinations → Webhook*:
 

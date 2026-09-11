@@ -62,7 +62,7 @@ O Learner Lab **não é uma conta AWS comum**. Os limites abaixo estão no docum
 │     otel-collector-logs (DaemonSet, /var/log/pods)                                        │
 │          ├─ prometheusremotewrite ─▶ Prometheus ─▶ Grafana (dashboards + SRE/SLO)         │
 │          ├─ otlphttp ─────────────▶ Loki  (object_store: S3)                              │
-│          └─ otlp ─────────────────▶ APM SaaS (New Relic · Applied Intelligence = AIOps)   │
+│          └─ otlp ─────────────────▶ APM SaaS (Datadog · Watchdog = AIOps)                 │
 │     OpenCost (custo/namespace) · PrometheusRule de burn-rate · Alertmanager                │
 │                                                                                            │
 │   ns argocd   ArgoCD (App-of-Apps)          ns velero   Velero ─▶ S3 (us-west-2)          │
@@ -159,7 +159,7 @@ Registradas em [`adr/README.md`](adr/README.md):
 | ADR-001 | Sem IRSA — credencial de pod via instance profile (`LabRole` + IMDS) |
 | ADR-002 | `ingress-nginx` + NLB, não AWS Load Balancer Controller |
 | ADR-003 | Nós em subnet pública, **sem NAT Gateway** por padrão (togglável) |
-| ADR-004 | APM: **New Relic** primário, Datadog atrás de flag |
+| ADR-004 | APM: **Datadog** (conta da Fase 4), New Relic versionado atrás de comentário |
 | ADR-005 | **SonarCloud** em vez de SonarQube self-hosted |
 | ADR-006 | **Um RDS com dois databases**, não dois RDS |
 | ADR-007 | Multicloud provado por **portabilidade estrutural**, não por segundo deploy |

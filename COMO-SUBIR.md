@@ -115,16 +115,20 @@ Preencha também a seção **Identificação** do `README.md`.
 
 ## 🟡 Bloco B — Recomendado: sem isso o ambiente sobe, mas você perde pontos
 
-### B1. Você tem uma conta New Relic?
+### B1. Você tem a API Key do Datadog?
 
 **Sem ela, o requisito F0.5b (APM com Distributed Tracing) e o F3.1 (AIOps) não
 podem ser demonstrados.** Prometheus, Grafana e Loki funcionam normalmente — mas
 esses dois requisitos são de **alto risco de dedução**.
 
-**Por que New Relic e não Datadog:** o trial do Datadog dura 14 dias, o hackathon
-dura 2 meses, e o free tier permanente do Datadog **não inclui APM** — que é
-justamente o requisito. Justificativa completa no
+**Por que Datadog:** é a conta educacional que o grupo já tem, criada na Fase 4
+e ainda ativa — não é trial. Trocar de APM custaria uma conta nova e não traria
+ganho: as aplicações exportam **OTLP puro** e não sabem qual backend recebe o
+trace. Justificativa completa no
 [ADR-004](docs/02-arquitetura/adr/README.md#adr-004).
+
+> **Só é necessária na primeira subida.** Depois a chave vive no Secret
+> `apm-credentials`, que sobrevive enquanto o cluster existir.
 
 **Como obter (gratuito, perpétuo, sem cartão):**
 O APM é o **Datadog**, herdado da Fase 4 ([ADR-004](docs/02-arquitetura/adr/README.md)).
@@ -347,7 +351,7 @@ make pre-voo
 **Este é o passo mais importante da lista.** Sem tocar na nuvem e sem gastar
 nada, ele verifica: ferramentas instaladas, Docker de fato **rodando**,
 credenciais válidas com os **três** campos, `LabRole` existindo, região liberada,
-remote do Git configurado, chave do New Relic, secrets do GitHub, e os gates de
+remote do Git configurado, chave do APM, secrets do GitHub, e os gates de
 **política do Academy** e de **observabilidade**.
 
 > Os gates de **workflows** e de **manifestos** não entram no pré-voo: dependem
@@ -400,7 +404,7 @@ make lab-up
 Cria VPC, EKS, RDS, DynamoDB, SQS, ECR e os buckets S3. O gargalo é o control
 plane do EKS.
 
-**Enquanto espera**, adiante o Bloco B: crie a conta New Relic e configure os
+**Enquanto espera**, adiante o Bloco B: pegue a API Key do Datadog e configure os
 secrets do GitHub.
 
 **Se falhar com `AccessDenied`:** sua sessão do lab expirou. Reinicie o lab,
@@ -509,7 +513,7 @@ make senhas    # credenciais e URL base
 | Applications `Synced` | `http://<NLB>/argocd/` | F0.4 |
 | Painel de SLO com números | `http://<NLB>/grafana/` → SRE | F1.2 |
 | Painel de custo | Grafana → FinOps | F2.3 |
-| Trace ponta a ponta | New Relic → Distributed Tracing | F0.5b |
+| Trace ponta a ponta | Datadog → APM → Traces | F0.5b |
 | Logs com `trace_id` | Grafana → Explore → Loki | F0.5a |
 | Tags em 100% dos recursos | AWS → Tag Editor → `CostCenter=NGO-Core` | F2.1 |
 | Backup concluído | `velero backup get` | F4.2a |

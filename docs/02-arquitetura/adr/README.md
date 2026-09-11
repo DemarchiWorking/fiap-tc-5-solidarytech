@@ -9,7 +9,7 @@
 | [001](#adr-001) | Sem IRSA — credencial de pod via instance profile | Aceito |
 | [002](#adr-002) | `ingress-nginx` + NLB em vez do AWS Load Balancer Controller | Aceito |
 | [003](#adr-003) | Nós em subnet pública, sem NAT Gateway por padrão | Aceito |
-| [004](#adr-004) | New Relic como APM primário | Aceito |
+| [004](#adr-004) | Datadog como APM (revertido de New Relic) | Aceito · revisado |
 | [005](#adr-005) | SonarCloud em vez de SonarQube self-hosted | Aceito |
 | [006](#adr-006) | Um RDS com dois databases | Aceito |
 | [007](#adr-007) | Multicloud provado por portabilidade estrutural | Aceito |
@@ -136,33 +136,50 @@ mudança de código.
 
 ## ADR-004
 
-### New Relic como APM primário, Datadog atrás de flag
+### Datadog como APM — revertendo a escolha por New Relic
 
-**Status:** Aceito · **Data:** 2026-09-05 · **Supersede parcialmente:** ADR-004 da Fase 4
+**Status:** Aceito · **Data:** 2026-09-05 · **Revisado:** 2026-09-10 ·
+**Mantém:** ADR-004 da Fase 4
 
 **Contexto.** O enunciado exige APM com **Distributed Tracing** (F0.5b) e **AIOps** — nomeando
-*"Watchdog no Datadog ou Applied Intelligence no New Relic"* (F3.1). A Fase 4 escolheu Datadog. O
-hackathon dura **2 meses**, e o *trial* do Datadog dura **14 dias**: o ambiente **expiraria antes
-da entrega**. O free tier permanente do Datadog cobre infraestrutura, mas **não inclui APM** — que
-é exatamente o requisito. O free tier do New Relic é **perpétuo**, inclui **APM completo**,
-**Applied Intelligence** e **100 GB/mês** de ingestão.
+*"Watchdog no Datadog ou Applied Intelligence no New Relic"* (F3.1). A Fase 4 escolheu Datadog.
 
-**Decisão.** **New Relic** como APM primário. O exporter do OTel Collector permanece **plugável**:
-trocar de volta para Datadog é alterar um bloco de `values.yaml`, sem tocar em código de aplicação
-— porque toda a instrumentação é **OpenTelemetry puro**, não SDK proprietário.
+**A decisão original (05/09) foi por New Relic**, com dois argumentos sobre o Datadog: o *trial*
+duraria **14 dias** contra os 2 meses do hackathon, e o free tier permanente **não inclui APM**.
+
+**Por que foi revertida (10/09).** As duas premissas estavam erradas para o **nosso** caso. A conta
+usada na Fase 4 não é trial nem free tier: é **educacional**, continua ativa, e inclui APM. A chave
+foi validada contra `api.us5.datadoghq.com/api/v1/validate`, que respondeu `valid=true`.
+
+A decisão original também custava algo que não estava contabilizado: criar e configurar uma conta
+nova em outro SaaS, na véspera da entrega, para obter exatamente a mesma capacidade.
+
+**Decisão.** **Datadog** como APM, site `us5` — mantendo a continuidade com a Fase 4. O exporter do
+OTel Collector permanece **plugável**: voltar para New Relic é descomentar um bloco de
+`values.yaml`, sem tocar em código de aplicação — porque toda a instrumentação é **OpenTelemetry
+puro**, não SDK proprietário.
 
 **Consequências.**
 
 *Positivas:*
-- Cobertura garantida durante os 2 meses **e depois da entrega** (o avaliador consegue abrir).
-- Applied Intelligence atende F3.1 sem custo.
+- Continuidade com a Fase 4: a conta, o histórico e o conhecimento do time.
+- **Watchdog** atende F3.1 sem custo adicional.
 - A instrumentação vendor-neutral é, por si só, um argumento de arquitetura: **sem lock-in de
-  observabilidade**.
+  observabilidade** — e esta reversão é a prova. Trocar o backend foram **duas linhas** no
+  `values.yaml`, com zero mudança em código de aplicação.
 
 *Negativas:*
-- Perde-se a continuidade com a Fase 4 e o conhecimento já acumulado em Datadog.
-- Mitigação: o bloco `datadog` do exporter fica **versionado e comentado** no `values.yaml`, pronto
-  para uso.
+- A chave do Datadog está **commitada em texto puro** no repositório da Fase 4 — o ADR-004 de lá
+  registra o próprio erro como *"risco real, não hipotético"*. Aqui ela vive no Secret
+  `apm-credentials`, materializado pelo bootstrap a partir de variável de ambiente, nunca no Git.
+  **Ação pendente:** rotacionar a chave no Datadog.
+- Depender de uma conta de terceiro (do colega de equipe) para o avaliador abrir o APM. Mitigação:
+  a evidência de tracing não depende da interface — as métricas do próprio Collector
+  (`otelcol_exporter_sent_spans`) provam a entrega, e estão em
+  [`apm-tracing.txt`](../../07-evidencias/apm-tracing.txt).
+
+**Evidência da reversão funcionando:** `API key validation successful.` no log do Collector e
+115.488 spans entregues com zero falhas de envio.
 
 ---
 

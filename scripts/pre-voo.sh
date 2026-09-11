@@ -263,6 +263,13 @@ if [[ -n "${DD_API_KEY:-}" ]]; then
   ok "DD_API_KEY definida — o bootstrap vai (re)materializar o Secret do APM"
 elif kubectl -n monitoring get secret apm-credentials >/dev/null 2>&1; then
   ok "APM configurado no cluster (Secret apm-credentials presente)"
+elif ! kubectl get ns >/dev/null 2>&1; then
+  # Distinguir "nao existe" de "nao da para verificar". Sem credencial valida o
+  # kubectl nao fala com o cluster, e afirmar que o Secret esta ausente seria
+  # inventar um problema — o Secret provavelmente esta la, intacto.
+  aviso "DD_API_KEY não definida e o cluster não está acessível para conferir"
+  dica "Se o cluster já existe, o Secret apm-credentials sobreviveu — nada a fazer"
+  dica "Se for a primeira subida: export DD_API_KEY=... antes do './solidary deploy'"
 else
   aviso "DD_API_KEY não definida e o Secret do APM não existe no cluster"
   dica "Sem ela, F0.5b (Distributed Tracing) e F3.1 (AIOps) ficam sem evidência"

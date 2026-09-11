@@ -6,6 +6,9 @@ Plataforma que conecta **ONGs**, **doadores** e **voluntários**, operada com
 maturidade **SRE · FinOps · ITSM/AIOps · Segurança e DR** sobre **AWS (EKS)** —
 provisionada 100% por **Terraform** e entregue por **GitOps (ArgoCD)**.
 
+> 📅 **Dia da entrega:** [`AMANHA.md`](AMANHA.md) — a sequência exata,
+> do zero ao vídeo gravado.
+>
 > 📌 **Onde a entrega está:** [`ESTADO-DA-ENTREGA.md`](ESTADO-DA-ENTREGA.md)
 > — o que está pronto e validado, o que falta e o que fazer agora.
 > Para testar cada parte com comandos e parâmetros:

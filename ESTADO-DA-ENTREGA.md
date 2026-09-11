@@ -4,7 +4,7 @@
 > está pronto**, **o que falta** e **o que fazer agora**. Tudo o que está
 > afirmado abaixo foi medido no ambiente provisionado, não estimado.
 
-**Última validação:** 10/09/2026 · commit `c427a4b` · conta `227007723638` ·
+**Última validação:** 11/09/2026 · commit `ca4896d` · conta `227007723638` ·
 região `us-east-1`
 
 ---
@@ -23,7 +23,8 @@ região `us-east-1`
 | **APM** | **62.952 spans** entregues ao Datadog, 0 falhas |
 | **Backup** | BSL `Available` · 7 backups · dados no S3 |
 | **FinOps** | 42 recursos com as 3 tags obrigatórias |
-| **Entregáveis** | 24 documentos · 11 evidências de terminal · PDF 361 KB |
+| **Entregáveis** | 35 documentos · 12 evidências de terminal · PDF 365 KB |
+| **Rubrica** | `./solidary rubrica` → **29 ok**, 2 pendentes (prints e link do vídeo), **0 faltando** |
 
 **O que falta é apresentação, não engenharia.**
 
@@ -145,6 +146,8 @@ precisaram do ambiente rodando sob carga.
 | 10 | **`gosec` não compila com Go 1.26** | SAST reprovava sem existir achado |
 | 11 | **Painel de erro 5xx vazio sem erro** | Gráfico de erros mostrando "No data" com a plataforma saudável |
 | 12 | **Health check do NLB numa porta inexistente** | **15 % das requisições externas em timeout** — e o SLI marcando 100 % |
+| 13 | **Os gates reprovavam por credencial expirada** | `pre-voo` dava NO-GO antes de abrir o lab, acusando o código por um problema de sessão |
+| 14 | **A entrega dizia New Relic, o sistema roda Datadog** | Relatório, roteiro do vídeo, ADR-004 e 6 outros arquivos — a entrega se contradizendo |
 
 **O padrão:** `kustomize`, `kubeconform`, `terraform validate` e os cinco gates
 locais validam **a forma**. Nenhum executa um cluster. Um HPA sintaticamente

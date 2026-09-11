@@ -108,6 +108,10 @@ check-promql: ## Contrato entre as consultas PromQL e as metricas do codigo
 check-workflows: ## Coerencia dos workflows do GitHub Actions (escopo de env, permissions, versoes)
 	@$(PY) scripts/verificar-workflows.py .
 
+.PHONY: check-rubrica
+check-rubrica: ## Confere se cada entregavel do enunciado existe no repositorio
+	@./scripts/verificar-rubrica.sh
+
 .PHONY: check-academy
 check-academy: ## Verifica as restricoes do AWS Academy no codigo Terraform
 	@$(PY) scripts/verificar-academy.py infra

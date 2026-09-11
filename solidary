@@ -63,6 +63,7 @@ ${NEGRITO}solidary${RESET} — entrada alternativa ao Makefile (para quem nao te
   ${VERDE}sync-creds${RESET}    Publica as credenciais da sessao nos secrets do GitHub
   ${VERDE}whoami${RESET}        Confirma que a sessao do lab esta ativa
   ${VERDE}check${RESET}         Todos os gates locais
+  ${VERDE}rubrica${RESET}       Confere se cada entregavel do enunciado existe
   ${VERDE}validate${RESET}      terraform validate nos dois ambientes
   ${VERDE}fmt${RESET}           terraform fmt
   ${VERDE}relatorio${RESET}     Gera o PDF do relatorio de entrega
@@ -116,6 +117,7 @@ case "$ALVO" in
   sync-creds) ./scripts/sync-aws-creds.sh ;;
   whoami) aws sts get-caller-identity ;;
   pre-voo) ./scripts/pre-voo.sh ;;
+  rubrica) ./scripts/verificar-rubrica.sh ;;
   relatorio) py scripts/gerar-relatorio.py ;;
 
   fmt) tf fmt -recursive infra/ ;;
@@ -163,6 +165,8 @@ case "$ALVO" in
     resultado $? "workflows (5 verificacoes)"
     bash scripts/verificar-manifestos.sh >/dev/null 2>&1
     resultado $? "manifestos Kubernetes"
+    bash scripts/verificar-rubrica.sh >/dev/null 2>&1
+    resultado $? "entregaveis da rubrica presentes"
     tf fmt -check -recursive infra/ >/dev/null 2>&1
     resultado $? "terraform fmt"
 

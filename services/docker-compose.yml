@@ -41,8 +41,10 @@ services:
     ports: ["5432:5432"]
     volumes:
       - ./ngo-service/db/init.sql:/docker-entrypoint-initdb.d/10-ngo.sql:ro
-      - ./donation-service/db/init.sql:/docker-entrypoint-initdb.d/30-donation.sql:ro
       - ./local/00-cria-donation-db.sh:/docker-entrypoint-initdb.d/20-cria-donation-db.sh:ro
+      # FORA do initdb.d de proposito: ali o .sql rodaria contra o ngo_db. O
+      # script acima o aplica no donation_db, que e onde o servico o procura.
+      - ./donation-service/db/init.sql:/solidary/donation-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U solidary -d ngo_db"]
       interval: 5s
@@ -62,7 +64,15 @@ services:
       # O endpoint /_localstack/init informa quando os scripts de ready.d
       # terminaram. Esperar so pela porta 4566 subiria os servicos antes de a
       # fila e a tabela existirem — corrida que gera falha intermitente.
-      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/init/ready.d | grep -q '\"state\": \"SUCCESSFUL\"'"]
+      #
+      # O caminho e /_localstack/init/<ESTAGIO> — "ready", e nao "ready.d",
+      # que e o nome do DIRETORIO dos scripts. Com ".d" o endpoint devolvia
+      # 404 para sempre, o LocalStack nunca ficava healthy e os tres servicos
+      # (que dependem dele por service_healthy) nunca subiam: o `make smoke`
+      # travava antes do primeiro teste. Medido em 24/09/2026:
+      #   /_localstack/init/ready    -> {"completed": true, ... "SUCCESSFUL"}
+      #   /_localstack/init/ready.d  -> 404
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/init/ready | grep -q '\"state\": \"SUCCESSFUL\"'"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -75,7 +85,7 @@ services:
       <<: *otel
       PORT: "8081"
       DATABASE_URL: postgres://solidary:solidary_local_only@postgres:5432/ngo_db
-    ports: ["8081:8081"]
+    ports: ["${NGO_PORT:-8081}:8081"]
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -88,7 +98,7 @@ services:
       PORT: "8082"
       DATABASE_URL: postgres://solidary:solidary_local_only@postgres:5432/donation_db
       AWS_SQS_URL: http://localstack:4566/000000000000/donation-events
-    ports: ["8082:8082"]
+    ports: ["${DONATION_PORT:-8082}:8082"]
     depends_on:
       postgres: { condition: service_healthy }
       localstack: { condition: service_healthy }
@@ -101,7 +111,7 @@ services:
       <<: [*otel, *aws-local]
       PORT: "8083"
       AWS_DYNAMODB_TABLE: SolidaryTechVolunteers
-    ports: ["8083:8083"]
+    ports: ["${VOLUNTEER_PORT:-8083}:8083"]
     depends_on:
       localstack: { condition: service_healthy }
 

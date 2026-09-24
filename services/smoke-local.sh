@@ -9,9 +9,12 @@
 #   docker compose up -d --build && ./smoke-local.sh
 set -euo pipefail
 
-NGO="http://localhost:8081"
-DOACAO="http://localhost:8082"
-VOLUNTARIO="http://localhost:8083"
+# Portas do host configuraveis (mesmas variaveis do docker-compose.yml): numa
+# maquina de desenvolvedor a 8081 costuma estar ocupada por outro projeto, e o
+# compose falhava com "port is already allocated" antes de qualquer teste.
+NGO="http://localhost:${NGO_PORT:-8081}"
+DOACAO="http://localhost:${DONATION_PORT:-8082}"
+VOLUNTARIO="http://localhost:${VOLUNTEER_PORT:-8083}"
 
 verde() { printf '\033[32m  OK\033[0m  %s\n' "$1"; }
 vermelho() { printf '\033[31m FALHA\033[0m %s\n' "$1"; }

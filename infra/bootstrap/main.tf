@@ -227,8 +227,57 @@ resource "aws_dynamodb_table" "lock" {
 }
 
 ###############################################################################
+# Credencial do APM (Datadog) — cofre, e nao variavel de ambiente
+#
+# A chave do Datadog vivia "na cabeca" de quem subia o ambiente. A documentacao
+# mandava `export DD_API_KEY=...`, o que a grava em texto puro no
+# ~/.bash_history; o bootstrap a passava ao kubectl por --from-literal, onde ela
+# aparece na lista de processos; e a cada conta de lab nova alguem precisava
+# redigita-la — exatamente o momento em que segredo vaza. O SITE do Datadog, que
+# e acoplado a chave, estava fixo no Git: uma chave de outro site levava 403 em
+# todo envio, sem erro na subida.
+#
+# Aqui fica o CONTEINER do segredo: JSON {api_key, site}. O VALOR nao passa pelo
+# Terraform de proposito — um aws_secretsmanager_secret_version gravaria a chave
+# em texto puro dentro do state. O valor entra por scripts/configurar-datadog.sh,
+# que le a chave sem eco, descobre o site na propria API do Datadog e grava por
+# stdin.
+#
+# Neste stack, e nao no do ambiente, pelo CICLO DE VIDA: o bootstrap e 1x por
+# conta e nao entra no `lab-down`. A credencial sobrevive a destruir e recriar o
+# cluster quantas vezes a sessao exigir.
+#
+# Sem CMK (gerenciar key policy e restrito no lab): cifrado com a chave
+# gerenciada aws/secretsmanager. Sem resource policy restritiva: sem IAM proprio
+# no lab, quem tem a sessao da conta le o segredo — debito declarado; em
+# producao, role dedicada + External Secrets Operator (ADR-008).
+###############################################################################
+
+resource "aws_secretsmanager_secret" "datadog" {
+  name        = "${lower(var.projeto)}/datadog"
+  description = "Credencial do APM Datadog, JSON com api_key e site. Valor gravado por scripts/configurar-datadog.sh, nunca pelo Terraform."
+
+  # 7 dias (o minimo) em vez de exclusao imediata: uma exclusao acidental ainda
+  # e reversivel. O custo e nao poder recriar o MESMO nome por uma semana.
+  recovery_window_in_days = 7
+
+  tags = {
+    Name      = "${lower(var.projeto)}/datadog"
+    Component = "apm-credential"
+  }
+}
+
+###############################################################################
 # Saidas
 ###############################################################################
+
+output "segredo_datadog" {
+  description = "Segredo do APM no Secrets Manager. So o nome e o ARN — nunca o valor."
+  value = {
+    nome = aws_secretsmanager_secret.datadog.name
+    arn  = aws_secretsmanager_secret.datadog.arn
+  }
+}
 
 output "bucket_state" {
   description = "Nome do bucket S3 do state. Copie para environments/*/backend.tf."

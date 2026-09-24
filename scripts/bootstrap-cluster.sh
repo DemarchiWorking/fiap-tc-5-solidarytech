@@ -157,29 +157,29 @@ if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
   echo "  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d"
 fi
 
-# Chave do APM. Opcional: sem ela o cluster sobe e Prometheus, Grafana e Loki
-# funcionam; so o envio de traces ao APM fica desligado.
+# Credencial do APM (Datadog): vem do COFRE (AWS Secrets Manager), ADR-008.
 #
-# O Secret carrega as chaves dos DOIS APMs. O pipeline de traces usa um so
-# (Datadog, por ADR-004), mas manter as duas chaves aqui torna a troca de
-# backend uma mudanca de duas linhas no values, sem mexer no bootstrap.
+# Antes: `--from-literal=DD_API_KEY="$DD_API_KEY"`, com a chave vinda de um
+# `export` digitado no terminal — texto puro no ~/.bash_history e visivel em
+# `ps` durante o kubectl. Agora o script le o cofre e cria o Secret por stdin.
 #
-# Criado SEMPRE, mesmo sem valor: `extraEnvsFrom` marca o Secret como
-# `optional: true`, mas o exporter referencia `${env:DD_API_KEY}` e um
-# Collector sem a variavel definida nao sobe.
-kubectl -n monitoring create secret generic apm-credentials \
-  --from-literal=DD_API_KEY="${DD_API_KEY:-nao-configurada}" \
-  --from-literal=NEW_RELIC_LICENSE_KEY="${NEW_RELIC_LICENSE_KEY:-nao-configurada}" \
-  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-
+# Criado SEMPRE, mesmo sem valor no cofre (com marcador): o exporter referencia
+# ${env:DD_API_KEY} e um Collector sem a variavel nao sobe — e ele carrega
+# metricas e logs tambem.
+#
+# DD_API_KEY no ambiente ainda e aceita, por compatibilidade: o script a grava
+# no cofre primeiro, e dali em diante ela nao precisa mais ser digitada.
 if [[ -n "${DD_API_KEY:-}" ]]; then
-  verde "Credencial do APM (Datadog) configurada"
+  "$RAIZ/scripts/configurar-datadog.sh"
 else
-  amarelo "DD_API_KEY nao definida — traces nao chegam ao APM."
-  echo "         Prometheus, Grafana e Loki funcionam normalmente; o que fica"
-  echo "         sem evidencia e o Distributed Tracing (Fundacao) e o AIOps."
-  echo "         Para ligar:  export DD_API_KEY=... && ./scripts/bootstrap-cluster.sh"
+  "$RAIZ/scripts/configurar-datadog.sh" --materializar
 fi
+case $? in
+  0) : ;;
+  2) echo "         Prometheus, Grafana e Loki funcionam normalmente; o que fica"
+     echo "         sem evidencia e o Distributed Tracing (Fundacao) e o AIOps." ;;
+  *) amarelo "Credencial do APM nao aplicada — ver mensagem acima." ;;
+esac
 
 # Identidade do cluster para a telemetria.
 #

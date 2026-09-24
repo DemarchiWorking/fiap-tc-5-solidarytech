@@ -269,6 +269,26 @@ kubectl -n argocd patch configmap argocd-cmd-params-cm --type merge \
 kubectl -n argocd rollout restart deployment/argocd-server >/dev/null
 kubectl -n argocd rollout status deployment/argocd-server --timeout=180s
 
+# O ARGOCD APAGAVA OS BACKUPS DO VELERO.
+#
+# O Velero copia os labels do Schedule para cada Backup que ele gera. O Schedule
+# vem do Helm chart gerenciado pelo ArgoCD, com app.kubernetes.io/instance=velero
+# — que e justamente o label pelo qual o ArgoCD 2.x rastreia recursos. Resultado:
+# o ArgoCD enxergava cada Backup como recurso da Application `velero` que nao
+# esta no Git, e o `prune` o apagava ("Backup ... pruned", medido em 24/09). O
+# controller do Velero recriava a partir do bucket, o ArgoCD apagava de novo, e
+# `velero backup get` mostrava ZERO backups com os dados intactos no S3. O
+# restore — a Opcao A de DR inteira — depende desses objetos.
+#
+# Excluir os tipos OPERACIONAIS do Velero do escopo do ArgoCD. Schedule e
+# BackupStorageLocation continuam gerenciados pelo Git; so saem os objetos que o
+# proprio Velero cria em runtime. Endpoints e Lease entram porque, ao definir
+# resource.exclusions, a lista padrao deixa de valer.
+kubectl -n argocd patch configmap argocd-cm --type merge -p "$(cat <<'EXCL'
+{"data":{"resource.exclusions":"- apiGroups: [\"velero.io\"]\n  kinds: [\"Backup\", \"Restore\", \"DeleteBackupRequest\", \"PodVolumeBackup\", \"PodVolumeRestore\", \"DataUpload\", \"DataDownload\", \"BackupRepository\", \"DownloadRequest\", \"ServerStatusRequest\"]\n  clusters: [\"*\"]\n- apiGroups: [\"\", \"discovery.k8s.io\"]\n  kinds: [\"Endpoints\", \"EndpointSlice\"]\n  clusters: [\"*\"]\n- apiGroups: [\"coordination.k8s.io\"]\n  kinds: [\"Lease\"]\n  clusters: [\"*\"]\n"}}
+EXCL
+)" >/dev/null
+
 kubectl apply -f - >/dev/null <<'INGRESS'
 apiVersion: networking.k8s.io/v1
 kind: Ingress

@@ -65,6 +65,15 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8081
 
+# pip nao tem funcao em runtime, e carrega bibliotecas VENDORIZADAS que o Trivy
+# enxerga: em 09/2026 o msgpack e o pkg_resources (setuptools 70.3.0) dentro de
+# pip/_vendor apareceram como dois HIGH, em DUAS copias — a do Python do sistema
+# e a do virtualenv. Nenhuma linha da aplicacao usa pip. Remover as duas zera o
+# achado e tira da imagem uma ferramenta que so serviria a quem quisesse
+# instalar algo dentro do container.
+RUN python -m pip uninstall --yes --quiet pip \
+    && /usr/local/bin/python -m pip uninstall --yes --quiet pip
+
 WORKDIR /app
 COPY --chown=solidary:solidary app.py telemetry.py ./
 

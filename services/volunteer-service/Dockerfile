@@ -55,6 +55,12 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8083
 
+# pip fora da imagem final — mesmo motivo do ngo-service: as bibliotecas
+# vendorizadas dele (msgpack, pkg_resources) eram os unicos HIGH da imagem, e
+# nada em runtime instala pacote.
+RUN python -m pip uninstall --yes --quiet pip \
+    && /usr/local/bin/python -m pip uninstall --yes --quiet pip
+
 WORKDIR /app
 COPY --chown=solidary:solidary app.py worker.py telemetry.py ./
 

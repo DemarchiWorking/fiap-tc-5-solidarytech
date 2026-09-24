@@ -80,6 +80,8 @@ ${NEGRITO}Sessao do laboratorio${RESET} (na ordem)
   ${VERDE}status${RESET}            Estado do GitOps e dos pods
   ${VERDE}senhas${RESET}            Credenciais do Grafana e do ArgoCD
   ${VERDE}conformidade${RESET}      Relatorio de conformidade com o Learner Lab
+  ${VERDE}evidencias${RESET}        Regenera docs/07-evidencias/validacao-final.txt (so leitura)
+  ${VERDE}datadog${RESET}           Grava a chave do Datadog no cofre (sem eco) e aplica no cluster
   ${VERDE}lab-down${RESET}          ${AMARELO}Destroi o ambiente — rode ao final${RESET}
 
   ${VERDE}plan${RESET} · ${VERDE}apply${RESET} · ${VERDE}init${RESET} · ${VERDE}output${RESET} · ${VERDE}kubeconfig${RESET} · ${VERDE}dr-plan${RESET}
@@ -266,6 +268,8 @@ case "$ALVO" in
 
   output)       tf -chdir="$DIR_AMBIENTE" output ;;
   conformidade) tf -chdir="$DIR_AMBIENTE" output conformidade_aws_academy ;;
+  evidencias)   AMBIENTE="$AMBIENTE" ./scripts/coletar-evidencias.sh ;;
+  datadog)      ./scripts/configurar-datadog.sh ;;
 
   lab-down)
     printf '%s\n' "${AMARELO}Destruindo $AMBIENTE. O bucket de state NAO e afetado.${RESET}"

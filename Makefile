@@ -287,6 +287,14 @@ output: ## Mostra as saidas do ambiente
 conformidade: ## Relatorio de conformidade com o Learner Lab (evidencia do relatorio)
 	@$(TF) -chdir=$(DIR_AMBIENTE) output conformidade_aws_academy
 
+.PHONY: datadog
+datadog: ## Grava a chave do Datadog no cofre (entrada oculta) e aplica no cluster (ADR-014)
+	@./scripts/configurar-datadog.sh
+
+.PHONY: evidencias
+evidencias: ## Regenera docs/07-evidencias/validacao-final.txt com o ambiente no ar (so leitura)
+	@AMBIENTE=$(AMBIENTE) ./scripts/coletar-evidencias.sh
+
 # ---------------------------------------------------------------------------
 # Disaster Recovery — Opcao B do enunciado, "uma regiao espelho com 1 comando"
 # ---------------------------------------------------------------------------

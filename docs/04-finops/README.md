@@ -127,7 +127,13 @@ pede assimetria de margem.
 | SQS | US$ 0,40/milhão de requisições | 0,01 | **0,30** |
 | ECR | ~3 GB de imagens | 0,01 | **0,30** |
 | CloudWatch Logs | Control plane, retenção 7 dias | 0,02 | **0,60** |
-| **Total** | | **≈ 6,73** | **≈ 201,94** |
+| Secrets Manager | 2 segredos (senha do RDS, credencial do APM) × US$ 0,40 | 0,03 | **0,80** |
+| **Total** | | **≈ 6,76** | **≈ 202,74** |
+
+> Linha do Secrets Manager acrescentada em 24/09: a senha do RDS já vivia lá sem
+> estar no forecast, e a credencial do APM passou a viver também (ADR-014). Nas
+> demais páginas o custo aparece arredondado ("≈ US$ 6,73/dia", "US$ 202/mês");
+> a diferença é de US$ 0,80/mês.
 
 **Opcionais, desligados por padrão:**
 

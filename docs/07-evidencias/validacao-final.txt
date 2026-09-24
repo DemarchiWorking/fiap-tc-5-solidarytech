@@ -1,88 +1,81 @@
 VALIDACAO FINAL DA ENTREGA — tudo medido, nada estimado
+Gerado por scripts/coletar-evidencias.sh
 =======================================================================
 
 === A. SESSAO ===
-  PDT 15:07  (termina 17:50)
-  conta 227007723638
-  NLB   http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com
+  2026-09-24 23:20 UTC
+  conta 722616916018
+  NLB   http://a863353274daa41cba5c5d7f255f497f-bc648a711b65f224.elb.us-east-1.amazonaws.com
 
 === B. GIT ===
-  HEAD c427a4b  ·  origin/main c427a4b
-  arvore: 1 modificacao(oes)
-  commits hoje: 56
+  HEAD 14c82c3  ·  origin/main 14c82c3
 
-=== C. APLICACOES ===
-  solidary-donation   donation-service-5fd9d7ffdd-gdvpw              Running    r=0
-  solidary-donation   donation-service-5fd9d7ffdd-r5wh4              Running    r=0
-  solidary-loadtest   k6-run-1789077632-wsfdg                        Completed  r=0
-  solidary-ngo        ngo-service-5574fc5fbf-htc9r                   Running    r=0
-  solidary-ngo        ngo-service-5574fc5fbf-wdcvq                   Running    r=0
-  solidary-volunteer  volunteer-service-7496469c95-fs8dz             Running    r=0
-  solidary-volunteer  volunteer-service-7496469c95-kvgk8             Running    r=0
-  solidary-volunteer  volunteer-worker-584b74df84-27kk9              Running    r=0
-  solidary-volunteer  volunteer-worker-584b74df84-4xp2w              Running    r=0
-  solidary-volunteer  volunteer-worker-584b74df84-94c29              Running    r=0
-  solidary-volunteer  volunteer-worker-584b74df84-hp2kd              Running    r=0
-  solidary-volunteer  volunteer-worker-584b74df84-n8mx8              Running    r=0
-  solidary-volunteer  volunteer-worker-584b74df84-vs66s              Running    r=0
+=== C. NOS E APLICACOES ===
+  no  ip-10-0-18-228.ec2.internal      Ready    v1.34.11-eks-f4fc4f1
+  no  ip-10-0-3-17.ec2.internal        Ready    v1.34.11-eks-f4fc4f1
+  no  ip-10-0-7-144.ec2.internal       Ready    v1.34.11-eks-f4fc4f1
+  solidary-donation   donation-service-65675c5885-2v9m4              Running    r=0
+  solidary-donation   donation-service-65675c5885-4sv5r              Running    r=0
+  solidary-loadtest   k6-run-1790289375-cd572                        Completed  r=0
+  solidary-loadtest   k6-run-1790291522-ljsfr                        Completed  r=0
+  solidary-ngo        ngo-service-6d99c95c78-khglm                   Running    r=0
+  solidary-ngo        ngo-service-6d99c95c78-qhntm                   Running    r=0
+  solidary-volunteer  volunteer-service-696ff69dcb-f5vd2             Running    r=0
+  solidary-volunteer  volunteer-service-696ff69dcb-jrdcd             Running    r=0
+  solidary-volunteer  volunteer-worker-84d55bdf4c-6b5bj              Running    r=0
+  solidary-volunteer  volunteer-worker-84d55bdf4c-gblr8              Running    r=0
+  solidary-volunteer  volunteer-worker-84d55bdf4c-jd28m              Running    r=0
+  solidary-volunteer  volunteer-worker-84d55bdf4c-pqp5z              Running    r=0
+  solidary-volunteer  volunteer-worker-84d55bdf4c-q4g2b              Running    r=0
+  solidary-volunteer  volunteer-worker-84d55bdf4c-q7mgd              Running    r=0
 
 === D. ARGOCD ===
-        1 OutOfSync Healthy
-       14 Synced Healthy
-  FORA: velero OutOfSync Healthy
+       15 Synced Healthy
 
 === E. APIs (pelo endereco publico) ===
   /ngo/health      HTTP 200
-  /ngo/ngos        HTTP 000
+  /ngo/ngos        HTTP 200
   /donations       HTTP 200
   /volunteers/1    HTTP 200
   POST /donations  HTTP 201
 
-=== F. HPAs ===
-  solidary-donation   donation-service    cpu:
-  solidary-ngo        ngo-service         cpu:
-  solidary-volunteer  volunteer-service   cpu:
-  solidary-volunteer  volunteer-worker    cpu:
+=== F. ELASTICIDADE (HPA) ===
+  solidary-donation   donation-service   cpu 1%/70%  min=2 max=10 atual=2
+  solidary-ngo        ngo-service        cpu 1%/70%  min=2 max=6 atual=2
+  solidary-volunteer  volunteer-service  cpu 2%/70%  min=2 max=6 atual=2
+  solidary-volunteer  volunteer-worker   cpu 39%/70%  min=1 max=6 atual=6
 
-=== G. SLIs ===
-  slo:donation_disponibilidade_erro:ratio_rate5m   0
-  slo:donation_latencia:p95                        0.007814632783322709
-  slo:donation_frescor_erro:ratio_rate1h           0
-  regras: 255 totais, 0 com problema
-  alvos:  27 ativos, 0 down
+=== G. SLIs (Prometheus) ===
+  slo:donation_disponibilidade_erro:ratio_rate5m       0
+  slo:donation_latencia:p95                            0.004809712145814303
+  slo:donation_frescor_erro:ratio_rate1h               0
+  slo:donation_disponibilidade:error_budget_restante   1
+  alvos do Prometheus ativos                           27
+  alvos do Prometheus down                             0
 
-=== H. APM ===
-  otelcol_exporter_sent_spans{exporter="datadog"} 115316
+=== H. APM (Datadog) — entrega, nao so envio ===
+  origem da credencial: secretsmanager (cofre solidarytech/datadog, versao 8e5c62db-13b9-40e9-b310-69589998dca1)
+  site: datadoghq.com
+  chave validada no boot: 2 ocorrencia(s)
+  respostas 403 no log:   0
+  payloads descartados:   0
+  connector de trace metrics: ativo
+  otelcol_exporter_sent_metric_points{exporter="datadog"} 53
+  otelcol_exporter_sent_spans{exporter="datadog"} 52228
 
 === I. BACKUP / DR / TAGS / IAM ===
   BSL default Available
-  backups: 8
-  CostCenter=NGO-Core        42 recursos
-  Project=SolidaryTech       42 recursos
-  Environment=Production     42 recursos
-  recursos no state: 65
+  backups no cluster: 1
+    velero-horario-aplicacoes-20260924230024   Completed   203
+  backups no bucket solidarytech-prod-velero-916018 (us-west-2): 3
+  CostCenter=NGO-Core        42 recursos (us-east-1 + us-west-2)
+  Project=SolidaryTech       42 recursos (us-east-1 + us-west-2)
+  Environment=Production     42 recursos (us-east-1 + us-west-2)
+  recursos do projeto com Environment != Production: 0
+  recursos no state: 52
   recursos IAM:      0
 
 === J. ENTREGAVEIS ===
   campos pendentes no relatorio: 1
-  evidencias .txt: 11
+  evidencias .txt: 15
   evidencias .png: 0
-  PDF: 369940 bytes
-  documentos: 23
-
-=======================================================================
-NOTA SOBRE O p95 EM NaN
-
-  slo:donation_latencia:p95 devolve NaN quando NAO HA TRAFEGO. Esta
-  correto: histogram_quantile sobre janela vazia nao tem o que calcular,
-  e latencia zero seria mentira — ao contrario de 'zero erros', que e
-  verdade quando nao ha erro.
-
-  Por isso o SLI de disponibilidade recebeu 'or vector(0)' e o de
-  latencia NAO recebeu. Sao casos diferentes:
-
-    ausencia de ERRO      -> a taxa e 0        (fato)
-    ausencia de REQUISICAO -> a latencia e ??? (nao ha o que medir)
-
-  Antes de gravar o video, rode './solidary carga' e espere o job.
-  Com trafego, o p95 fica na casa de 5 ms.

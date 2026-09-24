@@ -32,3 +32,17 @@ partir de variavel de ambiente — nunca versionada.
 5. ALVO DO PROMETHEUS PARA O COLLECTOR
    ServiceMonitor aponta para a porta: metrics
    Portas do Service: jaeger-compact jaeger-grpc jaeger-thrift metrics otlp otlp-http zipkin 
+
+-----------------------------------------------------------------------
+ERRATA — 24/09/2026 (ADR-014)
+
+A leitura do item 2 acima ("send_failed ausente = todo span entregue") NAO
+prova entrega. otelcol_exporter_sent_spans conta o que sai do exporter, nao o
+que o Datadog aceita: em 24/09 o mesmo contador chegou a 51.705 com TODO
+payload recusado por 403 (chave de marcador). Em 10/09 a entrega era real
+porque o item 1 mostra "API key validation successful" — e a chave, nao o
+contador, e o que a sustenta.
+
+Prova de entrega, desde 24/09: chave validada no boot + zero "403 Forbidden"
+no log + contadores subindo. Ver apm-datadog.txt e a secao H de
+validacao-final.txt (gerada por scripts/coletar-evidencias.sh).

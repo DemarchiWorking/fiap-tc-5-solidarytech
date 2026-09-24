@@ -13,6 +13,13 @@
 | [005](#adr-005) | SonarCloud em vez de SonarQube self-hosted | Aceito |
 | [006](#adr-006) | Um RDS com dois databases | Aceito |
 | [007](#adr-007) | Multicloud provado por portabilidade estrutural | Aceito |
+| [008](#adr-008) | Sem camada de autenticação nos três serviços | Aceito |
+| [009](#adr-009) | ElastiCache provisionável, mas desligado por padrão | Aceito |
+| [010](#adr-010) | SonarCloud (SaaS) no lugar do SonarQube self-hosted | Aceito |
+| [011](#adr-011) | Uma instância RDS para dois databases | Aceito |
+| [012](#adr-012) | Versão do Kubernetes pelo calendário de suporte | Aceito |
+| [013](#adr-013) | Buckets S3 criados pela AWS CLI, configurados por Terraform | Aceito |
+| [014](#adr-014) | Credencial do APM no cofre, site acoplado à chave, trace metrics pelo connector | Aceito · revisa o 004 |
 
 ---
 
@@ -139,7 +146,8 @@ mudança de código.
 ### Datadog como APM — revertendo a escolha por New Relic
 
 **Status:** Aceito · **Data:** 2026-09-05 · **Revisado:** 2026-09-10 ·
-**Mantém:** ADR-004 da Fase 4
+**Mantém:** ADR-004 da Fase 4 · **Revisado por:** [ADR-014](#adr-014) (site, credencial e
+prova de entrega)
 
 **Contexto.** O enunciado exige APM com **Distributed Tracing** (F0.5b) e **AIOps** — nomeando
 *"Watchdog no Datadog ou Applied Intelligence no New Relic"* (F3.1). A Fase 4 escolheu Datadog.
@@ -179,7 +187,7 @@ puro**, não SDK proprietário.
   [`apm-tracing.txt`](../../07-evidencias/apm-tracing.txt).
 
 **Evidência da reversão funcionando:** `API key validation successful.` no log do Collector e
-115.488 spans entregues com zero falhas de envio.
+115.316 spans entregues com zero falhas de envio ([`validacao-final.txt`](../../07-evidencias/validacao-final.txt)).
 
 ---
 
@@ -548,3 +556,66 @@ apply` segue como comando único.
 `terraform validate` passa, e a política do Academy também. Restrição de SCP só
 aparece quando se chama a API de verdade. É o segundo achado desta entrega que só
 a execução revelou; o primeiro foi o custo de extended support do EKS (ADR-012).
+
+---
+
+## ADR-014
+
+### Credencial do APM no cofre, site acoplado à chave, trace metrics pelo connector
+
+**Status:** Aceito · **Data:** 2026-09-24 · **Revisa:** [ADR-004](#adr-004)
+
+**Contexto.** Ao reprovisionar o ambiente numa conta de Learner Lab nova, a validação de 24/09
+encontrou quatro problemas no caminho entre a chave do Datadog e o APM — nenhum visível na subida:
+
+1. **A chave circulava sem proteção.** A documentação mandava `export DD_API_KEY=...` (texto puro
+   no `~/.bash_history`); o deploy a passava ao `kubectl` por `--from-literal` (visível em `ps`);
+   o console de primeira execução a gravava em `.env.local` "com permissão 600" — e, em `/mnt/c`,
+   o `chmod 600` resulta em **777** (medido).
+2. **O site estava fixo no Git** (`us5`), desacoplado da chave. A chave do grupo é do **US1**
+   (`datadoghq.com`): todo envio levaria 403.
+3. **O contador de entrega não prova entrega.** `otelcol_exporter_sent_spans` chegou a **51.705**
+   com **todo** payload recusado por 403 — ele conta o que sai do exporter, não o que o Datadog
+   aceita. A mitigação escrita no ADR-004 ("as métricas do Collector provam a entrega") era falsa
+   como método.
+4. **Sem trace metrics.** Na imagem 0.159 do Collector o feature gate
+   `exporter.datadogexporter.DisableAPMStats` está em Beta, ligado por padrão: o exporter não
+   calcula mais hits, erros e latência. Sem elas o **Watchdog** não tem o que analisar — o AIOps
+   (F3.1) ficava sem base. O próprio Collector avisa no log: *"Trace metrics are now disabled in
+   the Datadog Exporter by default. To continue receiving Trace Metrics, configure the Datadog
+   Connector"*.
+
+**Decisão.**
+
+- **Cofre como fonte de verdade.** AWS Secrets Manager, `solidarytech/datadog`, JSON
+  `{api_key, site}`. O contêiner é Terraform, no `infra/bootstrap` (1× por conta, sobrevive ao
+  `lab-down`); o **valor nunca passa pelo Terraform**, que o gravaria em texto puro no state.
+- **Entrada sem rastro.** `scripts/configurar-datadog.sh` (`./solidary datadog`) lê a chave sem
+  eco, valida o formato, **descobre o site** chamando `/api/v1/validate` em cada site do Datadog
+  (header lido de stdin, fora do `argv`), grava no cofre por stdin e confere o gravado por hash.
+  Só o final mascarado (`…d0e9`) aparece na tela.
+- **Materialização a partir do cofre.** O deploy cria o Secret `apm-credentials` com
+  `delete + create` (sem a anotação `last-applied-configuration`, que duplicaria o valor) e o
+  rotula com a origem e a versão do cofre, para auditoria de rotação.
+- **Site acoplado.** O exporter usa `${env:DD_SITE}`, gravado junto com a chave.
+- **Trace metrics.** `datadog/connector` no pipeline de traces, alimentando um pipeline
+  `metrics/datadog`; `compute_stats_by_span_kind` estende as métricas a SQS e banco.
+- **Prova de entrega, não de envio.** A evidência passa a ser: chave validada no boot **e** zero
+  403 no log **e** contadores subindo — `scripts/coletar-evidencias.sh`, seção H.
+
+**Consequências.**
+
+*Positivas:*
+- A chave é digitada uma vez por conta, nunca em `export`, e não fica em disco.
+- Trocar de chave, ou de site, é um comando — e não um 403 silencioso.
+- Watchdog passa a ter as métricas RED sobre as quais detecta anomalia.
+
+*Negativas, assumidas:*
+- **Sem IAM granular no lab:** quem tem a sessão da conta lê o segredo. Em produção: role dedicada,
+  resource policy no segredo e **External Secrets Operator** (com IRSA/Pod Identity) sincronizando
+  o cofre para o cluster, com rotação sem redeploy.
+- O segredo é cifrado com a chave gerenciada `aws/secretsmanager` (sem CMK — restrito no lab).
+- A chave usada nesta entrega **trafegou em texto** (chat e, segundo o ADR-004, o repositório da
+  Fase 4). **Ação:** rotacioná-la no Datadog depois da avaliação e rodar `./solidary datadog`.
+
+**Evidência:** [`apm-datadog.txt`](../../07-evidencias/apm-datadog.txt).

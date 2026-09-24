@@ -134,7 +134,7 @@ na fila** — nenhuma doação se perde.
 | [Como subir — checklist e troubleshooting](COMO-SUBIR.md) | operação |
 | [Enunciado transcrito](docs/00-enunciado/README.md) | — |
 | [**Matriz de requisitos × evidências**](docs/01-requisitos-e-criterios-de-aceitacao.md) | checklist de nota |
-| [Arquitetura](docs/02-arquitetura/README.md) e [ADRs 001–007](docs/02-arquitetura/adr/README.md) | — |
+| [Arquitetura](docs/02-arquitetura/README.md) e [ADRs 001–014](docs/02-arquitetura/adr/README.md) | — |
 | [**Evolução v3 → v4 → v5**](docs/02-arquitetura/evolucao-v3-v4-v5.md) | Regra de Ouro |
 | [**SLI, SLO, SLA e Error Budget**](docs/03-sre/sli-slo-sla.md) · [Chaos drill / MTTR](docs/03-sre/mttr-chaos-drill.md) | **F1** |
 | [**FinOps** — tags, rightsizing, forecast](docs/04-finops/README.md) | **F2** |
@@ -189,6 +189,8 @@ serializa). Tabela completa em [`services/README.md`](services/README.md).
 |---|---|
 | Fase | 5 — Hackathon (Multicloud, custos e IA) |
 | Entrega | até **29/09/2026** |
-| Integrantes | *a preencher — nomes, RMs e usernames (requisito E3.1)* |
-| Repositório | *a preencher* |
-| Vídeo | *a preencher* |
+| Integrantes | Leonardo Alves Freitas — rm369434 — `freitasleoalves` |
+| | Antonio Eduardo Silveira Demarchi — rm370045 — `demarchiworking` |
+| Repositório | <https://github.com/DemarchiWorking/fiap-tc-5-solidarytech> |
+| Relatório (PDF) | [`docs/relatorio/RELATORIO-FASE5.pdf`](docs/relatorio/RELATORIO-FASE5.pdf) |
+| Vídeo | *a preencher — link do YouTube (não listado)* |

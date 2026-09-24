@@ -150,7 +150,7 @@ kubectl -n solidary-loadtest create job pico-$(date +%s) \
 
 # 3. Datadog → Watchdog
 #    A anomalia detectada é o print exigido pelo requisito F3.1.
-#    (app.us5.datadoghq.com — repare no site us5)
+#    (https://app.datadoghq.com — site US1; o site vem do cofre, ver ADR-014)
 ```
 
 > **Não basta a feature estar habilitada.** A rubrica pede evidência de

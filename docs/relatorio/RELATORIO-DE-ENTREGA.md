@@ -71,7 +71,7 @@ Nenhuma restrição foi escondida.
 | **F0.2** | IaC (Terraform) | 21 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. **Cluster, bancos, mensageria e rede** — 100% por código |
 | **F0.3** | CI/CD DevSecOps | Pipeline reutilizável: `lint‖test` → `sast`+`build-scan-push` → `update-gitops`. **SAST:** gosec (Go) e bandit (Python), sempre; SonarCloud entra quando o `SONAR_TOKEN` está configurado. **SCA: Trivy em 2 camadas** (dependências + imagem, CRITICAL bloqueia), SARIF na aba Security, SBOM CycloneDX. `gitleaks` no histórico: 0 achados em 84 commits |
 | **F0.4** | GitOps | **ArgoCD** com App-of-Apps → ApplicationSet. `selfHeal` e `prune` ligados. Um único `kubectl apply` em todo o projeto |
-| **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **Datadog** com Distributed Tracing atravessando o SQS — 115.316 spans entregues, 0 falhas ([`validacao-final.txt`](../07-evidencias/validacao-final.txt)) |
+| **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **Datadog** com Distributed Tracing atravessando o SQS e trace metrics pelo `datadog/connector`. Em 24/09: chave validada, **0 respostas 403**, 52 mil spans no ciclo de carga ([`apm-datadog.txt`](../07-evidencias/apm-datadog.txt)) |
 
 Comparativo completo das três entregas:
 [`docs/02-arquitetura/evolucao-v3-v4-v5.md`](../02-arquitetura/evolucao-v3-v4-v5.md)
@@ -101,7 +101,7 @@ como `decimal.Decimal` e o encoder JSON do Flask não serializa esse tipo.
 
 Antes da entrega, o ambiente foi **destruído e recriado do zero numa conta de
 Learner Lab diferente** — a prova mais dura de que tudo é código. A auditoria
-que antecedeu a subida encontrou sete defeitos, nenhum visível para os gates:
+e a própria subida encontraram doze defeitos, nenhum visível para os gates:
 
 | Defeito | Efeito | Correção |
 |---|---|---|
@@ -112,9 +112,22 @@ que antecedeu a subida encontrou sete defeitos, nenhum visível para os gates:
 | Schema do donation aplicado no banco errado (local) | `POST /donations` → 500 no smoke | Schema aplicado no `donation_db` |
 | `configurar-repo` só trocava placeholders | Em conta nova: pods sem imagem, Loki e Velero sem bucket | Migra registry e buckets da conta anterior |
 | Pré-voo dizia "configurado" para outra conta | Falso GO | Compara o ID da conta e o bucket de state |
+| **ArgoCD apagava os backups do Velero** (label do Schedule copiado para o Backup) | `velero backup get` vazio com os dados no S3; restore inviável | Tipos operacionais do Velero excluídos do ArgoCD |
+| **Site do Datadog fixo em `us5`**; a chave do grupo é do US1 | 403 em todo envio, sem erro na subida | Site gravado junto com a chave e descoberto pela API |
+| **Sem trace metrics**: na versão 0.159 o exporter não as calcula (`DisableAPMStats`) | Watchdog sem métricas para analisar | `datadog/connector` + pipeline dedicado |
+| Contador de spans "enviados" usado como prova de entrega | 51.705 "enviados" com todo payload recusado | Prova = chave validada + 0 × 403 + contador |
+| Chave do APM em `export`, `--from-literal` e `.env.local` (`chmod 600` vira 777 em `/mnt/c`) | Chave no histórico, em `ps` e em disco | **Cofre** (Secrets Manager) — ADR-014 |
 
 Os dois defeitos do smoke se escondiam mutuamente: com o healthcheck quebrado,
-o teste nunca chegava ao hot path, onde o segundo estava.
+o teste nunca chegava ao hot path, onde o segundo estava. E os quatro do
+Datadog só aparecem com o sistema **operando**: o Collector sobe, o contador
+de envio sobe, e nada chega ao APM.
+
+**Medido no ambiente recriado:** 52 recursos por Terraform em 15 min, **0 IAM** ·
+15/15 Applications `Synced`/`Healthy` · todos os pods de aplicação com 0 reinício ·
+todas as rotas públicas respondendo, `POST /donations` → 201 · carga do k6:
+12.879 requisições, **0% de falha**, p95 de 7,9 ms · worker escalado 1 → 6
+pelo HPA ([`validacao-final.txt`](../07-evidencias/validacao-final.txt)).
 
 ### Evidências — Fundação
 
@@ -249,6 +262,18 @@ as duas réplicas antigas seguiram servindo durante os 13 minutos de falha.
 Procedimento e execução: [`mttr-chaos-drill.md`](../03-sre/mttr-chaos-drill.md) ·
 post-mortem real: [`post-mortem-2026-09-10-frescor.md`](../05-itsm-aiops/post-mortem-2026-09-10-frescor.md).
 
+### Os SLIs no ambiente recriado (24/09, após a carga)
+
+| SLI | Valor medido | SLO |
+|---|---|---|
+| Taxa de erro (5 min) | **0** | ≤ 0,1% |
+| Latência p95 | **4,8 ms** | 99% < 300 ms |
+| Frescor da fila — erro (1 h) | **0** | ≤ 0,5% |
+| Error budget restante (disponibilidade) | **100%** | — |
+
+Prometheus com 27 alvos, 0 fora do ar. Fonte:
+[`validacao-final.txt`](../07-evidencias/validacao-final.txt), seção G.
+
 ### Evidências — SRE
 
 ![Dashboard SRE: três SLIs, SLO e consumo do error budget (sob carga)](../07-evidencias/f1-dashboard-sre.png)
@@ -262,7 +287,7 @@ post-mortem real: [`post-mortem-2026-09-10-frescor.md`](../05-itsm-aiops/post-mo
 
 **Documento completo:** [`docs/04-finops/README.md`](../04-finops/README.md)
 
-### Forecast — US$ 201,94/mês
+### Forecast — US$ 202,74/mês
 
 | Item | US$/mês |
 |---|---:|
@@ -272,7 +297,11 @@ post-mortem real: [`post-mortem-2026-09-10-frescor.md`](../05-itsm-aiops/post-mo
 | NLB | 16,20 |
 | EBS (nós + PVCs) | 8,24 |
 | S3 + DynamoDB + SQS + ECR + CloudWatch | 2,60 |
-| **Total** | **201,94** |
+| Secrets Manager (senha do RDS e credencial do APM) | 0,80 |
+| **Total** | **202,74** |
+
+O Secrets Manager entrou em 24/09: a senha do RDS já vivia lá sem estar no
+forecast, e a credencial do APM passou a viver também (ADR-014).
 
 ### Tags obrigatórias
 
@@ -288,6 +317,9 @@ e na região de DR. O custo da resiliência se separa por uma tag própria
 (`Role=backup-cross-region`, `Role=warm-standby`), nunca mudando o valor de uma
 tag obrigatória — e o gate `verificar-academy.py` (verificação 16) reprova
 qualquer `Environment` diferente de `Production` antes do `plan`.
+
+**Medido em 24/09:** 42 recursos com as três tags em `us-east-1` + `us-west-2`,
+e **0** recursos do projeto com `Environment` diferente de `Production`.
 
 ### Recomendações quantificadas
 
@@ -350,7 +382,15 @@ reduzida. É isso que prova a modularização.
 Consequências do ambiente da faculdade, com o desenho correto documentado:
 sem Multi-AZ · sem IRSA · sem TLS/WAF · sem CMK no etcd · credencial estática no
 CI (OIDC bloqueado) · nós em subnet pública (decisão de custo revertível por uma
-variável).
+variável) · cofre do APM sem IAM granular — quem tem a sessão da conta lê o
+segredo; em produção, role dedicada + External Secrets Operator (ADR-014).
+
+**Medido em 24/09:** backup storage location `Available` no bucket de
+`us-west-2`; backup horário `Completed` com 203 itens; plano da região
+espelho **34 a criar, 0 a alterar, 0 a destruir**, com as mesmas tags
+([`dr-plano-regiao-secundaria.txt`](../07-evidencias/dr-plano-regiao-secundaria.txt)).
+O restore ainda não foi exercitado de ponta a ponta — o procedimento está no
+[runbook de DR](../06-dr-pcn/runbook-dr.md).
 
 ### Evidências — DR
 
@@ -379,27 +419,39 @@ exercitado de verdade: [post-mortem do incidente de 10/09](../05-itsm-aiops/post
 **Datadog Watchdog** — detecção automática de anomalias comportamentais,
 correlação de eventos e Golden Signals.
 
-A escolha está no [ADR-004](../02-arquitetura/adr/README.md), e é de
-**continuidade**: a conta educacional ativa do grupo é a do Datadog, criada na
-Fase 4. Trocar de APM aqui custaria uma conta nova e nenhum ganho — as
-aplicações exportam **OTLP puro** e não sabem qual backend recebe o trace. É
-esse o ganho de ter o Collector no meio: o backend é uma linha de
-configuração.
+A escolha do Datadog está no [ADR-004](../02-arquitetura/adr/README.md), por
+**continuidade** com a Fase 4. Em 24/09 a credencial passou a ser a da conta
+atual do grupo, no site US1 — e trocar de conta e de site não tocou em uma linha
+de código: as aplicações exportam **OTLP puro** e não sabem qual backend recebe o
+trace. É esse o ganho de ter o Collector no meio: o backend é configuração.
 
 O caminho contrário também está aberto e versionado: o bloco do exporter
 `otlphttp/newrelic` continua no `values.yaml` do Collector, comentado.
 
-**Evidência medida**, sem depender da interface — as métricas do próprio
-Collector:
+**A credencial vive num cofre** (AWS Secrets Manager, `solidarytech/datadog`),
+com o site junto — nunca em `export`, arquivo ou Git. Ela é gravada uma vez por
+conta com `./solidary datadog` (entrada sem eco, site descoberto na API do
+Datadog) e o deploy a materializa no cluster ([ADR-014](../02-arquitetura/adr/README.md)).
+
+**Prova de entrega, e não de envio** — o contador de spans do Collector mede o
+que sai dele, não o que o Datadog aceita (chegou a 51.705 com todo payload
+recusado). A evidência é a combinação:
 
 ```
-otelcol_exporter_sent_spans{exporter="datadog"}   115316
-otelcol_exporter_send_failed_spans                (ausente = zero)
-API key validation successful.
+GET https://api.datadoghq.com/api/v1/validate      -> HTTP 200 {"valid":true}
+'API key validation successful' no boot            -> 2
+'403 Forbidden' / 'Dropping Payload' no log        -> 0 / 0
+otelcol_exporter_sent_spans{exporter="datadog"}    52.135 -> 52.184 (30 requisições)
+otelcol_exporter_sent_metric_points{...datadog}    44 -> 49 (trace metrics)
 ```
 
-Detalhes em [`apm-tracing.txt`](../07-evidencias/apm-tracing.txt) e
-[`validacao-final.txt`](../07-evidencias/validacao-final.txt).
+**Por que as trace metrics importam para o AIOps:** o Watchdog detecta anomalia
+sobre latência, erro e volume por serviço. Na versão 0.159 do Collector o
+exporter deixou de calculá-las — o próprio log avisa: *"Trace metrics are now
+disabled in the Datadog Exporter by default"*. Sem o `datadog/connector`, o APM
+receberia spans e o Watchdog não teria o que analisar.
+
+Detalhes em [`apm-datadog.txt`](../07-evidencias/apm-datadog.txt).
 
 **Watchdog não precisa ser "ligado" por código:** ele analisa automaticamente
 todo serviço que envia APM ao Datadog. O que se configura é **para onde vai a

@@ -134,18 +134,25 @@ trace. Justificativa completa no
 O APM é o **Datadog**, herdado da Fase 4 ([ADR-004](docs/02-arquitetura/adr/README.md)).
 A conta educacional do grupo já existe e está ativa — não é trial.
 
-1. <https://us5.datadoghq.com> — repare no **us5**: a região tem página de
-   login própria, e `app.datadoghq.com` é outra organização
+1. Entre no Datadog da conta do grupo (hoje: site **US1**, <https://app.datadoghq.com>).
+   Não precisa saber o site de cor: o script abaixo o descobre sozinho.
 2. **Organization Settings → API Keys** → copie a **API Key**
    (não a Application Key)
 
-**O que fazer com ela:**
+**O que fazer com ela** — gravar no cofre, nunca em `export`:
 ```bash
-export DD_API_KEY="sua-api-key-aqui"
+./solidary datadog
 ```
 
-> Defina **antes** de rodar `make deploy`. Se esquecer, rode `make deploy` de
-> novo com a variável exportada — o script é idempotente.
+O script pede a chave **sem eco**, valida o formato, descobre o site na própria
+API do Datadog, grava `{api_key, site}` no **AWS Secrets Manager**
+(`solidarytech/datadog`) e, se o cluster estiver no ar, aplica e reinicia o
+Collector. **Uma vez por conta**: o cofre sobrevive ao `lab-down`, e todo
+`make deploy` seguinte lê dali ([ADR-014](docs/02-arquitetura/adr/README.md#adr-014)).
+
+> Por que não `export DD_API_KEY=...`: o comando vai para o `~/.bash_history` em
+> texto puro. E por que o site importa: chave válida no site errado leva 403 em
+> **todo** envio, sem erro na subida.
 >
 > **Só é necessário na primeira subida.** O bootstrap materializa a chave no
 > Secret `apm-credentials`, que sobrevive enquanto o cluster existir. Nas
@@ -298,7 +305,7 @@ dobra a vida útil do crédito.
 | A1 | Credenciais AWS Academy (3 campos) | 🔴 **Sim** | AWS Details → AWS CLI → Show |
 | A2 | Repositório GitHub publicado | 🔴 **Sim** | github.com/new |
 | A3 | Nomes, RMs e usernames | 🔴 **Sim** | Com o grupo |
-| B1 | Datadog API Key (APM) | 🟡 Muito recomendado | us5.datadoghq.com → Organization Settings → API Keys · conta do grupo, herdada da Fase 4 |
+| B1 | Datadog API Key (APM) | 🟡 Muito recomendado | Datadog → Organization Settings → API Keys · gravar com `./solidary datadog` (vai para o cofre) |
 | B2 | `SONAR_TOKEN` + `SONAR_ORG` | 🟡 Recomendado | sonarcloud.io |
 | B3 | Secrets AWS no GitHub | 🟡 Recomendado | `make sync-creds` |
 | C1 | Webhook de alertas | 🟢 Opcional | PagerDuty / Discord |
@@ -470,8 +477,7 @@ git pull
 ## Passo 4 — Entregar o cluster ao ArgoCD (~8 min)
 
 ```bash
-export DD_API_KEY="sua-api-key"   # só na 1a subida — ver B1
-make deploy
+make deploy        # lê a chave do Datadog do cofre — ver B1
 ```
 
 O script instala o ArgoCD, cria os namespaces, materializa os Secrets a partir do

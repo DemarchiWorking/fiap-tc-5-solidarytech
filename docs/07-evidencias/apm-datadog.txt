@@ -1,0 +1,52 @@
+APM — DATADOG: CREDENCIAL NO COFRE E PROVA DE ENTREGA (ADR-014)
+2026-09-24 23:19 UTC  ·  conta 722616916018
+Nenhum material da chave aparece neste arquivo: so metadados e o final mascarado.
+=======================================================================
+
+1. COFRE — AWS Secrets Manager (conteiner criado por Terraform em infra/bootstrap;
+   o valor NAO passa pelo Terraform, logo nao esta no state)
+   nome:             solidarytech/datadog
+   ARN:              arn:aws:secretsmanager:us-east-1:722616916018:secret:solidarytech/datadog-N8tpKo
+   cifragem:         aws/secretsmanager (chave gerenciada pela AWS)
+   versoes:          8e5c62db…(AWSCURRENT)
+   tags:             Project=SolidaryTech, Environment=Production, CostCenter=NGO-Core, Component=apm-credential
+   conteudo:          chave …d0e9 (32 hex) · site datadoghq.com
+
+2. A CHAVE DO COFRE, VALIDADA NA API DO DATADOG (header lido de stdin, fora do argv)
+   GET https://api.datadoghq.com/api/v1/validate -> HTTP 200 {"valid":true}
+
+3. SECRET NO CLUSTER — materializado a partir do cofre
+   chaves:           DD_API_KEY, DD_SITE, NEW_RELIC_LICENSE_KEY (nomes — valores omitidos)
+   origem:           secretsmanager
+   cofre / versao:   solidarytech/datadog / 8e5c62db…
+   last-applied-configuration: ausente (o valor nao e duplicado em anotacao)
+
+4. COLLECTOR — configuracao em execucao (ConfigMap gerado pelo ArgoCD a partir do Git)
+   imagem: otel/opentelemetry-collector-contrib:0.159.0
+   exporter datadog: site = ${env:DD_SITE:-datadoghq.com} · key = ${env:DD_API_KEY}
+   connectors:        ['datadog/connector']
+   pipeline metrics/datadog receivers ['datadog/connector'] -> exporters ['datadog']
+   pipeline traces          receivers ['otlp'] -> exporters ['datadog/connector', 'datadog']
+
+5. PROVA DE ENTREGA — nao basta o contador de envio
+   pod: otel-collector-65f9976567-9sdfx  (iniciado 2026-09-24T23:11:35Z)
+   'API key validation successful':  2
+   'Starting datadogconnector':      1
+   '403 Forbidden':                  0
+   'Dropping Payload':               0
+   aviso do proprio exporter (por que o connector e obrigatorio nesta versao):
+     "Trace metrics are now disabled in the Datadog Exporter by default. To continue receiving Trace Metrics, configure the Datadog Connector or disable the"
+
+   Contadores do Collector — duas leituras, com trafego real entre elas:
+     (30 GET /donations pelo NLB no intervalo)
+     otelcol_exporter_sent_metric_points{exporter="datadog"} 44	-> 49
+     otelcol_exporter_sent_spans{exporter="datadog"} 52135	-> 52184
+
+   Leitura: chave validada no boot, zero 403, zero payload descartado e
+   contadores subindo. Spans vao ao APM; trace metrics (metric_points) saem
+   do datadog/connector — sao elas que o Watchdog analisa.
+
+6. O QUE SO A INTERFACE MOSTRA (prints em docs/07-evidencias/)
+   https://app.datadoghq.com/apm/services   — donation-service, ngo-service, volunteer-service
+   https://app.datadoghq.com/apm/traces     — trace donation-service -> SQS -> volunteer-worker
+   https://app.datadoghq.com/watchdog       — anomalias (Watchdog analisa as trace metrics acima)

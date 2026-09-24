@@ -327,7 +327,7 @@ Em `http://localhost:9093`, veja as rotas e os alertas ativos.
 
 ## 7. APM — Datadog
 
-**Interface:** https://app.us5.datadoghq.com
+**Interface:** https://app.datadoghq.com (site US1)
 
 | Onde | O que conferir |
 |---|---|
@@ -346,7 +346,24 @@ kubectl -n monitoring port-forward deploy/otel-collector 8888:8888
 curl -s http://localhost:8888/metrics | grep -E 'otelcol_(exporter_sent_spans|receiver_accepted_spans|exporter_send_failed_spans)'
 ```
 
-Esperado — `sent` alto e `send_failed` ausente ou zero:
+Esperado — `sent` alto e `send_failed` ausente ou zero. Mas:
+
+**Isto mede ENVIO, não entrega.** O contador `sent` conta o que sai do exporter,
+não o que o Datadog aceita: em 24/09 ele marcou 51.705 spans com **todo**
+payload recusado por 403 (chave e site errados). A prova de entrega exige as
+três coisas juntas:
+
+```bash
+kubectl -n monitoring logs deploy/otel-collector | grep -c "API key validation successful"   # >= 1
+```
+
+```bash
+kubectl -n monitoring logs deploy/otel-collector | grep -c "403 Forbidden"                   # 0
+```
+
+— e o contador subindo. `./solidary evidencias` (seção H) faz as três.
+
+Exemplo da leitura do contador:
 
 ```
 otelcol_exporter_sent_spans{exporter="datadog"} 7144
@@ -354,11 +371,11 @@ otelcol_receiver_accepted_spans{receiver="otlp",transport="grpc"} 1153
 otelcol_receiver_accepted_spans{receiver="otlp",transport="http"} 5991
 ```
 
-> A chave do APM **não está no repositório**. Ela vive no Secret
-> `apm-credentials`, criado pelo bootstrap a partir de variável de ambiente:
-> `export DD_API_KEY=... && ./solidary deploy`. A Fase 4 commitou a chave em
-> texto puro no values.yaml deste mesmo componente — o ADR-004 de lá registra o
-> próprio erro.
+> A chave do APM **não está no repositório nem em variável de ambiente**. Ela
+> vive no AWS Secrets Manager (`solidarytech/datadog`, junto com o site) e é
+> materializada no Secret `apm-credentials` pelo deploy. Para gravar ou trocar:
+> `./solidary datadog` (entrada sem eco) — [ADR-014](02-arquitetura/adr/README.md#adr-014).
+> A Fase 4 commitou a chave em texto puro no values.yaml deste mesmo componente.
 
 ---
 
@@ -546,6 +563,6 @@ próximo `lab-up` reaproveita.
 | APIs | `$BASE/ngo/ngos` · `$BASE/donations` · `$BASE/volunteers/1` |
 | ArgoCD | `$BASE/argocd/` — `admin` |
 | Grafana | `$BASE/grafana/` — `admin` |
-| APM | https://app.us5.datadoghq.com |
+| APM | https://app.datadoghq.com |
 | Pipelines | github.com/DemarchiWorking/fiap-tc-5-solidarytech/actions |
 | Senhas e URL base | `./solidary senhas` |

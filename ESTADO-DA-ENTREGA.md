@@ -1,11 +1,13 @@
 # Estado da entrega — SolidaryTech · Tech Challenge Fase 5
 
-> **Comece por aqui.** Este é o documento que responde três perguntas: **o que
-> está pronto**, **o que falta** e **o que fazer agora**. Tudo o que está
-> afirmado abaixo foi medido no ambiente provisionado, não estimado.
+> **Comece por aqui.** Este documento responde três perguntas: **o que está
+> pronto**, **o que falta** e **o que fazer agora**. Tudo o que está afirmado
+> abaixo foi medido no ambiente provisionado, não estimado — e se regenera com
+> `./solidary evidencias`.
 
-**Última validação:** 11/09/2026 · commit `ca4896d` · conta `227007723638` ·
-região `us-east-1`
+**Última validação:** 24/09/2026 · conta `722616916018` · região `us-east-1` ·
+ambiente **destruído e recriado do zero** numa conta de Learner Lab nova
+(a anterior, `227007723638`, não existe mais).
 
 ---
 
@@ -13,159 +15,164 @@ região `us-east-1`
 
 | | |
 |---|---|
-| **Infraestrutura** | 65 recursos por Terraform · **0 recursos IAM** |
-| **Aplicações** | 3 serviços + worker · **9 pods**, 0 restarts |
+| **Infraestrutura** | 52 recursos por Terraform em 15 min · **0 recursos IAM** · plano revisado antes de cada apply |
+| **Aplicações** | 3 serviços + worker · **0 reinícios** · worker escalou **1 → 6** sob carga (HPA) |
 | **GitOps** | **15/15** Applications `Synced` / `Healthy` |
-| **APIs** | 30/30 chamadas externas OK · `POST /donations` → **201** |
-| **SLIs** | disponibilidade `0` erro · frescor `0` erro · latência p95 ~5 ms sob carga |
-| **Observabilidade** | 255 regras (**0 com problema**) · 27 alvos (**0 down**) |
-| **Painéis** | **18/18** consultas do Grafana devolvendo dado |
-| **APM** | **62.952 spans** entregues ao Datadog, 0 falhas |
-| **Backup** | BSL `Available` · 7 backups · dados no S3 |
-| **FinOps** | 42 recursos com as 3 tags obrigatórias |
-| **Entregáveis** | 35 documentos · 12 evidências de terminal · PDF 365 KB |
-| **Rubrica** | `./solidary rubrica` → **29 ok**, 2 pendentes (prints e link do vídeo), **0 faltando** |
+| **APIs (endereço público)** | todas as rotas `200` · `POST /donations` → **201** · 30/30 chamadas externas OK |
+| **Carga (k6)** | 12.879 requisições · **0% de falha** · p95 **7,9 ms** · 8.099 doações, 0 erro |
+| **SLIs** | taxa de erro **0** · p95 **4,8 ms** · frescor **0** · error budget **100%** |
+| **Observabilidade** | 27 alvos no Prometheus, **0 down** |
+| **APM (Datadog)** | chave **no cofre**, validada (site US1) · **0 respostas 403** · trace metrics ativas |
+| **Backup** | BSL `Available` em `us-west-2` · backup `Completed` (203 itens) · ArgoCD não apaga mais |
+| **DR — Opção B** | `plan` da região espelho: **34 a criar, 0 a alterar, 0 a destruir** |
+| **FinOps** | 42 recursos com as 3 tags · **0** com `Environment` ≠ `Production` · forecast **US$ 202,74/mês** |
+| **DevSecOps** | **0 HIGH/CRITICAL** nas 3 imagens e nas dependências · gitleaks: 0 no histórico |
+| **Rubrica** | `./solidary rubrica` → **34 ok**, 2 pendentes (prints e link do vídeo), **0 faltando** |
 
-**O que falta é apresentação, não engenharia.**
+**O que falta é apresentação e três ações que exigem a sua conta** (GitHub,
+Datadog, gravação). A engenharia está validada no ambiente real.
+
+---
+
+## O que falta — só você pode fazer
+
+| # | Item | Tempo | Por que importa |
+|---|---|---|---|
+| 1 | **`gh auth login`** e depois `./solidary sync-creds` | 3 min | Sem isso a CI não publica no ECR da conta nova — e a demo "pipelines rodando" precisa dela |
+| 2 | Disparar as pipelines (`./solidary publicar-imagens` + Actions → *Validação* e *Terraform* → *Run workflow*) | 15 min | CI verde, imagem nova no ECR e commit do `update-gitops` — é o que o vídeo mostra |
+| 3 | **Prints** (10, lista abaixo) | ~30 min | O PDF mostra uma caixa vermelha "EVIDÊNCIA PENDENTE" onde falta print |
+| 4 | **Watchdog** — criar o *Watchdog monitor* e capturar a tela | 5 min | Fecha o AIOps (F3.1). Ver a observação sobre linha de base abaixo |
+| 5 | **Vídeo** (15–20 min) — [`docs/roteiro-video.md`](docs/roteiro-video.md) | — | Entregável obrigatório |
+| 6 | Link do vídeo no relatório + `python scripts/gerar-relatorio.py` | 2 min | Último campo *a preencher* |
+| 7 | **`./solidary lab-down`** depois da gravação | 2 min | ≈ US$ 6,73/dia. O cofre e o state (bootstrap) não são afetados |
+| 8 | **Rotacionar a chave do Datadog** depois da avaliação | 3 min | Ela trafegou em texto (chat e repositório da Fase 4). Nova chave: `./solidary datadog` |
+
+> **Watchdog e linha de base.** O Watchdog é automático sobre as trace metrics
+> que o `datadog/connector` passou a gerar em 24/09, mas ele aprende o
+> comportamento normal antes de acusar anomalia. Rode `./solidary carga` com
+> antecedência; se no dia não houver anomalia, o print da página do Watchdog com
+> os três serviços monitorados, mais o *Watchdog monitor* configurado, demonstra
+> a funcionalidade **ativa** — e o roteiro explica o porquê.
+
+### Os 10 prints que o relatório espera
+
+Salve em `docs/07-evidencias/` com exatamente estes nomes — o PDF os inclui
+sozinho.
+
+| Arquivo | Onde |
+|---|---|
+| `f0-argocd.png` | `<NLB>/argocd/` — 15 Applications `Synced`/`Healthy` |
+| `f0-pipeline-verde.png` | GitHub → Actions → execução verde (depois dos itens 1 e 2) |
+| `f0-pods-running.png` | `kubectl get pods -A \| grep solidary` |
+| `f0-trace-distribuido.png` | Datadog (app.datadoghq.com) → APM → Traces |
+| `f1-dashboard-sre.png` | Grafana → *SRE: SLOs e Error Budget* (**rode a carga antes**) |
+| `f2-tags-console.png` | AWS → Tag Editor → `CostCenter = NGO-Core` |
+| `f2-dashboard-finops.png` | Grafana → *FinOps* |
+| `f3-anomalia-watchdog.png` | Datadog → Watchdog |
+| `f4-velero-backups.png` | `kubectl -n velero get backups.velero.io` |
+| `f4-dr-plan.png` | `AMBIENTE=dr-usw2 ./solidary plan` (só leitura) |
+
+`./solidary senhas` mostra as URLs e as credenciais do Grafana e do ArgoCD.
 
 ---
 
 ## O que está pronto e validado
 
-### Frente 0 — Fundação DevOps *(requisito obrigatório)*
+### Frente 0 — Fundação DevOps *(obrigatória)*
 
-| Item | Estado | Como conferir |
+| Item | Estado | Evidência |
 |---|---|---|
-| Dockerfiles otimizados (3 serviços) | ✅ | multi-stage, distroless, non-root, ~15 MB |
-| Kubernetes (EKS 1.34) | ✅ | `kubectl get nodes` → 3 nós `Ready` |
-| IaC — cluster, bancos, mensageria, rede | ✅ | `terraform state list` → 65 recursos |
-| CI/CD com SAST e SCA | ✅ | gosec, bandit, Trivy ×4 · **barrou 4 CVEs reais** |
-| GitOps (ArgoCD) | ✅ | 15 Applications · um único `kubectl apply` no projeto |
+| Dockerfiles otimizados (3 serviços) | ✅ | multi-stage, distroless/slim, non-root, **sem pip no runtime** · 0 HIGH/CRITICAL |
+| Kubernetes (EKS 1.34) | ✅ | 3 nós `Ready` · [`validacao-final.txt`](docs/07-evidencias/validacao-final.txt) |
+| IaC — cluster, bancos, mensageria, rede | ✅ | 52 recursos, 0 IAM, plano revisado |
+| CI/CD com SAST e SCA | ✅ | gosec, bandit, Trivy em 2 camadas, SBOM · [`devsecops-auditoria.txt`](docs/07-evidencias/devsecops-auditoria.txt) |
+| GitOps (ArgoCD) | ✅ | 15/15 · deploy nasce de commit |
 | Observabilidade (Prometheus/Grafana/Loki/OTel) | ✅ | 27 alvos, 0 down |
-| **APM com Distributed Tracing** | ✅ | Datadog · 62.952 spans, 0 falhas |
+| **APM com Distributed Tracing** | ✅ | [`apm-datadog.txt`](docs/07-evidencias/apm-datadog.txt) — entrega provada, não só envio |
 
 ### Frente 1 — SRE
 
 | Item | Estado | Evidência |
 |---|---|---|
-| 3 SLIs (o enunciado pede 2) | ✅ | disponibilidade, latência, **frescor da fila** |
-| SLO por SLI + SLA contratual | ✅ | [`sli-slo-sla.md`](docs/03-sre/sli-slo-sla.md) |
-| Dashboard SRE com error budget | ✅ | **18/18 consultas validadas contra o Prometheus**, não só o JSON |
-| **Chaos drill executado** | ✅ | **MTTD medido: 76 s** — [`mttr-chaos-drill.md`](docs/03-sre/mttr-chaos-drill.md) |
-| **Error budget em ação** | ✅ | incidente real: detecção → correção → recuperação |
+| 3 SLIs (o enunciado pede 2) + SLO + SLA | ✅ | [`sli-slo-sla.md`](docs/03-sre/sli-slo-sla.md) |
+| Dashboard SRE com error budget | ✅ | SLIs calculados no Prometheus em 24/09 |
+| Chaos drill executado — **MTTD 76 s** | ✅ | [`mttr-chaos-drill.md`](docs/03-sre/mttr-chaos-drill.md) |
+| Error budget em ação | ✅ | incidente real de 10/09 + [post-mortem](docs/05-itsm-aiops/post-mortem-2026-09-10-frescor.md) |
 
 ### Frente 2 — FinOps
 
 | Item | Estado | Evidência |
 |---|---|---|
-| Tags via IaC | ✅ | 42 recursos × `Project` + `Environment` + `CostCenter` |
-| **Rightsizing medido** | ✅ | request do worker era **4× menor** que o uso real |
-| Forecast + recomendações | ✅ | US$ 201,94/mês |
+| Tags via IaC, **valor literal em 100%** | ✅ | gate 16 do `verificar-academy.py` · 0 recursos fora de `Production` |
+| Rightsizing medido | ✅ | [`rightsizing-medido.txt`](docs/07-evidencias/rightsizing-medido.txt) |
+| Forecast + recomendações | ✅ | US$ 202,74/mês · [`docs/04-finops`](docs/04-finops/README.md) |
 
 ### Frente 3 — ITSM e AIOps
 
 | Item | Estado |
 |---|---|
-| Ciclo de vida do incidente | ✅ desenhado |
-| **Post-mortem preenchido** | ✅ [incidente real de 10/09](docs/05-itsm-aiops/post-mortem-2026-09-10-frescor.md) |
-| Cadeia de alerta | ✅ **roteamento provado**, entrega pendente de credencial |
-| **AIOps (Watchdog)** | ⬜ **falta ativar na UI do Datadog** |
+| Ciclo de vida do incidente | ✅ desenhado (SVG no relatório) |
+| Post-mortem preenchido | ✅ incidente real de 10/09 |
+| AIOps — base técnica (trace metrics para o Watchdog) | ✅ `datadog/connector` ativo |
+| AIOps — print da anomalia | ⬜ item 4 acima |
+| Cadeia de alerta (PagerDuty/Discord) | ⚠️ roteamento provado; entrega depende de credencial externa |
 
 ### Frente 4 — Segurança e DR
 
 | Item | Estado | Evidência |
 |---|---|---|
 | PCN com RTO/RPO | ✅ | [`pcn.md`](docs/06-dr-pcn/pcn.md) |
-| **Opção A** — Velero cross-region | ✅ | backup real, dados no S3 |
-| **Opção B** — warm standby por Terraform | ✅ | `AMBIENTE=dr-usw2 ./solidary plan` limpo |
-| NetworkPolicies | ✅ | conexão negada medida: **HTTP 000 em 8 s** |
-| Segredos fora do Git | ✅ | RDS via Secrets Manager · busca no repo volta vazia |
-| Conformidade AWS Academy | ✅ | **0 recursos IAM**, LabRole lida |
-
----
-
-## O que falta — 6 itens, todos seus
-
-| # | Item | Tempo | Por que importa |
-|---|---|---|---|
-| 1 | **Prints** (0 capturados) | ~30 min | A rubrica deduz ponto por requisito não demonstrado visualmente |
-| 2 | **Watchdog** no Datadog | 2 min | Fecha o AIOps da frente 3 |
-| 3 | **Vídeo** (15–20 min) | — | Entregável obrigatório |
-| 4 | **Link do vídeo** → me passa, eu fecho o PDF | 2 min | Último campo `*a preencher*` |
-| 5 | **Repositório privado** | 20 s | O histórico ainda tem `labsuser.ppk` e `ssourl.txt` |
-| 6 | **`./solidary lab-down`** | 2 min | US$ 6,73/dia |
-
-### Opcional, mas fecha um item da rubrica
-
-Um webhook de Discord (**com `/slack` no fim da URL**) faz a cadeia de incidente
-passar de *"configurada"* para *"operando"* — que é a diferença que o enunciado
-cobra. O roteamento já está provado; falta só a credencial de entrega.
-
-```bash
-export CHATOPS_WEBHOOK_URL='https://discord.com/api/webhooks/.../slack'
-./solidary deploy
-```
-
-### Os 8 prints essenciais
-
-| Arquivo | Onde |
-|---|---|
-| `f0-argocd.png` | ArgoCD → 15 Applications `Synced`/`Healthy` |
-| `f0-pods-running.png` | `kubectl get pods -A \| grep solidary` |
-| `f0-pipeline-verde.png` | Actions → execução verde |
-| `f0-pipeline-bloqueio.png` | Actions → execução **reprovada pelo Trivy** |
-| `f1-dashboard-sre.png` | Grafana → SRE / SLO (**rode a carga antes**) |
-| `f2-dashboard-finops.png` | Grafana → FinOps |
-| `f2-tags-console.png` | AWS → Tag Editor → `CostCenter=NGO-Core` |
-| `f0-trace-distribuido.png` | Datadog → APM → Traces |
-
-Salve em `docs/07-evidencias/`.
-
-> **Rode `./solidary carga` antes dos prints do Grafana.** Sem tráfego, o p95
-> de latência aparece como `NaN` — e está certo: `histogram_quantile` sobre
-> janela vazia não tem o que calcular.
+| Opção A — Velero cross-region | ✅ | backup `Completed`, bucket em `us-west-2` |
+| Opção B — warm standby por Terraform | ✅ | [`dr-plano-regiao-secundaria.txt`](docs/07-evidencias/dr-plano-regiao-secundaria.txt) |
+| Segredos fora do Git **e fora do terminal** | ✅ | RDS e Datadog no Secrets Manager (ADR-014) |
+| Conformidade AWS Academy | ✅ | 0 IAM · LabRole por data source · 16 verificações |
 
 ---
 
 ## Os defeitos que a validação encontrou
 
-Nenhum deles aparecia em gate, revisão de código ou `kubectl get` — todos
-precisaram do ambiente rodando sob carga.
+Nenhum deles aparecia em gate, revisão de código ou `kubectl get`.
+
+**Validação de 10–11/09** (conta anterior):
 
 | # | Defeito | Como se manifestava |
 |---|---|---|
-| 1 | **`metrics-server` ausente** | Os 3 HPAs em `<unknown>`, nunca escalando. Decorativos desde o dia 1 |
-| 2 | **`volunteer-worker` sem HPA** | 29,9 % dos eventos fora do SLO; error budget em −42 |
-| 3 | **Request do worker 4× subdimensionado** | Scheduler achava que 4 workers custavam 200 m; custavam 800 m |
-| 4 | **`Dockerfile` copiava de um cache mount** | A imagem do `donation-service` **nunca foi construída** |
-| 5 | **SLI de disponibilidade sumia quando tudo estava bem** | `rate(...{5xx})` devolve vazio, não zero |
-| 6 | **`startupProbe` com timeout de 1 s** | Worker em CrashLoop: 15 reinícios |
-| 7 | **`ServiceMonitor` apontando para porta inexistente** | Prometheus sem alvo do Collector |
-| 8 | **4 CVEs reais** | Gate do Trivy barrando `x/crypto`, `pgx`, `grpc` |
-| 9 | **`trivy-action@0.28.0` não existe mais** | Job morria em "Set up job", sem dizer qual ação |
-| 10 | **`gosec` não compila com Go 1.26** | SAST reprovava sem existir achado |
-| 11 | **Painel de erro 5xx vazio sem erro** | Gráfico de erros mostrando "No data" com a plataforma saudável |
-| 12 | **Health check do NLB numa porta inexistente** | **15 % das requisições externas em timeout** — e o SLI marcando 100 % |
-| 13 | **Os gates reprovavam por credencial expirada** | `pre-voo` dava NO-GO antes de abrir o lab, acusando o código por um problema de sessão |
-| 14 | **A entrega dizia New Relic, o sistema roda Datadog** | Relatório, roteiro do vídeo, ADR-004 e 6 outros arquivos — a entrega se contradizendo |
+| 1 | `metrics-server` ausente | Os 3 HPAs em `<unknown>`, nunca escalando |
+| 2 | `volunteer-worker` sem HPA | 29,9 % dos eventos fora do SLO; error budget em −42 |
+| 3 | Request do worker 4× subdimensionado | Scheduler achava que 4 workers custavam 200 m; custavam 800 m |
+| 4 | `Dockerfile` copiava de um cache mount | A imagem do `donation-service` nunca foi construída |
+| 5 | SLI de disponibilidade sumia quando tudo estava bem | `rate(...{5xx})` devolve vazio, não zero |
+| 6 | `startupProbe` com timeout de 1 s | Worker em CrashLoop: 15 reinícios |
+| 7 | `ServiceMonitor` em porta inexistente | Prometheus sem alvo do Collector |
+| 8 | 4 CVEs reais | Gate do Trivy barrando `x/crypto`, `pgx`, `grpc` |
+| 9 | `trivy-action@0.28.0` não existe mais | Job morria em "Set up job" |
+| 10 | `gosec` não compila com Go 1.26 | SAST reprovava sem existir achado |
+| 11 | Painel de erro 5xx vazio sem erro | "No data" com a plataforma saudável |
+| 12 | Health check do NLB em porta inexistente | 15 % das requisições externas em timeout, SLI em 100 % |
+| 13 | Gates reprovavam por credencial expirada | NO-GO acusando o código por problema de sessão |
+| 14 | A entrega dizia New Relic, o sistema roda Datadog | Documentos se contradizendo |
 
-**O padrão:** `kustomize`, `kubeconform`, `terraform validate` e os cinco gates
-locais validam **a forma**. Nenhum executa um cluster. Um HPA sintaticamente
-perfeito que nunca escala passa por todos — e um painel sintaticamente perfeito
-que renderiza vazio também.
+**Auditoria e reprovisionamento de 24/09** (conta nova):
 
-Os defeitos 1, 2, 3, 5, 6, 7 e 11 só apareceram **executando**: sob carga, com
-o cluster no ar, consultando o Prometheus de verdade. Os defeitos 4, 8, 9 e 10
-só apareceram quando a pipeline **rodou pela primeira vez** neste repositório.
+| # | Defeito | Como se manifestava |
+|---|---|---|
+| 15 | 3 CVEs HIGH novas no `grpc` 1.79.3 | Apareceriam na aba Security do GitHub |
+| 16 | `pip` vendorizado nas imagens Python | 2 HIGH por imagem |
+| 17 | `Environment=DR` no bucket do Velero e no ambiente DR | Fora do filtro que evidencia o F2.1 |
+| 18 | Healthcheck do LocalStack em rota inexistente | `make smoke` **nunca** passou do boot |
+| 19 | Schema do donation aplicado no banco errado (local) | `POST /donations` → 500 — escondido pelo 18 |
+| 20 | `configurar-repo` só trocava placeholders | Em conta nova: pods sem imagem, Loki e Velero em bucket alheio |
+| 21 | Pré-voo dizia "configurado" para outra conta | Falso GO |
+| 22 | **ArgoCD apagava os backups do Velero** | `backup get` vazio com os dados no S3 — restore inviável |
+| 23 | **Site do Datadog fixo em `us5`**, chave do US1 | 403 em todo envio, sem erro na subida |
+| 24 | **Sem trace metrics** (`DisableAPMStats` na 0.159) | Watchdog sem métricas para analisar |
+| 25 | Contador de spans "enviados" usado como prova | 51.705 "enviados" com todo payload recusado |
+| 26 | Chave do APM em `export`, `ps` e `.env.local` | `chmod 600` vira **777** em `/mnt/c` — proteção anunciada não existia |
 
-**O defeito 12 é de uma terceira categoria, e a mais incômoda: só aparece
-medindo de FORA.** O health check do NLB apontava para a porta de métricas do
-container, que não existe no nó. Todos os alvos ficavam `unhealthy`, o NLB
-entrava em *fail-open* e mandava tráfego para um nó sem pod do ingress, onde
-`externalTrafficPolicy: Local` descartava o pacote. Resultado: **15 % de
-timeout para o usuário, com o SLI de disponibilidade em 100 %** — porque ele
-mede o que *chega* ao serviço, e o pacote morria antes. Depois da correção:
-30/30 chamadas externas OK, os dois IPs do NLB respondendo.
+**O padrão:** os gates estáticos validam a **forma**. Os defeitos 18–26 só
+apareceram subindo numa conta nova e **olhando o sistema operar** — o Collector
+subia, o contador subia, e nada chegava ao APM; o Velero fazia backup, e o
+ArgoCD os apagava.
 
 ---
 
@@ -175,77 +182,65 @@ mede o que *chega* ao serviço, e o pacote morria antes. Depois da correção:
 
 | Preciso... | Vou em... |
 |---|---|
-| Testar tudo, passo a passo, com parâmetros | [`docs/10-validacao-passo-a-passo.md`](docs/10-validacao-passo-a-passo.md) |
-| Entender *por que* cada teste importa | [`docs/09-como-testar.md`](docs/09-como-testar.md) |
+| Regenerar as evidências com o ambiente no ar | `./solidary evidencias` |
+| Gravar ou trocar a chave do Datadog | `./solidary datadog` (entrada sem eco → cofre) |
+| Testar tudo, passo a passo | [`docs/10-validacao-passo-a-passo.md`](docs/10-validacao-passo-a-passo.md) |
 | Subir o ambiente do zero | [`COMO-SUBIR.md`](COMO-SUBIR.md) |
-| Checklist da sessão do lab | [`docs/08-validacao-final.md`](docs/08-validacao-final.md) |
-| Descobrir URLs e senhas da sessão | `./solidary senhas` |
+| A sequência do dia da gravação | [`AMANHA.md`](AMANHA.md) |
 
 ### Para a banca
 
 | Seção | Documento |
 |---|---|
-| Relatório (entregável E3) | [`RELATORIO-DE-ENTREGA.md`](docs/relatorio/RELATORIO-DE-ENTREGA.md) · PDF gerado |
+| Relatório (E3) | [`RELATORIO-DE-ENTREGA.md`](docs/relatorio/RELATORIO-DE-ENTREGA.md) → `RELATORIO-FASE5.pdf` |
 | SLI / SLO / SLA | [`docs/03-sre/sli-slo-sla.md`](docs/03-sre/sli-slo-sla.md) |
 | PCN com RTO e RPO | [`docs/06-dr-pcn/pcn.md`](docs/06-dr-pcn/pcn.md) |
 | Ciclo de incidente | [`docs/05-itsm-aiops/README.md`](docs/05-itsm-aiops/README.md) |
-| Post-mortem real | [`post-mortem-2026-09-10-frescor.md`](docs/05-itsm-aiops/post-mortem-2026-09-10-frescor.md) |
-| Decisões arquiteturais | [`docs/02-arquitetura/adr/README.md`](docs/02-arquitetura/adr/README.md) |
+| Decisões arquiteturais (14 ADRs) | [`docs/02-arquitetura/adr/README.md`](docs/02-arquitetura/adr/README.md) |
 | Roteiro do vídeo | [`docs/roteiro-video.md`](docs/roteiro-video.md) |
-
-### Evidências capturadas *(10 arquivos)*
-
-Todas em `docs/07-evidencias/`, extraídas do ambiente real:
-
-`validacao-final.txt` · `ambiente-completo.txt` · `elasticidade-e-frescor.txt` ·
-`apm-tracing.txt` · `dr-backup-seguranca.txt` · `plataforma-observabilidade.txt` ·
-`rightsizing-medido.txt` · `gitops-convergencia.txt` ·
-`infraestrutura-provisionada.txt` · `conformidade-academy.txt` ·
-`fumaca-endpoints.txt`
 
 ---
 
 ## Como retomar numa sessão nova
 
-O ambiente **não** sobrevive ao fim da sessão do Learner Lab se você rodar
-`lab-down`. Se rodou, para voltar:
-
-```bash
-wsl
-```
-
-```bash
-tc5
-```
-
-Cole as credenciais novas do painel em `~/.aws/credentials` e:
+**Tudo roda no WSL, não no CMD.** Credenciais novas do painel do lab em
+`~/.aws/credentials` e:
 
 ```bash
 ./solidary pre-voo
 ```
 
-Veredito **GO** → suba:
-
-```bash
-./solidary lab-up && ./solidary configurar-repo && ./solidary deploy
-```
-
-Se o ambiente ainda está no ar, só refaça o kubeconfig:
+Se o ambiente ainda existe, só refaça o kubeconfig:
 
 ```bash
 ./solidary kubeconfig && ./solidary status
 ```
 
-> **Tudo roda no WSL, não no CMD.** O Windows tem um `kubectl` que responde e
-> não conhece este cluster — o sintoma é `dial tcp [::1]:8080`, que parece
-> problema de rede e é problema de shell.
+Se rodou `lab-down`, suba de novo — a chave do Datadog **não** precisa ser
+redigitada, ela está no cofre:
+
+```bash
+./solidary lab-up && ./solidary deploy
+```
+
+Conta de lab **nova** (outro integrante, lab resetado): o `pre-voo` aponta o
+bucket de state inacessível e o GitOps de outra conta, e diz o que fazer —
+arquivar o state local do bootstrap, `make bootstrap`, `./solidary datadog`,
+`lab-up`, `configurar-repo` (migra registry e buckets) e push.
 
 ---
 
-## Higiene pendente
+## Higiene
 
-- **O repositório está público** e o histórico contém `labsuser.ppk` e
-  `ssourl.txt`, adicionados pelo commit `8603b96`. Os arquivos saíram do HEAD
-  em `a787c6d`, mas seguem alcançáveis pelo SHA antigo. Deixe privado até
-  regenerar a chave no painel do lab.
-- **`./solidary lab-down` ao final.** US$ 6,73/dia.
+- **O repositório fica PÚBLICO.** A recomendação anterior era torná-lo privado
+  por causa do `labsuser.ppk` e do `ssourl.txt` no histórico (commit `8603b96`).
+  Reavaliado em 24/09: a `ssourl.txt` tinha um *SigninToken* de federação que
+  expira em 15 minutos; a `labsuser.ppk` é a chave do par `vockey` de uma conta
+  que não existe mais, e nenhum recurso deste projeto usa SSH. Privado, o link do
+  repositório pararia de funcionar para a banca. Se quiser purgar mesmo assim:
+  `git filter-repo` + `push --force` — decisão sua, reescreve o histórico.
+- **`labsuser.pem` na raiz do projeto**: está no `.gitignore` e nunca foi
+  versionada, mas vai junto em qualquer `.zip` da pasta. Mova para fora
+  (por exemplo, `~/.ssh/`).
+- **Rotacionar a chave do Datadog** depois da avaliação (item 8).
+- **`./solidary lab-down`** ao final. O cofre e o bucket de state ficam.

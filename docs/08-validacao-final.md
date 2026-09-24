@@ -148,8 +148,10 @@ métrica. Os painéis de SLO ficam vazios, o error budget não tem o que calcula
 e a IA do APM não tem linha de base para aprender. Um vídeo gravado com o
 ambiente ocioso *prova que nada funciona*.
 
-Enquanto roda, ative no Datadog: **Watchdog** para os três serviços
-(app.us5.datadoghq.com — repare no site `us5`).
+Enquanto roda, confira no Datadog (https://app.datadoghq.com — site US1) se os três
+serviços aparecem em **APM → Services** com requisições, erros e latência. O
+**Watchdog** é automático sobre essas métricas; para receber a anomalia no
+canal, crie um *Watchdog monitor* (Monitors → New Monitor → Watchdog).
 
 **Prova:** pré-requisito de **F1** e **F3.1**.
 

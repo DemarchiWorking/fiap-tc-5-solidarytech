@@ -1,0 +1,44 @@
+DR — OPCAO B (WARM STANDBY): plano da regiao secundaria
+2026-09-24 22:39 UTC  ·  conta 722616916018  ·  ambiente infra/environments/dr-usw2
+Comando: AMBIENTE=dr-usw2 ./solidary plan   (somente leitura — nada foi criado)
+=======================================================================
+
+Plan: 34 to add, 0 to change, 0 to destroy.
+
+Recursos que o 'make dr-up' criaria em us-west-2 (os MESMOS modulos da producao):
+        1 aws_vpc_security_group_ingress_rule.rds_do_cluster
+        1 module.dynamodb.aws_dynamodb_table.voluntarios
+        1 module.eks.aws_cloudwatch_log_group.control_plane
+        1 module.eks.aws_eks_addon.coredns
+        1 module.eks.aws_eks_addon.ebs_csi
+        1 module.eks.aws_eks_addon.kube_proxy
+        1 module.eks.aws_eks_addon.vpc_cni
+        1 module.eks.aws_eks_cluster.principal
+        1 module.eks.aws_eks_node_group.principal
+        1 module.eks.aws_launch_template.nos
+        1 module.network.aws_internet_gateway.principal
+        1 module.network.aws_route_table.privada
+        1 module.network.aws_route_table.publica
+        2 module.network.aws_route_table_association.privada
+        2 module.network.aws_route_table_association.publica
+        1 module.network.aws_security_group.rds
+        2 module.network.aws_subnet.privada
+        2 module.network.aws_subnet.publica
+        1 module.network.aws_vpc.principal
+        1 module.network.aws_vpc_endpoint.dynamodb
+        1 module.network.aws_vpc_endpoint.s3
+        1 module.rds.aws_db_instance.principal
+        1 module.rds.aws_db_parameter_group.principal
+        1 module.rds.aws_db_subnet_group.principal
+        1 module.rds.aws_secretsmanager_secret.banco
+        1 module.rds.aws_secretsmanager_secret_version.banco
+        1 module.rds.random_password.master
+        1 module.sqs.aws_sqs_queue.dlq
+        1 module.sqs.aws_sqs_queue.principal
+        1 module.sqs.aws_sqs_queue_redrive_allow_policy.dlq
+
+Tags obrigatorias no plano:
+  "Environment" = "Production"  37 ocorrencias
+  "Environment" = "DR"          0 ocorrencias
+  "Role" = "warm-standby"       33 ocorrencias
+      1   + instance_class                        = "db.t3.micro"

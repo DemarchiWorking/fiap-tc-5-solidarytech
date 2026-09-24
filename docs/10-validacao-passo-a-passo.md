@@ -526,8 +526,9 @@ recomendação sem valor.
 
 ## PASSO 11 — Datadog (APM)
 
-**URL:** https://app.us5.datadoghq.com
-**Conta:** a mesma da Fase 4 (ADR-004). O site é **us5**, não o padrão.
+**URL:** https://app.datadoghq.com
+**Conta:** a do grupo. O site (hoje **US1**) é o da chave, gravado junto com ela
+no cofre — o `./solidary datadog` o descobre sozinho (ADR-014).
 
 | Onde | O que conferir |
 |---|---|
@@ -552,15 +553,29 @@ otelcol_receiver_accepted_spans{receiver="otlp",transport="grpc"} 1156
 otelcol_receiver_accepted_spans{receiver="otlp",transport="http"} 10183
 ```
 
-`sent` alto e `send_failed` ausente = todo span aceito foi entregue.
+**Isto mede ENVIO, não entrega.** O contador `sent` conta o que sai do exporter,
+não o que o Datadog aceita: em 24/09 ele marcou 51.705 spans com **todo**
+payload recusado por 403 (chave e site errados). A prova de entrega exige as
+três coisas juntas:
+
+```bash
+kubectl -n monitoring logs deploy/otel-collector | grep -c "API key validation successful"   # >= 1
+```
+
+```bash
+kubectl -n monitoring logs deploy/otel-collector | grep -c "403 Forbidden"                   # 0
+```
+
+— e o contador subindo. `./solidary evidencias` (seção H) faz as três.
 
 ### 11.2 A chave do APM
 
-**Não está no repositório.** Vive no Secret `apm-credentials`, criado pelo
-bootstrap a partir de variável de ambiente:
+**Não está no repositório nem em variável de ambiente.** Vive no AWS Secrets
+Manager (`solidarytech/datadog`, com o site junto) e o deploy a materializa no
+Secret `apm-credentials`. Para gravar ou trocar:
 
 ```bash
-export DD_API_KEY=... && ./solidary deploy
+./solidary datadog     # chave sem eco -> cofre -> cluster
 ```
 
 > A Fase 4 commitou a `DD_API_KEY` em texto puro no `values.yaml` deste mesmo
@@ -736,7 +751,7 @@ reaproveita.
 | Grafana | `$BASE/grafana/` | `admin` / `./solidary senhas` |
 | Prometheus | `localhost:9090` via port-forward | sem auth |
 | OpenCost | `localhost:9003` via port-forward | sem auth |
-| Datadog APM | https://app.us5.datadoghq.com | conta da Fase 4 |
+| Datadog APM | https://app.datadoghq.com | conta do grupo (site US1) |
 | GitHub Actions | `/DemarchiWorking/fiap-tc-5-solidarytech/actions` | sua conta |
 | Console AWS | Tag Editor, ECR, SQS, RDS, DynamoDB | Learner Lab |
 

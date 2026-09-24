@@ -17,7 +17,16 @@ resources:
   - dashboard-sre.yaml
   # Requisitos F2.2 e F2.3 — custo por namespace e evidencia de rightsizing.
   - dashboard-finops.yaml
+  - networkpolicy-grafana.yaml
 
-commonLabels:
-  app.kubernetes.io/part-of: solidarytech
-  app.kubernetes.io/managed-by: argocd
+# `labels` com includeSelectors: false, e nao `commonLabels`. O commonLabels
+# injeta os labels tambem nos SELETORES: o podSelector da NetworkPolicy do
+# Grafana ganhava part-of/managed-by, que o pod do Grafana nao tem — a policy
+# seria aplicada e nao selecionaria pod nenhum, em silencio (medido com
+# `kustomize build` em 24/09). Para os demais recursos daqui, que nao tem
+# seletor, o resultado e identico.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: solidarytech
+      app.kubernetes.io/managed-by: argocd
+    includeSelectors: false

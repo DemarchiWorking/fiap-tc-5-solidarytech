@@ -88,25 +88,19 @@ spec:
         - protocol: TCP
           port: 5432
 
-    # Servicos AWS fora do cluster (SQS, DynamoDB, APM). O `except` mantem o
-    # bloqueio de trafego lateral para dentro da VPC que nao tenha sido
-    # explicitamente permitido acima.
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/16
-              # A VPC de DR tambem precisa constar: sem ela, o mesmo manifesto
-              # aplicado no standby deixaria de bloquear o trafego lateral que
-              # esta regra existe para bloquear.
-              - 10.10.0.0/16
-      ports:
-        - protocol: TCP
-          port: 443
-    # IMDSv2 — unica fonte de credencial AWS dos pods (ADR-001).
-    - to:
-        - ipBlock:
-            cidr: 169.254.169.254/32
-      ports:
-        - protocol: TCP
-          port: 80
+    # SEM saida para a internet e SEM IMDS — de proposito.
+    #
+    # Esta policy liberava 443 para 0.0.0.0/0 e 169.254.169.254:80, com o
+    # comentario "SQS, DynamoDB, APM". Nenhum dos tres se aplica ao ngo-service:
+    # ele fala so com o PostgreSQL, e a telemetria vai ao Collector, dentro do
+    # cluster (regra de monitoring acima). As regras vieram copiadas do
+    # donation-service, que precisa de SQS.
+    #
+    # O custo de deixa-las era alto. Medido em 24/09: de dentro do pod do
+    # ngo-service, `PUT /latest/api/token` no IMDS devolvia 200 — ou seja, a
+    # credencial da LabRole estava ao alcance do servico PUBLICO e SEM
+    # AUTENTICACAO (ADR-008). Uma RCE ali entregava a conta AWS inteira, e a
+    # saida para a internet dava o caminho para exfiltrar.
+    #
+    # donation e volunteer mantem IMDS e 443: sem IRSA (ADR-001), e por ali que
+    # obtem credencial para SQS e DynamoDB. O ngo nao precisa, entao nao tem.

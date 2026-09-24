@@ -1,0 +1,36 @@
+# Grafana sem acesso ao IMDS — mitigacao do ADR-001 para o pod exposto.
+#
+# O Grafana e publicado pelo NLB (/grafana). Sem IRSA, todo pod do no alcanca a
+# credencial da LabRole pelo IMDS — e o Grafana tem um caminho classico ate la:
+# um administrador (ou quem roubar a sessao dele, e o acesso e HTTP) cria um
+# datasource apontando para 169.254.169.254 e usa o proxy de datasources do
+# proprio Grafana. SSRF ate a credencial da conta AWS.
+#
+# O Grafana nao precisa do IMDS: os tres datasources (Prometheus, Loki,
+# Alertmanager) sao internos ao cluster. Esta policy libera toda a saida,
+# EXCETO o endereco de metadados. E propositalmente estreita: bloquear mais
+# (internet, API do Kubernetes) quebraria o sidecar que carrega os dashboards,
+# e o risco que ela fecha e so este.
+#
+# Complementa a policy do ngo-service, que perdeu IMDS e internet pelo mesmo
+# motivo (24/09).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-sem-imds
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes: [Egress]
+  egress:
+    # Tudo dentro do cluster: DNS, Prometheus, Loki, Alertmanager.
+    - to:
+        - namespaceSelector: {}
+    # Fora do cluster: tudo, menos o IMDS. Inclui a API do Kubernetes, que o
+    # sidecar de dashboards consulta.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32

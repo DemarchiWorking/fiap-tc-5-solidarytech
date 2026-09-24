@@ -40,7 +40,7 @@ ssourl.txt
 kubeconfig*
 
 # Gerados por ./comecar.sh — contem credenciais e identificacao.
-# .env.local guarda a License Key do New Relic e o token do SonarCloud.
+# .env.local guarda a DD_API_KEY do Datadog e o token do SonarCloud.
 .solidarytech.conf
 .env.local
 
@@ -81,3 +81,7 @@ docs/relatorio/RELATORIO-FASE5.html
 services/donation-service/donation-service
 services/ngo-service/ngo-service
 services/volunteer-service/volunteer-service
+
+# State local do bootstrap de uma conta de lab ANTERIOR, arquivado ao trocar de
+# conta (cada integrante/lab tem um ID proprio). Referencia, nunca versionar.
+infra/bootstrap/.conta-*/

@@ -121,9 +121,30 @@ REPO_URL="$REPO_URL" REPO_WEB="$REPO_WEB" ECR_REGISTRY="$ECR_REGISTRY" \
 LOKI_BUCKET="$LOKI_BUCKET" VELERO_BUCKET="$VELERO_BUCKET" \
 AWS_REGION="$AWS_REGION" DR_REGION="$DR_REGION" RAIZ="$RAIZ" \
 py - <<'PY'
-import io, os
+import io, os, re
 
 raiz = os.environ["RAIZ"]
+
+# Valores REAIS de uma conta anterior. Os placeholders so existem ate a primeira
+# configuracao; depois disso os manifestos guardam o registry e os buckets da
+# conta que foi usada. Quando a conta muda — outro integrante do grupo, outro
+# Learner Lab —, trocar so os placeholders nao muda NADA: os pods puxariam
+# imagem do ECR de outra conta (ImagePullBackOff) e o Loki e o Velero gravariam
+# em buckets alheios (AccessDenied), derrubando logs e backup em silencio.
+#
+# Os padroes sao derivados dos valores NOVOS, entao so casam o mesmo tipo de
+# recurso: um host de ECR de 12 digitos, e <prefixo>-loki-<6 digitos da conta>.
+def padrao_de_bucket(novo: str) -> re.Pattern:
+    prefixo = novo.rsplit("-", 1)[0]
+    return re.compile(re.escape(prefixo) + r"-[0-9]{6}\b")
+
+troca_de_conta = [
+    (re.compile(r"\b[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com\b"),
+     os.environ["ECR_REGISTRY"]),
+    (padrao_de_bucket(os.environ["LOKI_BUCKET"]), os.environ["LOKI_BUCKET"]),
+    (padrao_de_bucket(os.environ["VELERO_BUCKET"]), os.environ["VELERO_BUCKET"]),
+]
+
 troca = {
     "__REPO_URL__":      os.environ["REPO_URL"],
     "__REPO_WEB__":      os.environ["REPO_WEB"],
@@ -161,6 +182,8 @@ for pasta in ("gitops",):
             novo = texto
             for marcador, valor in troca.items():
                 novo = novo.replace(marcador, valor)
+            for padrao, valor in troca_de_conta:
+                novo = padrao.sub(valor, novo)
             if novo != texto:
                 io.open(p, "w", encoding="utf-8", newline="\n").write(novo)
                 alterados += 1

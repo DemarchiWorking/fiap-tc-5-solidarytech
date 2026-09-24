@@ -237,6 +237,15 @@ if [[ -f infra/environments/prod-use1/backend.hcl ]]; then
   ok "backend.hcl presente"
   BUCKET=$(grep -E '^\s*bucket' infra/environments/prod-use1/backend.hcl | cut -d'"' -f2)
   printf "        bucket de state: %s\n" "${BUCKET:-<não lido>}"
+  # Presenca do arquivo nao prova nada: ao trocar de conta de lab, o
+  # backend.hcl continua apontando para o bucket da conta ANTERIOR, que a
+  # credencial nova nao enxerga — e o init falha com 403 ja no lab-up.
+  if [[ -n "${CONTA:-}" && -n "${BUCKET:-}" ]] && \
+     ! aws s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
+    falha "o bucket de state $BUCKET não existe (ou não é acessível) na conta $CONTA"
+    dica "Conta de lab nova? Arquive infra/bootstrap/terraform.tfstate*, rode 'make bootstrap'"
+    dica "e aponte os dois backend.hcl para o bucket novo. Depois: terraform init -reconfigure"
+  fi
 else
   aviso "backend.hcl ausente — o Terraform ainda não foi inicializado"
   dica "Rode 'make bootstrap' e copie a saída para backend.hcl"
@@ -249,7 +258,17 @@ if grep -rq "__REPO_URL__" gitops/ 2>/dev/null; then
   aviso "GitOps ainda com placeholders (normal antes do 'make configurar-repo')"
   dica "Ordem: make lab-up → make configurar-repo → commit+push → make deploy"
 else
-  ok "GitOps já configurado para esta conta"
+  # "Sem placeholder" nao e o mesmo que "configurado para ESTA conta": depois
+  # da primeira configuracao, o registry gravado e o da conta que foi usada.
+  # Este aviso dizia "ja configurado" com os manifestos apontando para o ECR
+  # de OUTRA conta — o deploy terminaria em ImagePullBackOff.
+  CONTA_GITOPS=$(grep -rhoE "[0-9]{12}\.dkr\.ecr" gitops/ 2>/dev/null | head -1 | cut -c1-12)
+  if [[ -n "${CONTA:-}" && -n "$CONTA_GITOPS" && "$CONTA_GITOPS" != "$CONTA" ]]; then
+    aviso "GitOps configurado para a conta $CONTA_GITOPS, mas a sessão é da conta $CONTA"
+    dica "Depois do lab-up: make configurar-repo (migra registry e buckets) + commit + push"
+  else
+    ok "GitOps já configurado para esta conta"
+  fi
 fi
 
 # ===========================================================================

@@ -32,7 +32,7 @@ configuration:
   backupStorageLocation:
     - name: default
       provider: aws
-      bucket: solidarytech-prod-velero-723638
+      bucket: solidarytech-prod-velero-916018
       default: true
       config:
         # Regiao do BUCKET, nao do cluster. Cross-region de proposito.

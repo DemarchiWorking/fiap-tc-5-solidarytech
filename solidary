@@ -156,7 +156,7 @@ case "$ALVO" in
   check)
     passo "Gates locais"
     py scripts/verificar-academy.py infra >/dev/null 2>&1
-    resultado $? "policy do AWS Academy (15 verificacoes)"
+    resultado $? "policy do AWS Academy (16 verificacoes)"
     py scripts/verificar-observabilidade.py . >/dev/null 2>&1
     resultado $? "observabilidade (7 verificacoes)"
     py scripts/verificar-promql.py . >/dev/null 2>&1

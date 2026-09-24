@@ -124,10 +124,15 @@ variable "snapshot_rds" {
 locals {
   tags_padrao = {
     Project = "SolidaryTech"
-    # DR, e nao Production: separa o custo do standby no relatorio de FinOps.
-    # Sem isso, o gasto de manter a regiao secundaria some dentro do total e
-    # ninguem consegue responder "quanto custa a nossa resiliencia?".
-    Environment = "DR"
+    # Production, e nao "DR". O standby E producao: no failover, e ele que
+    # atende as doacoes. E o enunciado exige as tres tags com estes valores em
+    # TODOS os recursos — com Environment=DR, o filtro Environment=Production
+    # do Tag Editor (a evidencia do F2.1) deixava a regiao secundaria de fora.
+    #
+    # A separacao de custo que motivava o "DR" continua existindo, pela tag
+    # Role: filtrar Role=warm-standby responde "quanto custa a nossa
+    # resiliencia?" sem violar a politica obrigatoria.
+    Environment = "Production"
     CostCenter  = "NGO-Core"
     ManagedBy   = "Terraform"
     Owner       = var.responsavel

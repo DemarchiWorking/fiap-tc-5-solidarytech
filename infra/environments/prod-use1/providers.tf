@@ -28,8 +28,12 @@ provider "aws" {
   alias  = "dr"
   region = var.regiao_dr
 
+  # Environment continua "Production": o enunciado exige Project, Environment
+  # e CostCenter com estes valores em TODOS os recursos. Um Environment=DR
+  # aqui tirava o bucket de backup do filtro que evidencia o F2.1. O custo de
+  # DR se separa pela tag Role.
   default_tags {
-    tags = merge(local.tags_padrao, { Environment = "DR" })
+    tags = merge(local.tags_padrao, { Role = "backup-cross-region" })
   }
 }
 

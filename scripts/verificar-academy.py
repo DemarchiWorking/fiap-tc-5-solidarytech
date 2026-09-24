@@ -16,6 +16,8 @@ O que verifica:
   4. Que nenhuma regiao fora de us-east-1 / us-west-2 apareca.
   5. Que nenhum tipo de instancia passe do teto `large`.
   6. Que nenhum segredo esteja escrito literalmente no codigo.
+  (...) e, por ultimo, que as tres tags obrigatorias do F2.1 tenham
+  exatamente os valores do enunciado em toda raiz Terraform.
 
 Uso:
     python scripts/verificar-academy.py [caminho_do_infra]
@@ -507,6 +509,53 @@ def main() -> int:
                     )
         if len(falhas) == antes:
             print("   ok\n")
+
+    # 16. Tags obrigatorias do F2.1 ----------------------------------------
+    #
+    # O enunciado e literal: TODOS os recursos com Project=SolidaryTech,
+    # Environment=Production e CostCenter=NGO-Core. Este projeto chegou a
+    # marcar o bucket do Velero e o ambiente de DR com Environment=DR — boa
+    # intencao (separar o custo da resiliencia), efeito ruim: o filtro
+    # Environment=Production do Tag Editor, que e a evidencia do requisito,
+    # deixava esses recursos de fora. Separacao de custo se faz com uma tag
+    # PROPRIA (Role), nunca mudando o valor de uma obrigatoria.
+    #
+    # Duas regras: (a) nenhum valor literal diferente do exigido; (b) toda raiz
+    # Terraform (ambiente ou bootstrap) declara as tres chaves.
+    print("16. Tags obrigatorias de FinOps (F2.1)")
+    antes = len(falhas)
+    obrigatorias = {
+        "Project": "SolidaryTech",
+        "Environment": "Production",
+        "CostCenter": "NGO-Core",
+    }
+    for a in arquivos:
+        corpo = sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+        for chave, valor in obrigatorias.items():
+            for m in re.finditer(rf'\b{chave}\s*=\s*"([^"]*)"', corpo):
+                if m.group(1) != valor:
+                    falhas.append(
+                        f"{rel(a)}:{linha_de(corpo, m.start())}: {chave} = "
+                        f"\"{m.group(1)}\". O enunciado exige {chave}={valor} "
+                        f"em TODOS os recursos; para separar custo, use uma "
+                        f"tag propria (ex.: Role)."
+                    )
+    raizes = sorted({
+        os.path.dirname(a) for a in arquivos
+        if "modules" not in rel(a).split("/")
+    })
+    for r in raizes:
+        texto = "".join(
+            sem_heredoc_e_comentario(io.open(a, encoding="utf-8").read())
+            for a in arquivos if os.path.dirname(a) == r
+        )
+        for chave in obrigatorias:
+            if not re.search(rf"\b{chave}\s*=", texto):
+                falhas.append(
+                    f"{rel(r) or '.'}: a raiz nao declara a tag obrigatoria "
+                    f"{chave} — os recursos dela nasceriam fora da politica."
+                )
+    print("   ok\n" if len(falhas) == antes else "")
 
     # Resultado --------------------------------------------------------------
     if falhas:

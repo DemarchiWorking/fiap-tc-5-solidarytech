@@ -251,5 +251,8 @@ module "bucket_velero" {
   dias_expiracao         = var.retencao_backups_velero_dias
   dias_expiracao_versoes = 7
 
-  tags = merge(local.tags_padrao, { Environment = "DR" })
+  # Role, e nao Environment=DR: o bucket guarda dado de PRODUCAO, e as tres
+  # tags obrigatorias (F2.1) precisam valer em 100% dos recursos. A tag Role
+  # separa o custo de DR sem sair da politica. Ver providers.tf.
+  tags = merge(local.tags_padrao, { Role = "backup-cross-region" })
 }

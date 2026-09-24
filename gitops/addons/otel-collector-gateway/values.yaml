@@ -125,14 +125,21 @@ config:
     #    backend recebe o trace, porque exporta OTLP puro. E exatamente esse o
     #    ganho de ter o Collector no meio.
     #
-    #    A chave vem do Secret `apm-credentials`, criado pelo bootstrap a
-    #    partir de variavel de ambiente. A Fase 4 commitou a DD_API_KEY em
-    #    texto puro no values.yaml deste mesmo componente, e o ADR-004 de la
-    #    registra isso como "risco real, nao hipotetico".
+    #    A chave vem do Secret `apm-credentials`, materializado a partir do
+    #    AWS Secrets Manager por scripts/configurar-datadog.sh (ADR-008) —
+    #    nunca de variavel digitada no terminal. A Fase 4 commitou a
+    #    DD_API_KEY em texto puro no values.yaml deste mesmo componente, e o
+    #    ADR-004 de la registra isso como "risco real, nao hipotetico".
+    #
+    #    O SITE vem do mesmo Secret, e nao mais fixo aqui. A chave pertence a
+    #    um site so; estava fixo em us5, e a chave do grupo e do site US1
+    #    (datadoghq.com) — cada envio levaria 403, sem erro na subida. O
+    #    script descobre o site na propria API do Datadog e o grava junto com
+    #    a chave: os dois nao tem mais como divergir.
     datadog:
       api:
         key: ${env:DD_API_KEY}
-        site: us5.datadoghq.com
+        site: ${env:DD_SITE:-datadoghq.com}
         # Nao derrubar o Collector se a chave estiver ausente ou invalida:
         # perder o APM e ruim, perder a pipeline inteira de telemetria —
         # metricas e logs junto — e pior.
@@ -148,11 +155,34 @@ config:
     debug:
       verbosity: basic
 
+  # Trace metrics do APM (hits, erros, latencia por servico e recurso).
+  #
+  # Nesta versao do Collector (0.159) o exporter NAO as calcula mais: o feature
+  # gate exporter.datadogexporter.DisableAPMStats esta em Beta, ligado por
+  # padrao (conferido com `otelcol-contrib featuregate` na imagem que roda no
+  # cluster). Sem o connector, o Datadog recebe os spans mas a pagina do
+  # servico fica sem as metricas RED — e o Watchdog, que detecta anomalia
+  # justamente sobre elas, nao tem o que analisar. Era o AIOps (F3.1) sem base.
+  #
+  # compute_stats_by_span_kind: calcula tambem para spans CLIENT/PRODUCER — a
+  # publicacao no SQS e as chamadas ao banco ganham latencia e erro proprios,
+  # nao so o endpoint HTTP.
+  connectors:
+    datadog/connector:
+      traces:
+        compute_stats_by_span_kind: true
+
   service:
     pipelines:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
+        # O connector recebe os MESMOS spans que o exporter e produz as trace
+        # metrics, que seguem pelo pipeline metrics/datadog abaixo.
+        exporters: [datadog/connector, datadog]
+      metrics/datadog:
+        receivers: [datadog/connector]
+        processors: [memory_limiter, batch]
         exporters: [datadog]
       metrics:
         receivers: [otlp]

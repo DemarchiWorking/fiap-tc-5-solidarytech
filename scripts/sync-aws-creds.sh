@@ -94,5 +94,24 @@ gh secret set AWS_SECRET_ACCESS_KEY --repo "$REPO" --body "$SECRET_KEY"
 
 verde "Secrets atualizados."
 echo
+
+# Variaveis do backend do Terraform, usadas pelo job `plan` da CI para
+# reconstruir o backend.hcl (que nao e versionado). Mudam quando a CONTA muda:
+# numa conta de lab nova o bootstrap cria outro bucket de state, e a CI
+# continuaria apontando para o da conta anterior — o `terraform init` do job
+# falharia com 403, com as credenciais certas. Lidas do backend.hcl local, que
+# e a fonte que o proprio `make init` usa.
+BACKEND="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/infra/environments/prod-use1/backend.hcl"
+if [[ -f "$BACKEND" ]]; then
+  valor_backend() { grep -E "^\s*$1\s*=" "$BACKEND" | head -1 | cut -d'"' -f2; }
+  BUCKET_STATE=$(valor_backend bucket)
+  TABELA_LOCK=$(valor_backend dynamodb_table)
+  if [[ -n "$BUCKET_STATE" && -n "$TABELA_LOCK" ]]; then
+    gh variable set TF_STATE_BUCKET --repo "$REPO" --body "$BUCKET_STATE"
+    gh variable set TF_LOCK_TABLE   --repo "$REPO" --body "$TABELA_LOCK"
+    verde "Variaveis do backend atualizadas: $BUCKET_STATE / $TABELA_LOCK"
+    echo
+  fi
+fi
 amarelo "Lembre-se: estas credenciais expiram quando a sessao do lab terminar (~4h)."
 amarelo "Rode este script de novo no inicio de cada sessao, antes de disparar a pipeline."

@@ -57,6 +57,10 @@ bloqueia a criação de IAM roles, users e OIDC providers, o que elimina IRSA,
 Cada contorno está documentado em ADR, com o desenho de produção ao lado.
 Nenhuma restrição foi escondida.
 
+### Arquitetura
+
+![Arquitetura da SolidaryTech: entrega por GitOps, EKS em us-east-1 e DR em us-west-2](img/arquitetura.svg)
+
 ---
 
 ## 3. Fundação DevOps — Fases 1 a 4 (Requisito obrigatório)
@@ -65,9 +69,9 @@ Nenhuma restrição foi escondida.
 |---|---|---|
 | **F0.1** | Docker e Kubernetes | Dockerfiles multi-stage com estágio de teste, usuário não-root por UID e `HEALTHCHECK`. Go em **distroless**; Python sem compilador na imagem final. Deploy em **EKS** |
 | **F0.2** | IaC (Terraform) | 21 arquivos `.tf`: backend S3+DynamoDB, 8 módulos, 2 ambientes. **Cluster, bancos, mensageria e rede** — 100% por código |
-| **F0.3** | CI/CD DevSecOps | Pipeline reutilizável: `lint‖test` → `sonar`+`build-scan-push` → `update-gitops`. **Trivy em 2 camadas** (SCA + imagem), SBOM CycloneDX, `gitleaks` |
+| **F0.3** | CI/CD DevSecOps | Pipeline reutilizável: `lint‖test` → `sast`+`build-scan-push` → `update-gitops`. **SAST:** gosec (Go) e bandit (Python), sempre; SonarCloud entra quando o `SONAR_TOKEN` está configurado. **SCA: Trivy em 2 camadas** (dependências + imagem, CRITICAL bloqueia), SARIF na aba Security, SBOM CycloneDX. `gitleaks` no histórico: 0 achados em 84 commits |
 | **F0.4** | GitOps | **ArgoCD** com App-of-Apps → ApplicationSet. `selfHeal` e `prune` ligados. Um único `kubectl apply` em todo o projeto |
-| **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **Datadog** com Distributed Tracing atravessando o SQS — 115.488 spans entregues, 0 falhas |
+| **F0.5** | Observabilidade e APM | Prometheus, Grafana, Loki (S3), **dois** OTel Collectors. **Datadog** com Distributed Tracing atravessando o SQS — 115.316 spans entregues, 0 falhas ([`validacao-final.txt`](../07-evidencias/validacao-final.txt)) |
 
 Comparativo completo das três entregas:
 [`docs/02-arquitetura/evolucao-v3-v4-v5.md`](../02-arquitetura/evolucao-v3-v4-v5.md)
@@ -92,6 +96,35 @@ como `decimal.Decimal` e o encoder JSON do Flask não serializa esse tipo.
 
 **22 defeitos corrigidos**, todos com teste de regressão. Tabela completa em
 [`services/README.md`](../../services/README.md).
+
+### Auditoria final e reprovisionamento (24/09)
+
+Antes da entrega, o ambiente foi **destruído e recriado do zero numa conta de
+Learner Lab diferente** — a prova mais dura de que tudo é código. A auditoria
+que antecedeu a subida encontrou sete defeitos, nenhum visível para os gates:
+
+| Defeito | Efeito | Correção |
+|---|---|---|
+| 3 CVEs HIGH novas no `grpc` 1.79.3 | Apareceriam na aba Security | `grpc` 1.83.2 · Trivy: 0 HIGH/CRITICAL |
+| `pip` vendorizado nas imagens Python | 2 HIGH por imagem | `pip` removido do runtime |
+| Bucket do Velero e ambiente DR com `Environment=DR` | Fora do filtro `Environment=Production` | Tag própria `Role`; **gate novo** barra a regressão |
+| Healthcheck do LocalStack em rota inexistente | `make smoke` nunca passava do boot | Rota corrigida |
+| Schema do donation aplicado no banco errado (local) | `POST /donations` → 500 no smoke | Schema aplicado no `donation_db` |
+| `configurar-repo` só trocava placeholders | Em conta nova: pods sem imagem, Loki e Velero sem bucket | Migra registry e buckets da conta anterior |
+| Pré-voo dizia "configurado" para outra conta | Falso GO | Compara o ID da conta e o bucket de state |
+
+Os dois defeitos do smoke se escondiam mutuamente: com o healthcheck quebrado,
+o teste nunca chegava ao hot path, onde o segundo estava.
+
+### Evidências — Fundação
+
+![ArgoCD com todas as Applications Synced / Healthy](../07-evidencias/f0-argocd.png)
+
+![GitHub Actions: pipeline verde (lint, testes, SAST, build-scan-push, update-gitops)](../07-evidencias/f0-pipeline-verde.png)
+
+![Pods dos 3 serviços e do worker em Running](../07-evidencias/f0-pods-running.png)
+
+![Trace distribuído no Datadog: donation-service → SQS → volunteer-worker](../07-evidencias/f0-trace-distribuido.png)
 
 ---
 
@@ -201,16 +234,24 @@ função dele: lembrar do que aconteceu depois que o gráfico já voltou ao norm
 
 ### MTTR (F1.3)
 
-| Etapa | Sem a stack | Com a stack |
-|---|---|---|
-| Detecção | ~6 h (usuário reclama) | **~2 min** (burn rate) |
-| Diagnóstico | ~4 h (logs por pod) | **~5 min** (`trace_id`: APM ↔ Loki) |
-| Mitigação | minutos, se houver alguém | **~90 s** (self-heal) |
-| **Total** | **~10 h** | **~10 min** |
+| Etapa | Sem a stack | Com a stack | Origem do número |
+|---|---|---|---|
+| Detecção | ~6 h (usuário reclama) | **76 s** | **Medido** no chaos drill de 10/09 |
+| Diagnóstico | ~4 h (logs por pod) | ~5 min (`trace_id`: APM ↔ Loki) | Projeção |
+| Mitigação | minutos, se houver alguém | ~90 s (self-heal) | Meta do runbook |
+| **Total** | **~10 h** | **~10 min** | Projeção ancorada na detecção medida |
 
-Procedimento do drill: [`mttr-chaos-drill.md`](../03-sre/mttr-chaos-drill.md).
+A detecção é o número medido; as demais etapas são metas de projeto, e estão
+rotuladas como tal. No drill, a mitigação automática nem foi necessária: a
+readiness barrou o rollout quebrado e **o doador não percebeu o incidente** —
+as duas réplicas antigas seguiram servindo durante os 13 minutos de falha.
 
-**Evidências:** *(inserir prints de `docs/07-evidencias/`)*
+Procedimento e execução: [`mttr-chaos-drill.md`](../03-sre/mttr-chaos-drill.md) ·
+post-mortem real: [`post-mortem-2026-09-10-frescor.md`](../05-itsm-aiops/post-mortem-2026-09-10-frescor.md).
+
+### Evidências — SRE
+
+![Dashboard SRE: três SLIs, SLO e consumo do error budget (sob carga)](../07-evidencias/f1-dashboard-sre.png)
 
 ---
 
@@ -242,6 +283,12 @@ Aplicadas por `default_tags` no provider. **A armadilha:** `default_tags` **não
 alcança** as EC2 nem os volumes de um managed node group — e são eles que
 dominam a fatura. Resolvido com **launch template** e `tag_specifications`.
 
+**Os valores são literais em 100% dos recursos**, inclusive no bucket de backup
+e na região de DR. O custo da resiliência se separa por uma tag própria
+(`Role=backup-cross-region`, `Role=warm-standby`), nunca mudando o valor de uma
+tag obrigatória — e o gate `verificar-academy.py` (verificação 16) reprova
+qualquer `Environment` diferente de `Production` antes do `plan`.
+
 ### Recomendações quantificadas
 
 > O enunciado pede pelo menos uma. São cinco.
@@ -254,7 +301,15 @@ dominam a fatura. Resolvido com **launch template** e `tag_specifications`.
 | 4 | Spot Instances — **não aplicável**: o lab só libera On-Demand | (US$ 60/mês em produção) |
 | 5 | VPC Endpoints de gateway (aplicado, gratuitos) | elimina custo de NAT p/ S3 e DynamoDB |
 
-**Evidências:** *(print do Tag Editor + dashboard FinOps + tabela de rightsizing)*
+### Evidências — FinOps
+
+![Tag Editor da AWS filtrando CostCenter=NGO-Core](../07-evidencias/f2-tags-console.png)
+
+![Dashboard FinOps: custo por namespace (OpenCost) e eficiência de requests](../07-evidencias/f2-dashboard-finops.png)
+
+Tabela de rightsizing antes/depois, com a medição sob carga:
+[`docs/04-finops/README.md`](../04-finops/README.md) §2 ·
+[`rightsizing-medido.txt`](../07-evidencias/rightsizing-medido.txt).
 
 ---
 
@@ -297,7 +352,11 @@ sem Multi-AZ · sem IRSA · sem TLS/WAF · sem CMK no etcd · credencial estáti
 CI (OIDC bloqueado) · nós em subnet pública (decisão de custo revertível por uma
 variável).
 
-**Evidências:** *(print do restore do Velero + `make dr-plan` limpo)*
+### Evidências — DR
+
+![Velero: backups Completed no bucket de us-west-2](../07-evidencias/f4-velero-backups.png)
+
+![Opção B: plano da região secundária (dr-usw2) limpo, com os mesmos módulos](../07-evidencias/f4-dr-plan.png)
 
 ---
 
@@ -309,27 +368,11 @@ variável).
 
 ### Ciclo de vida do incidente
 
-```
-DETECÇÃO ─┬─ determinística (burn rate de SLO)
-          └─ preditiva (AIOps: anomalia comportamental)
-   v
-TRIAGEM (page / ticket)
-   v
-NOTIFICAÇÃO ── PagerDuty · ChatOps · self-heal   ← em PARALELO
-   v
-MITIGAÇÃO AUTOMÁTICA (rollout restart c/ allowlist)
-   v
-INVESTIGAÇÃO (trace_id: APM ↔ Loki) ou ESCALONAMENTO
-   v
-RESOLUÇÃO
-   v
-POST-MORTEM BLAMELESS (48 h, obrigatório em todo page)
-   v
-COMUNICAÇÃO (ONGs · diretoria · time)
-   └──▶ realimenta a detecção
-```
+![Ciclo de vida do incidente: detecção preditiva e determinística, triagem, notificação paralela, mitigação, investigação, resolução, post-mortem e comunicação](img/ciclo-incidente.svg)
 
-Diagrama completo em [`docs/05-itsm-aiops/README.md`](../05-itsm-aiops/README.md).
+Cada etapa, com metas de tempo e responsáveis, em
+[`docs/05-itsm-aiops/README.md`](../05-itsm-aiops/README.md). O ciclo foi
+exercitado de verdade: [post-mortem do incidente de 10/09](../05-itsm-aiops/post-mortem-2026-09-10-frescor.md).
 
 ### AIOps
 
@@ -350,14 +393,23 @@ O caminho contrário também está aberto e versionado: o bloco do exporter
 Collector:
 
 ```
-otelcol_exporter_sent_spans{exporter="datadog"}   115488
+otelcol_exporter_sent_spans{exporter="datadog"}   115316
 otelcol_exporter_send_failed_spans                (ausente = zero)
 API key validation successful.
 ```
 
-Detalhes em [`apm-tracing.txt`](../07-evidencias/apm-tracing.txt).
+Detalhes em [`apm-tracing.txt`](../07-evidencias/apm-tracing.txt) e
+[`validacao-final.txt`](../07-evidencias/validacao-final.txt).
 
-**Evidências visuais:** *(print do Watchdog + trace atravessando o SQS)*
+**Watchdog não precisa ser "ligado" por código:** ele analisa automaticamente
+todo serviço que envia APM ao Datadog. O que se configura é **para onde vai a
+anomalia** — um *Watchdog monitor* (Monitors → New Monitor → Watchdog,
+`service:donation-service env:prod`) que notifica o mesmo canal do ChatOps.
+A evidência exigida é a anomalia detectada depois do pico de carga do k6.
+
+### Evidências — AIOps
+
+![Datadog Watchdog: anomalia detectada após o pico de carga](../07-evidencias/f3-anomalia-watchdog.png)
 
 ---
 

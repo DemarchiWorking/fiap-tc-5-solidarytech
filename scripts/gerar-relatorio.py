@@ -80,6 +80,32 @@ def _linha_de_tabela(linha: str) -> list[str]:
     return [c.strip() for c in linha.strip().strip("|").split("|")]
 
 
+# Imagens: `![legenda](caminho)` sozinho numa linha.
+#
+# O enunciado deduz ponto de "qualquer requisito que nao for claramente
+# demonstrado", e as evidencias VISUAIS sao obrigatorias no relatorio. Antes
+# este conversor nao tinha imagem nenhuma: o PDF saia com "(inserir prints)"
+# no lugar da prova, e o unico jeito de incluir um print era editar HTML na mao
+# na vespera da entrega.
+#
+# Agora o print entra sozinho quando o arquivo existe. Quando NAO existe, vira
+# uma caixa vermelha no proprio lugar e entra na contagem do aviso do topo —
+# impossivel mandar o PDF sem perceber que falta evidencia.
+IMAGEM = re.compile(r"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
+EVIDENCIAS_PENDENTES: list[str] = []
+
+
+def _figura(legenda: str, caminho: str) -> str:
+    absoluto = os.path.normpath(os.path.join(os.path.dirname(ENTRADA), caminho))
+    if os.path.exists(absoluto):
+        return (f'<figure><img src="{_html.escape(caminho)}" alt="{_html.escape(legenda)}">'
+                f"<figcaption>{_inline(legenda)}</figcaption></figure>")
+    EVIDENCIAS_PENDENTES.append(os.path.basename(caminho))
+    return (f'<div class="pendente"><strong>EVIDÊNCIA PENDENTE</strong> — '
+            f"<code>{_html.escape(os.path.basename(caminho))}</code><br>"
+            f"{_inline(legenda)}</div>")
+
+
 def markdown_para_html(md: str) -> str:
     linhas = md.split("\n")
     saida: list[str] = []
@@ -94,6 +120,14 @@ def markdown_para_html(md: str) -> str:
 
     while i < len(linhas):
         linha = linhas[i]
+
+        # ---- imagem (linha propria) ------------------------------------
+        img = IMAGEM.match(linha)
+        if img:
+            fechar_lista()
+            saida.append(_figura(img.group(1), img.group(2)))
+            i += 1
+            continue
 
         # ---- bloco de codigo -------------------------------------------
         if linha.startswith("```"):
@@ -175,7 +209,7 @@ def markdown_para_html(md: str) -> str:
         paragrafo = [linha]
         i += 1
         while i < len(linhas) and linhas[i].strip() and \
-                not re.match(r"^(#{1,6}\s|```|>|\s*[-*]\s|\s*\d+\.\s|\s*\|)", linhas[i]) and \
+                not re.match(r"^(#{1,6}\s|```|>|\s*[-*]\s|\s*\d+\.\s|\s*\||!\[)", linhas[i]) and \
                 not re.match(r"^\s*---+\s*$", linhas[i]):
             paragrafo.append(linhas[i])
             i += 1
@@ -253,22 +287,40 @@ a { color: #14406e; text-decoration: none; }
 
 /* Marca o que ainda falta preencher — impossivel entregar sem ver. */
 em:only-child { color: inherit; }
+
+figure { margin: 8pt 0 12pt; page-break-inside: avoid; break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; max-height: 118mm; border: 0.5pt solid #c8d0da; border-radius: 2pt; }
+figcaption { font-size: 8.8pt; color: #4a5a6a; margin-top: 3pt; text-align: center; }
+
+.pendente {
+  border: 1.5pt dashed #b02a37; background: #fdf2f3; color: #8b1a24;
+  padding: 7pt 10pt; margin: 8pt 0; border-radius: 3pt; font-size: 9pt;
+  page-break-inside: avoid; break-inside: avoid;
+}
 """
 
 AVISO_PLACEHOLDER = """
 <div style="border:1.5pt solid #b02a37;background:#fdf2f3;color:#8b1a24;
             padding:8pt 10pt;margin:10pt 0;border-radius:3pt;font-size:9.5pt;">
-  <strong>ATENCAO — este PDF ainda tem campos por preencher.</strong><br>
-  Preencha nomes, RMs, usernames e os links do repositorio e do video em
-  <code>docs/relatorio/RELATORIO-DE-ENTREGA.md</code> e gere de novo com
-  <code>make relatorio</code>. O enunciado exige esses dados no entregavel E3.1.
+  <strong>ATENCAO — este PDF ainda tem pendencias: {detalhe}.</strong><br>
+  Campos: preencha em <code>docs/relatorio/RELATORIO-DE-ENTREGA.md</code>.
+  Evidencias: salve os prints com o nome indicado em
+  <code>docs/07-evidencias/</code>. Depois, gere de novo com
+  <code>make relatorio</code>. O enunciado deduz ponto por requisito nao
+  demonstrado.
 </div>
 """
 
 
-def montar_html(md: str, tem_pendencia: bool) -> str:
+def montar_html(md: str, campos_pendentes: int) -> str:
+    EVIDENCIAS_PENDENTES.clear()
     corpo = markdown_para_html(md)
-    aviso = AVISO_PLACEHOLDER if tem_pendencia else ""
+    partes = []
+    if campos_pendentes:
+        partes.append(f"{campos_pendentes} campo(s) a preencher")
+    if EVIDENCIAS_PENDENTES:
+        partes.append(f"{len(EVIDENCIAS_PENDENTES)} evidencia(s) visual(is) ausente(s)")
+    aviso = AVISO_PLACEHOLDER.format(detalhe=" e ".join(partes)) if partes else ""
     return (
         "<!doctype html>\n"
         '<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n'
@@ -339,16 +391,20 @@ def main() -> int:
     md = io.open(ENTRADA, encoding="utf-8").read()
 
     pendencias = md.count("*a preencher*")
-    tem_pendencia = pendencias > 0
 
     io.open(SAIDA_HTML, "w", encoding="utf-8", newline="\n").write(
-        montar_html(md, tem_pendencia))
+        montar_html(md, pendencias))
     print(f"{VERDE}HTML gerado:{RESET} {os.path.relpath(SAIDA_HTML, RAIZ)}")
 
-    if tem_pendencia:
+    if pendencias:
         print(f"{AMARELO}  aviso: {pendencias} campo(s) '*a preencher*' no relatorio.{RESET}")
         print(f"{AMARELO}  Nomes, RMs, usernames e os links do repositorio e do video{RESET}")
         print(f"{AMARELO}  sao exigidos no entregavel E3.1 — preencha antes de enviar.{RESET}")
+    if EVIDENCIAS_PENDENTES:
+        print(f"{AMARELO}  aviso: {len(EVIDENCIAS_PENDENTES)} evidencia(s) visual(is) ausente(s) "
+              f"em docs/07-evidencias/:{RESET}")
+        for nome in EVIDENCIAS_PENDENTES:
+            print(f"{AMARELO}    - {nome}{RESET}")
 
     if "--so-html" in sys.argv:
         return 0

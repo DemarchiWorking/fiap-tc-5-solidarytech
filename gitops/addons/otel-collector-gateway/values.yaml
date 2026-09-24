@@ -37,7 +37,7 @@ presets:
     extractAllPodLabels: true
 
 extraEnvsFrom:
-  # Chave do New Relic. Secret criado pelo bootstrap a partir de variavel de
+  # Chave do Datadog (DD_API_KEY). Secret criado pelo bootstrap a partir de variavel de
   # ambiente — nunca versionado. A Fase 4 tinha a DD_API_KEY em texto puro no
   # values.yaml deste mesmo componente.
   - secretRef:

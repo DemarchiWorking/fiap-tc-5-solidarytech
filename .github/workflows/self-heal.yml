@@ -4,7 +4,7 @@
 #
 #   Alerta do Prometheus (burn rate de SLO) ou anomalia detectada pelo APM
 #        v
-#   Alertmanager / webhook do New Relic  ->  repository_dispatch
+#   Alertmanager / webhook do Datadog  ->  repository_dispatch
 #        v
 #   este workflow  ->  kubectl rollout restart
 #

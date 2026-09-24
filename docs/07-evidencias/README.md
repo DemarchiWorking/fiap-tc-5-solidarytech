@@ -50,7 +50,7 @@ subir o cluster duas vezes.
 
 | Arquivo | O que precisa aparecer | Requisito |
 |---|---|---|
-| `f3-anomalia-newrelic.png` | Anomalia detectada pelo Applied Intelligence após o pico de carga | F3.1 |
+| `f3-anomalia-watchdog.png` | Anomalia detectada pelo **Datadog Watchdog** após o pico de carga (APM → Watchdog) | F3.1 |
 | `f3-incidente-pagerduty.png` | Incidente aberto automaticamente pelo alerta `severity: page` | F3.2 · Fase 4 |
 | `f3-notificacao-discord.png` | Mensagem no canal com summary, serviço e link do runbook | F3.2 · Fase 4 |
 | `f3-self-heal-run.png` | Execução do `self-heal.yml` no Actions, com o estado **antes e depois** do rollout | F3.2 · Fase 4 |

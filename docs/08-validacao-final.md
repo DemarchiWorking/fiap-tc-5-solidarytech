@@ -204,7 +204,7 @@ kubectl -n solidary-donation rollout undo deploy/donation-service
 de Ouro — gestão de incidentes, ChatOps e self-healing.
 
 📸 `f1-burn-rate.png` · `f3-incidente-pagerduty.png` ·
-`f3-notificacao-discord.png` · `f3-self-heal-run.png` · `f3-anomalia-newrelic.png`
+`f3-notificacao-discord.png` · `f3-self-heal-run.png` · `f3-anomalia-watchdog.png`
 
 Depois: preencha o post-mortem e a timeline do MTTR
 ([`03-sre/mttr-chaos-drill.md`](03-sre/mttr-chaos-drill.md)).

@@ -1,0 +1,62 @@
+AUDITORIA DEVSECOPS — capturada na maquina de build, antes da subida
+2026-09-24 20:19 UTC  ·  base: commit bc2e0cd + correcoes desta auditoria
+=======================================================================
+
+1. SCA — Trivy fs nas dependencias (mesma politica da CI: HIGH e CRITICAL, ignore-unfixed)
+   ANTES (go.mod com google.golang.org/grpc v1.79.3):
+     donation-service  gomod  3 HIGH  (CVE-2026-84304, CVE-2026-84445, GHSA-hrxh-6v49-42gf)
+   DEPOIS (grpc v1.83.2):
+     donation-service   0 vulnerabilidade(s) HIGH/CRITICAL
+     ngo-service        0 vulnerabilidade(s) HIGH/CRITICAL
+     volunteer-service  0 vulnerabilidade(s) HIGH/CRITICAL
+
+2. Imagens — Trivy image (camada 2 da CI: pacotes do SO + binarios + site-packages)
+   ANTES: ngo-service e volunteer-service com 2 HIGH cada, no pip VENDORIZADO:
+     msgpack 1.1.2 (GHSA-6v7p-g79w-8964) e setuptools/pkg_resources 70.3.0 (CVE-2025-47273)
+   DEPOIS (pip removido do estagio runtime):
+     donation-service   0 HIGH/CRITICAL   imagem 39.3MB   usuario 65532:65532
+     ngo-service        0 HIGH/CRITICAL   imagem 247MB   usuario 10001:10001
+     volunteer-service  0 HIGH/CRITICAL   imagem 282MB   usuario 10001:10001
+
+3. Segredos — gitleaks sobre o HISTORICO COMPLETO (todos os commits, todas as branches)
+   INF 84 commits scanned.
+   INF scanned ~1205827 bytes (1.21 MB) in 2.38s
+   INF no leaks found
+
+4. Smoke local — Postgres + LocalStack (SQS, DynamoDB) + 3 servicos + worker
+   Imagens reconstruidas com as correcoes acima. Antes desta auditoria o smoke
+   nunca passava do boot (healthcheck do LocalStack em rota inexistente) e,
+   corrigido isso, falhava no hot path (schema no banco errado).
+
+   == 1. Readiness dos servicos
+     OK  ngo-service pronto
+     OK  donation-service pronto
+     OK  volunteer-service pronto
+
+   == 2. Liveness nao depende de dependencia externa
+     OK  ngo /health
+     OK  donation /health
+     OK  volunteer /health
+
+   == 3. Cadastro de ONG
+     OK  ONG criada (id=3)
+     OK  e-mail duplicado devolve 409
+     OK  payload invalido devolve 400
+
+   == 4. Cadastro de voluntario (DynamoDB)
+     OK  voluntario criado
+     OK  listagem de voluntarios serializa Decimal
+
+   == 5. Hot path — doacao
+     OK  doacao criada
+     OK  valor negativo rejeitado
+     OK  ngo_id ausente rejeitado
+     OK  listagem de doacoes
+
+   == 6. Fila consumida pelo worker
+     OK  fila drenada pelo worker
+     OK  worker correlacionou a doacao aos voluntarios da ONG
+
+   == Resultado
+   Todas as verificacoes passaram.
+   SMOKE_EXIT=0

@@ -171,6 +171,8 @@ case "$ALVO" in
     resultado $? "entregaveis da rubrica presentes"
     tf fmt -check -recursive infra/ >/dev/null 2>&1
     resultado $? "terraform fmt"
+    py scripts/verificar-links.py . >/dev/null 2>&1
+    resultado $? "links da documentacao"
 
     printf '\n'
     if [[ $FALHAS -eq 0 ]]; then

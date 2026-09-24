@@ -140,43 +140,11 @@ jobs:
       # ---------------------------------------------------------------
       - name: Links da documentação
         # Documentação com link quebrado é documentação que ninguém confere — e
-        # este projeto usa a documentação como evidência de nota.
-        run: |
-          python - <<'PY'
-          import io, os, re, sys
-          quebrados = []
-          for d, _, fs in os.walk("."):
-              # Comparar COMPONENTES do caminho, e nao substring. O filtro
-              # anterior era `".git" in d`, e ".git" e substring de
-              # ".github": o diretorio de workflows inteiro escapava da
-              # validacao. Os oito arquivos de pipeline — os que mais
-              # dependem de YAML correto — nunca foram conferidos por este
-              # gate. `.venv` e `node_modules` entram na lista pelo motivo
-              # original: sao arvores grandes que nao sao nossas.
-              partes = set(d.split(os.sep))
-              if partes & {".git", ".venv", "node_modules", "__pycache__"}:
-                  continue
-              for f in fs:
-                  if not f.endswith(".md"): continue
-                  p = os.path.join(d, f)
-                  txt = io.open(p, encoding="utf-8").read()
-                  for m in re.finditer(r"\]\(([^)#][^)]*?)\)", txt):
-                      alvo = m.group(1).split("#")[0].strip()
-                      if not alvo or alvo.startswith(("http", "mailto:", "<")): continue
-                      if not os.path.exists(os.path.normpath(os.path.join(d, alvo))):
-                          quebrados.append(f"{p} -> {alvo}")
-          for q in quebrados: print("FALHA", q)
-          print(f"{len(quebrados)} link(s) quebrado(s)")
-          sys.exit(1 if quebrados else 0)
-          PY
-
-  # =========================================================================
-  manifestos:
-    name: Manifestos Kubernetes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
+        # este projeto usa a documentação como evidência de nota. O script é o
+        # mesmo do `./solidary check`: um gate que só existe na CI é um gate que
+        # se descobre tarde (foi o que aconteceu em 24/09). Print de evidência
+        # ainda não capturado vira aviso, não reprovação.
+        run: python scripts/verificar-links.py .
 
       - name: Referências a documentos fora do Markdown
         run: |

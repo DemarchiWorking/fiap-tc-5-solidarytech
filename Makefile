@@ -90,7 +90,11 @@ pre-voo: ## VERIFIQUE ANTES DE SUBIR — valida ferramentas, credenciais e codig
 	@./scripts/pre-voo.sh
 
 .PHONY: check
-check: check-academy check-observabilidade check-promql check-workflows fmt-check validate check-manifestos ## Roda todos os gates locais
+check: check-academy check-observabilidade check-promql check-workflows fmt-check validate check-manifestos check-links ## Roda todos os gates locais
+
+.PHONY: check-links
+check-links: ## Links relativos da documentacao (o mesmo gate da CI)
+	@$(PY) scripts/verificar-links.py .
 
 .PHONY: check-observabilidade
 check-observabilidade: ## Coerencia da observabilidade (dashboards, regras de SLO, contrato da metrica)

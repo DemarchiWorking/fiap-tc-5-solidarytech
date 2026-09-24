@@ -268,12 +268,14 @@ printf "  Sem a chave do APM, dois requisitos ${N}ficam sem evidência${X}:\n"
 printf "    ${R}F0.5b${X}  Distributed Tracing no APM\n"
 printf "    ${R}F3.1${X}   AIOps — detecção automática de anomalias (Watchdog)\n\n"
 printf "  Prometheus, Grafana e Loki funcionam normalmente sem ela.\n"
-printf "  Conta do grupo (herdada da Fase 4, ADR-004), site ${N}us5${X}:\n"
-printf "    ${C}https://us5.datadoghq.com${X} → Organization Settings → API Keys\n"
-printf "  Copie a ${N}API Key${X} (não a Application Key).\n\n"
+printf "  Datadog → ${C}Organization Settings → API Keys${X} → copie a ${N}API Key${X}\n"
+printf "  (não a Application Key). O site (US1, US5, EU...) é descoberto sozinho,\n"
+printf "  na própria API do Datadog — chave no site errado leva 403 em todo envio.\n"
+printf "  A chave vai para o ${N}AWS Secrets Manager${X} no deploy (ADR-014): nunca para\n"
+printf "  arquivo, nem para o histórico do terminal.\n\n"
 
 if [[ -n "${DD_API_KEY:-}" ]]; then
-  ok "chave já configurada (${DD_API_KEY:0:6}…${DD_API_KEY: -4})"
+  ok "chave já informada (…${DD_API_KEY: -4})"
   confirmar "Trocar a chave?" && DD_API_KEY=""
 fi
 
@@ -281,9 +283,9 @@ if [[ -z "${DD_API_KEY:-}" ]]; then
   read -r -s -p "  API Key (ENTER para pular): " CHAVE_DD; echo
   if [[ -n "$CHAVE_DD" ]]; then
     DD_API_KEY="$CHAVE_DD"
-    ok "chave registrada"
+    ok "chave recebida (…${DD_API_KEY: -4}) — fica só em memória até o deploy gravá-la no cofre"
   else
-    aviso "pulado — se o Secret apm-credentials já existir no cluster, o APM segue funcionando"
+    aviso "pulado — se a chave já estiver no cofre (solidarytech/datadog), o deploy a usa"
   fi
 fi
 
@@ -380,13 +382,20 @@ ok ".solidarytech.conf"
 # Segredos em arquivo separado, com permissão restrita e fora do Git.
 {
   printf '# Segredos — NUNCA versionado (ver .gitignore)\n'
-  [[ -n "${DD_API_KEY:-}" ]]            && printf 'DD_API_KEY=%s\n' "$DD_API_KEY"
+  # DD_API_KEY NAO entra aqui: vive no AWS Secrets Manager (ADR-014).
   [[ -n "${SONAR_TOKEN:-}" ]]           && printf 'SONAR_TOKEN=%s\n' "$SONAR_TOKEN"
   [[ -n "${PAGERDUTY_ROUTING_KEY:-}" ]] && printf 'PAGERDUTY_ROUTING_KEY=%s\n' "$PAGERDUTY_ROUTING_KEY"
   [[ -n "${CHATOPS_WEBHOOK_URL:-}" ]]   && printf 'CHATOPS_WEBHOOK_URL=%s\n' "$CHATOPS_WEBHOOK_URL"
 } > "$ENV_LOCAL"
 chmod 600 "$ENV_LOCAL" 2>/dev/null || true
-ok ".env.local (permissão 600)"
+# Conferir, e nao anunciar: em /mnt/c (DrvFs sem a opcao `metadata`) o chmod
+# nao tem efeito — medido em 24/09, "chmod 600" resultou em 777.
+if [[ "$(stat -c %a "$ENV_LOCAL" 2>/dev/null)" == "600" ]]; then
+  ok ".env.local (permissão 600)"
+else
+  aviso ".env.local SEM permissão restrita neste disco (chmod ignorado — DrvFs)"
+  info "Os segredos dele ficam legíveis. Prefira clonar o repositório no disco do WSL (~/)."
+fi
 
 # Identificação nos documentos de entrega.
 if [[ -n "${INTEGRANTES:-}" ]]; then

@@ -37,9 +37,10 @@ presets:
     extractAllPodLabels: true
 
 extraEnvsFrom:
-  # Chave do Datadog (DD_API_KEY). Secret criado pelo bootstrap a partir de variavel de
-  # ambiente — nunca versionado. A Fase 4 tinha a DD_API_KEY em texto puro no
-  # values.yaml deste mesmo componente.
+  # Chave e site do Datadog (DD_API_KEY, DD_SITE). Secret materializado a partir
+  # do AWS Secrets Manager por scripts/configurar-datadog.sh (ADR-014) — nunca
+  # versionado, nunca digitado em `export`. A Fase 4 tinha a DD_API_KEY em texto
+  # puro no values.yaml deste mesmo componente.
   - secretRef:
       name: apm-credentials
       optional: true
@@ -126,7 +127,7 @@ config:
     #    ganho de ter o Collector no meio.
     #
     #    A chave vem do Secret `apm-credentials`, materializado a partir do
-    #    AWS Secrets Manager por scripts/configurar-datadog.sh (ADR-008) —
+    #    AWS Secrets Manager por scripts/configurar-datadog.sh (ADR-014) —
     #    nunca de variavel digitada no terminal. A Fase 4 commitou a
     #    DD_API_KEY em texto puro no values.yaml deste mesmo componente, e o
     #    ADR-004 de la registra isso como "risco real, nao hipotetico".

@@ -274,26 +274,23 @@ fi
 # ===========================================================================
 secao "6. Credenciais opcionais (custam pontos se faltarem)"
 
-# APM: Datadog, herdado da Fase 4 (ADR-004). A chave NAO precisa estar no
-# ambiente a cada sessao — o bootstrap a materializa no Secret
-# `apm-credentials`, que sobrevive enquanto o cluster existir. Exportar
-# DD_API_KEY so e necessario na PRIMEIRA subida, ou para trocar a chave.
-if [[ -n "${DD_API_KEY:-}" ]]; then
-  ok "DD_API_KEY definida — o bootstrap vai (re)materializar o Secret do APM"
-elif kubectl -n monitoring get secret apm-credentials >/dev/null 2>&1; then
-  ok "APM configurado no cluster (Secret apm-credentials presente)"
-elif ! kubectl get ns >/dev/null 2>&1; then
-  # Distinguir "nao existe" de "nao da para verificar". Sem credencial valida o
-  # kubectl nao fala com o cluster, e afirmar que o Secret esta ausente seria
-  # inventar um problema — o Secret provavelmente esta la, intacto.
-  aviso "DD_API_KEY não definida e o cluster não está acessível para conferir"
-  dica "Se o cluster já existe, o Secret apm-credentials sobreviveu — nada a fazer"
-  dica "Se for a primeira subida: export DD_API_KEY=... antes do './solidary deploy'"
+# APM: Datadog (ADR-004). A credencial vive no COFRE — AWS Secrets Manager,
+# solidarytech/datadog, com o site junto (ADR-014) — e o deploy a materializa
+# no cluster. Ninguem digita `export DD_API_KEY=...`: isso a gravaria no
+# historico do terminal. Aqui so se confere se o cofre TEM valor; a chave nao
+# sai do cofre para a tela (so o final mascarado).
+DD_COFRE=$(aws secretsmanager get-secret-value --secret-id solidarytech/datadog \
+             --query SecretString --output text 2>/dev/null \
+           | py -c 'import json,sys; d=json.load(sys.stdin); print("..." + d["api_key"][-4:] + " @ " + d["site"])' 2>/dev/null)
+if [[ -n "$DD_COFRE" ]]; then
+  ok "credencial do Datadog no cofre ($DD_COFRE) — o deploy a aplica"
+elif aws secretsmanager describe-secret --secret-id solidarytech/datadog >/dev/null 2>&1; then
+  aviso "cofre solidarytech/datadog existe, mas está vazio"
+  dica "Sem a chave, F0.5b (Distributed Tracing) e F3.1 (AIOps) ficam sem evidência"
+  dica "./scripts/configurar-datadog.sh   (pede a chave sem eco e grava no cofre)"
 else
-  aviso "DD_API_KEY não definida e o Secret do APM não existe no cluster"
-  dica "Sem ela, F0.5b (Distributed Tracing) e F3.1 (AIOps) ficam sem evidência"
-  dica "Datadog → Organization Settings → API Keys (site us5)"
-  dica "export DD_API_KEY=... (antes do './solidary deploy')"
+  aviso "cofre solidarytech/datadog não existe nesta conta"
+  dica "Ele é criado pelo bootstrap (make bootstrap); depois: ./scripts/configurar-datadog.sh"
 fi
 
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then

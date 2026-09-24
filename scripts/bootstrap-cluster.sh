@@ -157,7 +157,7 @@ if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
   echo "  kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d"
 fi
 
-# Credencial do APM (Datadog): vem do COFRE (AWS Secrets Manager), ADR-008.
+# Credencial do APM (Datadog): vem do COFRE (AWS Secrets Manager), ADR-014.
 #
 # Antes: `--from-literal=DD_API_KEY="$DD_API_KEY"`, com a chave vinda de um
 # `export` digitado no terminal — texto puro no ~/.bash_history e visivel em

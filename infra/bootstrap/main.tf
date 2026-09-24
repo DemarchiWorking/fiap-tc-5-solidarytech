@@ -250,7 +250,7 @@ resource "aws_dynamodb_table" "lock" {
 # Sem CMK (gerenciar key policy e restrito no lab): cifrado com a chave
 # gerenciada aws/secretsmanager. Sem resource policy restritiva: sem IAM proprio
 # no lab, quem tem a sessao da conta le o segredo — debito declarado; em
-# producao, role dedicada + External Secrets Operator (ADR-008).
+# producao, role dedicada + External Secrets Operator (ADR-014).
 ###############################################################################
 
 resource "aws_secretsmanager_secret" "datadog" {

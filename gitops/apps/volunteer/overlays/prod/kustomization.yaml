@@ -24,7 +24,7 @@ resources:
     # o job `update-gitops`, no fim da CI. Ver Passo 3.5 do COMO-SUBIR.md.
 images:
 - name: volunteer-service
-  newName: 722616916018.dkr.ecr.us-east-1.amazonaws.com/solidarytech/volunteer-service
+  newName: 716532857874.dkr.ecr.us-east-1.amazonaws.com/solidarytech/volunteer-service
   newTag: 0e03a4936e3880a80cfbe10f7527ed9bbba9abab
 
 commonAnnotations:

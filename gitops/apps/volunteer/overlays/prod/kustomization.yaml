@@ -25,7 +25,7 @@ resources:
 images:
 - name: volunteer-service
   newName: 716532857874.dkr.ecr.us-east-1.amazonaws.com/solidarytech/volunteer-service
-  newTag: 0e03a4936e3880a80cfbe10f7527ed9bbba9abab
+  newTag: b02dc8065676e8f463518fbf3b324838ddae4d7c
 
 commonAnnotations:
   solidarytech.io/gerenciado-por: argocd

@@ -56,16 +56,25 @@ if [[ -z "$REPO" ]]; then
 fi
 
 # Le a secao do perfil no arquivo INI, parando na proxima secao.
+#
+# Um parser so. Antes eram dois encadeados por `||`: o primeiro falhava EM
+# SILENCIO (saia com 0 e texto vazio) e o fallback, que funcionaria, nunca era
+# chamado — o script dizia "nao consegui ler" com o arquivo correto. Tolera o
+# que o arquivo de verdade traz: CRLF (bloco colado do painel do lab pelo
+# Windows), espacos em volta do "=" ou nao, e "=" DENTRO do valor (o session
+# token e base64: so o primeiro "=" separa chave de valor).
 ler_chave() {
-  awk -v perfil="[$PERFIL]" -v chave="$1" '
-    $0 == perfil { dentro = 1; next }
-    /^\[/        { dentro = 0 }
-    dentro && $1 == chave { print $3; exit }
-  ' FS=' *= *|^ *' "$ARQUIVO_CREDENCIAIS" 2>/dev/null \
-  || awk -v perfil="[$PERFIL]" -v chave="$1" '
-    $0 == perfil { dentro = 1; next }
-    /^\[/        { dentro = 0 }
-    dentro && index($0, chave "=") == 1 { sub(/^[^=]*=[[:space:]]*/, ""); print; exit }
+  awk -v perfil="$PERFIL" -v chave="$1" '
+    { sub(/\r$/, "") }
+    /^[[:space:]]*\[/ { cab = $0; gsub(/[][[:space:]]/, "", cab); dentro = (cab == perfil); next }
+    dentro {
+      i = index($0, "=")
+      if (i == 0) next
+      k = substr($0, 1, i - 1); v = substr($0, i + 1)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+      if (k == chave) { print v; exit }
+    }
   ' "$ARQUIVO_CREDENCIAIS"
 }
 

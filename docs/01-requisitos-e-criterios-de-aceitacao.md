@@ -124,7 +124,8 @@
 ## Resumo de cobertura
 
 > **Atualizado em 24/09/2026**, depois de destruir e recriar o ambiente do zero
-> numa conta de Learner Lab nova (`722616916018`). ✅ aqui significa artefato no
+> numa conta de Learner Lab nova (`722616916018`), e revalidado em 25/09 na
+> conta `716532857874`. ✅ aqui significa artefato no
 > repositório **e** evidência de execução capturada (`docs/07-evidencias/*.txt`).
 > O que resta é, em sua maioria, **print de tela e vídeo** — ver
 > [`ESTADO-DA-ENTREGA.md`](../ESTADO-DA-ENTREGA.md).

@@ -3,7 +3,8 @@
 > Cada linha abaixo é uma exigência **literal** do enunciado do Hackathon
 > (`docs/00-enunciado/enunciado-original.txt`, idêntico ao PDF do coordenador),
 > confrontada com a prova **em execução** — não com a intenção. Validado em
-> **24/09/2026** no ambiente da conta `722616916018`, recriado do zero.
+> **24/09/2026** na conta `722616916018` e **revalidado em 25/09/2026** na conta
+> `716532857874` — o ambiente recriado do zero pela terceira vez, mesmos resultados.
 >
 > ✅ comprovado em execução · 🟨 depende de ação do grupo (conta, print, vídeo) ·
 > ⚠️ comprovado com ressalva declarada
@@ -31,7 +32,7 @@ pontos. Não basta configurar; é preciso mostrar operando na prática."*
 | Terraform provisionando **cluster, bancos, mensageria e rede** | ✅ | EKS, RDS, DynamoDB, SQS+DLQ, VPC — 0 recurso IAM | `terraform -chdir=infra/environments/prod-use1 state list` |
 | Pipelines com **testes** | ✅ | lint ‖ testes (Go com `-race`, pytest) | `.github/workflows/ci-servico.yml` |
 | **SAST/SCA** (Trivy/Sonar) | ✅ | gosec + bandit (SAST) · Trivy em dependências e imagem, CRITICAL bloqueia · SBOM | [`devsecops-auditoria.txt`](07-evidencias/devsecops-auditoria.txt) |
-| **Construção da imagem** | ✅ | CI dos 3 serviços na conta nova, 25/09 00:15 UTC: build → Trivy → push no ECR → commit do bot no GitOps (`deploy(...): 0e03a49`) → ArgoCD implantou; `terraform plan` na CI: *No changes* | [Actions](https://github.com/DemarchiWorking/fiap-tc-5-solidarytech/actions) |
+| **Construção da imagem** | ✅ | CI dos 3 serviços na conta nova, 25/09 09:59 UTC: build → Trivy → push no ECR → commit do bot no GitOps (`deploy(...): b02dc80`) → ArgoCD implantou; `terraform plan` na CI: *No changes* | [Actions](https://github.com/DemarchiWorking/fiap-tc-5-solidarytech/actions) |
 | GitOps com ArgoCD/FluxCD | ✅ | App-of-Apps · `selfHeal` e `prune` · 15 Applications | `kubectl -n argocd get applications` |
 | Prometheus, Grafana, Loki e/ou OpenTelemetry **rodando** | ✅ | todos no ar; dois OTel Collectors | `./solidary evidencias` → G |
 | APM (Datadog/New Relic) com **Distributed Tracing** | ✅ | chave validada · 0 × 403 · spans e trace metrics subindo · trace atravessa o SQS | [`apm-datadog.txt`](07-evidencias/apm-datadog.txt) |
@@ -49,7 +50,7 @@ pontos. Não basta configurar; é preciso mostrar operando na prática."*
 
 | Exigência | Resultado | Prova | Como reproduzir |
 |---|---|---|---|
-| Tags **no Terraform**: `Project=SolidaryTech`, `Environment=Production`, `CostCenter=NGO-Core` em **todos** os recursos | ✅ | 42 recursos com as 3 tags; **0** com `Environment` ≠ `Production`; gate 16 barra regressão | `./solidary evidencias` → I |
+| Tags **no Terraform**: `Project=SolidaryTech`, `Environment=Production`, `CostCenter=NGO-Core` em **todos** os recursos | ✅ | 44 recursos com as 3 tags; **0** com `Environment` ≠ `Production`; gate 16 barra regressão | `./solidary evidencias` → I |
 | **Rightsizing** de requests/limits **nos YAML, via GitOps** | ✅ | todos os Deployments com requests/limits, ajustados pela medição sob carga | [`rightsizing-medido.txt`](07-evidencias/rightsizing-medido.txt) |
 | **Forecast** mensal | ✅ | US$ 202,74/mês item a item | [`04-finops`](04-finops/README.md) §3 |
 | **≥ 1 recomendação** nativa de nuvem | ✅ | 5 recomendações quantificadas | idem §4 |
@@ -66,7 +67,7 @@ pontos. Não basta configurar; é preciso mostrar operando na prática."*
 | Exigência | Resultado | Prova | Como reproduzir |
 |---|---|---|---|
 | **PCN** executivo com **RTO e RPO** para os dados de doação | ✅ | RTO 1 h · RPO 15 min, justificados | [`pcn.md`](06-dr-pcn/pcn.md) |
-| **Opção A** — Velero: backup de **manifestos e volumes** para bucket externo | ✅ | manifestos no bucket de **us-west-2**; 3 volumes por snapshot; **restore executado** (PVC recuperado em 13 s) | [`dr-velero-backup-restore.txt`](07-evidencias/dr-velero-backup-restore.txt) |
+| **Opção A** — Velero: backup de **manifestos e volumes** para bucket externo | ✅ | manifestos no bucket de **us-west-2**; 3 volumes por snapshot; **restore executado** (PVC recuperado em 12 s) | [`dr-velero-backup-restore.txt`](07-evidencias/dr-velero-backup-restore.txt) |
 | **Opção B** — ambiente espelho em outra região com 1 comando | ✅ | `dr-usw2` usa os mesmos módulos; plano 34/0/0 | [`dr-plano-regiao-secundaria.txt`](07-evidencias/dr-plano-regiao-secundaria.txt) |
 | Segurança (DevSecOps e segredos) | ✅ | segredos no Secrets Manager (nenhum no Git, nem no terminal); IMDS bloqueado para pods que não usam AWS; S3 sem acesso público; RDS privado | relatório §6 — revisão de segurança |
 

@@ -133,6 +133,15 @@ todas as rotas públicas respondendo, `POST /donations` → 201 · carga do k6:
 12.879 requisições, **0% de falha**, p95 de 7,9 ms · worker escalado 1 → 6
 pelo HPA ([`validacao-final.txt`](../07-evidencias/validacao-final.txt)).
 
+**Revalidado em 25/09 numa terceira conta (`716532857874`)**, de novo do zero:
+bootstrap e 52 recursos aplicados a partir de planos revisados (0 IAM) · CI dos
+três serviços publicou no ECR e commitou as tags no GitOps; o ArgoCD implantou
+a imagem da CI · 15/15 Applications `Synced`/`Healthy` · API pública com as 11
+respostas esperadas (201, 409, 400, 200) · k6: 12.879 requisições, **0% de
+falha**, p95 de 7,2 ms · Datadog: 51.733 spans entregues, **0 × 403** · Velero:
+backup de 914 itens e restore em 12 s · DR: plano 34/0/0. Nenhuma linha de
+código mudou entre as contas — só a configuração gerada por `configurar-repo`.
+
 ### Evidências — Fundação
 
 ![ArgoCD com todas as Applications Synced / Healthy](../07-evidencias/f0-argocd.png)
@@ -389,20 +398,21 @@ CI (OIDC bloqueado) · nós em subnet pública (decisão de custo revertível po
 variável) · cofre do APM sem IAM granular — quem tem a sessão da conta lê o
 segredo; em produção, role dedicada + External Secrets Operator (ADR-014).
 
-**Medido em 24/09 — Opção A em ação, e não só configurada:**
+**Medido em 25/09 (conta `716532857874`) — Opção A em ação, e não só configurada:**
 
 | Etapa | Resultado |
 |---|---|
-| Backup (schedule diário: manifestos **e volumes**) | `Completed` · 471/471 itens · **3/3 snapshots de volume** · 11 s |
+| Backup (schedule diário: manifestos **e volumes**) | `Completed` · 914/914 itens · **3/3 snapshots de volume** · 13 s |
 | Manifestos | `tar.gz` de 683 KB no bucket de **us-west-2** (outra região) |
 | Volumes | 3 snapshots EBS cifrados (Prometheus, Grafana, Alertmanager) |
-| **Restore executado** | PVC do Prometheus recuperado do snapshot num namespace isolado: `Completed`, **PVC `Bound` em 13 s**, volume EBS novo criado a partir do snapshot |
+| **Restore executado** | PVC do Prometheus recuperado do snapshot num namespace isolado: `Completed`, **PVC `Bound` em 12 s**, volume EBS novo criado a partir do snapshot |
 | Limpeza do drill | namespace e volume do drill removidos — sem custo órfão |
+| Lição registrada | a 1ª tentativa rodou com os snapshots ainda `pending` e falhou; a limpeza automática marcou o PV de produção do Prometheus — contido com `Retain`, sem perda. O drill agora espera os snapshots e só apaga clones do namespace isolado |
 
 Os snapshots de volume são **regionais** (us-east-1) e os manifestos, cross-region.
 Os volumes do cluster são só de observabilidade; o dado de doação vive no RDS,
 com PITR. Em produção: node-agent do Velero ou cópia dos snapshots pelo AWS
-Backup ([`dr-velero-backup-restore.txt`](../07-evidencias/dr-velero-backup-restore.txt)).
+Backup ([`dr-velero-backup-restore.txt`](../07-evidencias/dr-velero-backup-restore.txt), com a lição do drill no item 6).
 
 **Opção B:** plano da região espelho **34 a criar, 0 a alterar, 0 a destruir**,
 com as mesmas tags ([`dr-plano-regiao-secundaria.txt`](../07-evidencias/dr-plano-regiao-secundaria.txt)).

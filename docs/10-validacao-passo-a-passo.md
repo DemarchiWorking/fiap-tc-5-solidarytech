@@ -62,12 +62,13 @@ pergunte ao cluster:
 ./solidary senhas
 ```
 
-Saída (exemplo da sessão de 10/09/2026):
+Saída (exemplo da sessão de 25/09/2026 — senhas omitidas: são geradas a cada
+subida e só aparecem no seu terminal):
 
 ```
-Grafana  admin / IYu6eV2JN7T34lSENrhajmVL
-ArgoCD   admin / smoAO5ga4VE128Cg
-URL base: http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com
+Grafana  admin / ************************
+ArgoCD   admin / ****************
+URL base: http://a173bbf9cd96d4f029926b4b1283fd97-8653edf64db9f672.elb.us-east-1.amazonaws.com
 ```
 
 Guarde a URL numa variável — todos os passos seguintes usam:

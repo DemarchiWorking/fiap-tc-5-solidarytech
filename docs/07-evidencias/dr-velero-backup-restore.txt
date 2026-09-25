@@ -1,54 +1,69 @@
 DR — OPCAO A (VELERO): BACKUP DE MANIFESTOS E VOLUMES + RESTORE EXECUTADO
-2026-09-24 23:47 UTC  ·  conta 722616916018
+2026-09-25 10:25 UTC  ·  conta 716532857874
 =======================================================================
 
 Enunciado: "configure o Velero no Kubernetes para fazer backup do estado do
 cluster (manifestos e volumes) para um bucket externo".
 
 1. BACKUP — execucao do schedule diario (o que inclui volumes), disparada para
-   validacao: o ambiente foi recriado as 20:30 UTC e o horario das 03:00 ainda
+   validacao: o ambiente foi recriado as 09:41 UTC e o horario das 03:00 ainda
    nao tinha passado nesta conta.
-   backup:     velero-diario-validacao-202609242344
+   backup:     velero-diario-validacao-202609251016   (label velero.io/schedule-name=velero-diario)
    namespaces: ["solidary-ngo","solidary-donation","solidary-volunteer","monitoring","argocd"]
    fase:       Completed
-   itens:      471/471
+   itens:      914/914
    snapshots:  3/3
-   inicio/fim: 2026-09-24T23:44:24Z -> 2026-09-24T23:44:35Z
-   expira:     2026-10-24T23:44:24Z
+   inicio/fim: 2026-09-25T10:16:25Z -> 2026-09-25T10:16:38Z
+   expira:     2026-10-25T10:16:25Z
 
-2. MANIFESTOS — no bucket externo, em OUTRA regiao (us-west-2)
-        4209  velero-backup.json
-          27  velero-diario-validacao-202609242344-itemoperations.json.gz
-       29240  velero-diario-validacao-202609242344-logs.gz
-          29  velero-diario-validacao-202609242344-podvolumebackups.json.gz
-        3368  velero-diario-validacao-202609242344-resource-list.json.gz
-          49  velero-diario-validacao-202609242344-results.gz
-         443  velero-diario-validacao-202609242344-volumeinfo.json.gz
-         402  velero-diario-validacao-202609242344-volumesnapshots.json.gz
-      682938  velero-diario-validacao-202609242344.tar.gz
+2. MANIFESTOS — no bucket externo solidarytech-prod-velero-857874, em OUTRA regiao (us-west-2)
+        4803  velero-backup.json
+          27  velero-diario-validacao-202609251016-itemoperations.json.gz
+       45604  velero-diario-validacao-202609251016-logs.gz
+          29  velero-diario-validacao-202609251016-podvolumebackups.json.gz
+        7307  velero-diario-validacao-202609251016-resource-list.json.gz
+          49  velero-diario-validacao-202609251016-results.gz
+         440  velero-diario-validacao-202609251016-volumeinfo.json.gz
+         394  velero-diario-validacao-202609251016-volumesnapshots.json.gz
+      736230  velero-diario-validacao-202609251016.tar.gz
 
 3. VOLUMES — snapshots EBS dos PVCs (cifrados), na regiao do volume (us-east-1)
-   snap-069485490bcc1ca95    2 GiB  completed  cifrado=True  kube-prometheus-stack-grafana
-   snap-0678012d4743968c9   10 GiB  completed  cifrado=True  prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0
-   snap-03b74ef041ef72b06    1 GiB  completed  cifrado=True  alertmanager-kube-prometheus-stack-alertmanager-db-alertmanager-kube-prometheus-stack-alertmanager-0
+   snap-002862d747ed97b55    1 GiB  completed  cifrado=True  alertmanager-kube-prometheus-stack-alertmanager-db-alertmanager-kube-prometheus-stack-alertmanager-0
+   snap-0124b8c74a1fc01d1   10 GiB  completed  cifrado=True  prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0
+   snap-0e05c5ea2e6bdd0f0    2 GiB  completed  cifrado=True  kube-prometheus-stack-grafana
 
 4. RESTORE EXECUTADO — PVC do Prometheus recuperado do snapshot, num namespace
    isolado (dr-drill-restore), sem tocar em producao
-   restore:    drill-volume-prometheus-234614  (backup velero-diario-validacao-202609242344)
+   restore:    drill-volume-prometheus-102511  (backup velero-diario-validacao-202609251016)
    fase:       Completed
-   itens:      3/3   erros:    avisos: 1
-   inicio/fim: 2026-09-24T23:46:17Z -> 2026-09-24T23:46:21Z
-   aviso (lido em restores/drill-volume-prometheus-234614/...-results.gz no bucket):
-     - failed to list stub VolumeGroupSnapshotContents: no matches for kind "VolumeGroupSnapshotContent" in version "groupsnapshot.storage.k8s.io/v1beta2"
-     (benigno: CRD de snapshot em grupo que o cluster nao usa)
-   PVC restaurado: Bound 10Gi  ->  PV velero-clone-e667bb7b-5cbb-4e54-9269-5c5d8e4b0818
-   volume EBS novo vol-0e5cc0c0a03bb0f44, criado A PARTIR de snap-0678012d4743968c9 (10 GiB, cifrado=True, us-east-1a)
-   tempo medido do restore ate o PVC Bound: 13 s
+   itens:      3/3   erros: 0   avisos: 1
+   inicio/fim: 2026-09-25T10:25:18Z -> 2026-09-25T10:25:23Z
+   aviso: failed to list stub VolumeGroupSnapshotContents (CRD de snapshot em
+          grupo que o cluster nao usa — benigno, o mesmo da validacao de 24/09)
+   PVC restaurado: Bound 10Gi  ->  PV velero-clone-9bb51c44-788f-42e2-a3e5-26f4139cf0de
+   volume EBS novo vol-0a23126fa547462a5, criado A PARTIR de snap-0124b8c74a1fc01d1 (10 GiB, cifrado=True, us-east-1a)
+   tempo medido do restore ate o PVC Bound: 12 s
 
 5. LIMPEZA DO DRILL — o volume criado pelo restore nao pode virar custo orfao
-   namespace dr-drill-restore: removido (a primeira leitura pegou o namespace ainda
-   em Terminating; reconferido: NotFound, e nenhum PV velero-clone restante)
-   volume vol-0e5cc0c0a03bb0f44: apagado (NotFound)
+   namespace dr-drill-restore: NotFound
+   PV velero-clone-9bb51c44-...: NotFound
+   volume vol-0a23126fa547462a5: NotFound (apagado)
+
+6. LICAO APRENDIDA NESTA EXECUCAO (registrada de proposito)
+   A primeira tentativa de restore (drill-volume-prometheus-101620, 10:16 UTC)
+   terminou PartiallyFailed: disparada 8 s apos o backup, com os snapshots EBS
+   ainda "pending" — o EC2 recusa CreateVolume (IncorrectState). Sem o clone, o
+   PVC do drill apontou para o nome do PV original, e a limpeza automatica do
+   drill marcou o PV de producao do Prometheus para remocao.
+   Contencao imediata: o PV seguiu Bound (finalizer kubernetes.io/pv-protection
+   segura a remocao enquanto o PVC existir) e recebeu reclaimPolicy=Retain — o
+   volume EBS nao pode mais ser apagado por esse caminho. Nenhum dado perdido,
+   Prometheus sem restart, SLIs e alvos inalterados.
+   Correcao no procedimento de drill: (a) so restaurar com TODOS os snapshots do
+   backup em "completed"; (b) so limpar PV cujo nome e velero-clone-*, cujo
+   claimRef esta no namespace do drill e cujo volume veio do snapshot do
+   backup — qualquer divergencia aborta sem apagar nada. A segunda tentativa
+   (item 4) rodou com as duas travas.
 
 LEITURA
    Manifestos: bucket externo em us-west-2 — sobrevivem a falha da regiao.

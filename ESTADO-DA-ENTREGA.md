@@ -5,9 +5,11 @@
 > abaixo foi medido no ambiente provisionado, não estimado — e se regenera com
 > `./solidary evidencias`.
 
-**Última validação:** 24/09/2026 · conta `722616916018` · região `us-east-1` ·
-ambiente **destruído e recriado do zero** numa conta de Learner Lab nova
-(a anterior, `227007723638`, não existe mais).
+**Última validação:** 25/09/2026 · conta `716532857874` · região `us-east-1` ·
+ambiente **recriado do zero** numa conta de Learner Lab nova — a terceira
+(as anteriores, `227007723638` e `722616916018`, foram trocadas pelo Academy).
+Da conta vazia ao sistema no ar, com CI e GitOps: **~35 min**, sem uma linha de
+código alterada — só `configurar-repo` apontando o GitOps para a conta nova.
 
 ---
 
@@ -19,16 +21,16 @@ ambiente **destruído e recriado do zero** numa conta de Learner Lab nova
 | **Aplicações** | 3 serviços + worker · **0 reinícios** · worker escalou **1 → 6** sob carga (HPA) |
 | **GitOps** | **15/15** Applications `Synced` / `Healthy` |
 | **APIs (endereço público)** | todas as rotas `200` · `POST /donations` → **201** · 30/30 chamadas externas OK |
-| **Carga (k6)** | 12.879 requisições · **0% de falha** · p95 **7,9 ms** · 8.099 doações, 0 erro |
+| **Carga (k6)** | 12.879 requisições · **0% de falha** · p95 **7,2 ms** · 8.100 doações, 0 erro |
 | **SLIs** | taxa de erro **0** · p95 **4,8 ms** · frescor **0** · error budget **100%** |
 | **Observabilidade** | 27 alvos no Prometheus, **0 down** |
 | **APM (Datadog)** | chave **no cofre**, validada (site US1) · **0 respostas 403** · trace metrics ativas |
-| **Backup e restore** | manifestos + **3 volumes** (`Completed`, 471 itens) · **restore executado**: PVC recuperado do snapshot em 13 s |
+| **Backup e restore** | manifestos + **3 volumes** (`Completed`, 914 itens) · **restore executado**: PVC recuperado do snapshot em 12 s |
 | **DR — Opção B** | `plan` da região espelho: **34 a criar, 0 a alterar, 0 a destruir** |
-| **FinOps** | 42 recursos com as 3 tags · **0** com `Environment` ≠ `Production` · forecast **US$ 202,74/mês** |
+| **FinOps** | 44 recursos com as 3 tags · **0** com `Environment` ≠ `Production` · forecast **US$ 202,74/mês** |
 | **DevSecOps** | **0 HIGH/CRITICAL** nas 3 imagens e nas dependências · gitleaks: 0 no histórico |
 | **Segurança de rede** | pods expostos que não usam AWS (`ngo-service`, Grafana) **sem acesso ao IMDS** — testado de dentro |
-| **CI/CD na conta nova** | 5 pipelines verdes (25/09 00:15 UTC): CI dos 3 serviços publicou no ECR e commitou no GitOps, ArgoCD implantou; *Validação* verde; `terraform plan` na CI: **No changes** |
+| **CI/CD na conta nova** | pipelines verdes (25/09 09:59 UTC, commit `b02dc80`): CI dos 3 serviços publicou no ECR e commitou no GitOps, ArgoCD implantou; *Validação* verde; `terraform plan` na CI: **No changes** |
 | **Rubrica** | `./solidary rubrica` → **34 ok**, 2 pendentes (prints e link do vídeo), **0 faltando** |
 
 **O que falta é apresentação e três ações que exigem a sua conta** (GitHub,
@@ -40,7 +42,7 @@ Datadog, gravação). A engenharia está validada no ambiente real.
 
 | # | Item | Tempo | Por que importa |
 |---|---|---|---|
-| 1–2 | ~~`gh auth login`, `sync-creds` e pipelines~~ | feito | 25/09 00:15 UTC — **só repita numa sessão nova do lab** (os secrets expiram com ela): `./solidary sync-creds` e `./solidary publicar-imagens` |
+| 1–2 | ~~`gh auth login`, `sync-creds` e pipelines~~ | feito | 25/09 09:59 UTC (conta `716532857874`) — **só repita numa sessão nova do lab** (os secrets expiram com ela): `./solidary sync-creds` e `./solidary publicar-imagens` |
 | 3 | **Prints** (10, lista abaixo) | ~30 min | O PDF mostra uma caixa vermelha "EVIDÊNCIA PENDENTE" onde falta print |
 | 4 | **Watchdog** — criar o *Watchdog monitor* e capturar a tela | 5 min | Fecha o AIOps (F3.1). Ver a observação sobre linha de base abaixo |
 | 5 | **Vídeo** (15–20 min) — [`docs/roteiro-video.md`](docs/roteiro-video.md) | — | Entregável obrigatório |

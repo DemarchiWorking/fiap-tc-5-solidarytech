@@ -85,8 +85,11 @@ A URL base é a do NLB. Todas as chamadas abaixo passam pela pilha inteira:
 **NLB → ingress-nginx → Service → pod → banco**. Nenhuma usa `port-forward`.
 
 ```bash
-BASE=http://a155047f7dcdb4a50aea0d1d203cf0cd-973295eaa1a8ca51.elb.us-east-1.amazonaws.com
+BASE=http://a173bbf9cd96d4f029926b4b1283fd97-8653edf64db9f672.elb.us-east-1.amazonaws.com
 ```
+
+> O endereço do NLB muda a cada subida do ambiente. O atual sai no fim do
+> `./solidary deploy` e em `./solidary senhas`.
 
 ### ngo-service — cadastro de ONGs (Flask + RDS Postgres)
 

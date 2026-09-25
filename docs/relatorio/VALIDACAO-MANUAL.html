@@ -240,11 +240,11 @@
       <tr><td>F0-04</td><td>Pipelines com testes</td><td>Jobs Lint e Testes verdes</td><td><span class="selo-st st-ok">Medido</span></td></tr>
       <tr><td>F0-05</td><td>SAST/SCA (Trivy/Sonar)</td><td>gosec/bandit + Trivy + SBOM</td><td><span class="selo-st st-ok">Medido</span></td></tr>
       <tr><td>F0-06</td><td>Construção e publicação da imagem</td><td>ECR imutável = imagem em execução</td><td><span class="selo-st st-ok">Medido</span></td></tr>
-      <tr><td>F0-07</td><td>GitOps com ArgoCD</td><td>15/15 + selfHeal em 8 s</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-07</td><td>GitOps com ArgoCD</td><td>15/15 + selfHeal em 18 s</td><td><span class="selo-st st-ok">Medido</span></td></tr>
       <tr><td>F0-08</td><td>Prometheus, Grafana, Loki, OpenTelemetry</td><td>27 alvos, 0 down</td><td><span class="selo-st st-ok">Medido</span></td></tr>
       <tr><td>F0-09</td><td>APM com Distributed Tracing</td><td>Datadog: 0 × 403, trace via SQS</td><td><span class="selo-st st-ok">Medido</span></td></tr>
       <tr><td>F0-10</td><td>Aplicações funcionais (3 APIs + fila)</td><td>11 chamadas públicas</td><td><span class="selo-st st-ok">Medido</span></td></tr>
-      <tr><td>F0-11</td><td>Elasticidade (HPA)</td><td>Worker 1 → 6 sob carga</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-11</td><td>Elasticidade (HPA)</td><td>Worker 1 → 6 → 1</td><td><span class="selo-st st-ok">Medido</span></td></tr>
       <tr><td>F1-01</td><td>≥ 2 SLIs do donation-service (Golden Metrics)</td><td>3 recording rules</td><td><span class="selo-st st-ok">Medido</span></td></tr>
       <tr><td>F1-02</td><td>SLO para cada SLI</td><td>99,9 % · 99 % &lt; 300 ms · 99,5 % &lt; 60 s</td><td><span class="selo-st st-doc">Documental</span></td></tr>
       <tr><td>F1-03</td><td>Dashboard exclusivo de SLO e error budget</td><td>Painel Grafana SRE</td><td><span class="selo-st st-ok">Medido</span></td></tr>
@@ -493,12 +493,12 @@ git log --oneline --grep="^deploy(" -5</pre></li>
         <li>Estado de todas as aplicações:
 <pre>kubectl -n argocd get applications</pre></li>
         <li>Abra <code>$BASE/argocd/</code>, entre com <code>admin</code> e a senha do P-03. A tela inicial é o print <code>f0-argocd.png</code>.</li>
-        <li><b>Prova de GitOps:</b> altere o cluster "na mão" e veja o ArgoCD desfazer:
-<pre>kubectl -n solidary-ngo scale deploy/ngo-service --replicas=1
-kubectl -n solidary-ngo get deploy ngo-service -w      <span class="c"># Ctrl+C quando voltar a 2/2</span></pre></li>
+        <li><b>Prova de GitOps:</b> altere na mão um campo que o Git declara (o teto do HPA) e veja o ArgoCD desfazer:
+<pre>kubectl -n solidary-ngo patch hpa ngo-service --type merge -p '{"spec":{"maxReplicas":3}}'
+kubectl -n solidary-ngo get hpa ngo-service -w      <span class="c"># Ctrl+C quando MAXPODS voltar a 6</span></pre></li>
       </ol>
-      <div class="esperado"><b>15</b> Applications <code>Synced</code> / <code>Healthy</code>. Após o <code>scale</code>, o Deployment volta para <b>2 réplicas em ~8 s</b> (medido 25/09) sem ninguém intervir: <code>selfHeal: true</code> reconcilia contra o Git.</div>
-      <div class="info">Use o <code>ngo-service</code>. No <code>donation-service</code> as réplicas são ignoradas de propósito (<code>ignoreDifferences</code>): quem manda nelas é o HPA.</div>
+      <div class="esperado"><b>15</b> Applications <code>Synced</code> / <code>Healthy</code>. O <code>MAXPODS</code> volta para <b>6 em ~18 s</b> (medido 25/09) sem ninguém intervir: o <code>selfHeal: true</code> dispara um sync automático e reaplica o valor do Git.</div>
+      <div class="info"><b>Não</b> use <code>kubectl scale</code> aqui: as réplicas de todos os Deployments de aplicação são ignoradas de propósito (<code>ignoreDifferences</code> + <code>RespectIgnoreDifferences=true</code>), porque quem manda nelas é o HPA. Escalar o ngo para 1 e vê-lo voltar a 2 prova o <code>minReplicas</code> do HPA, não o GitOps (era o teste antigo, corrigido em 25/09).</div>
       <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
     </div>
   </div>
@@ -578,7 +578,7 @@ kubectl -n solidary-volunteer get pods -l app=volunteer-worker -w</pre></li>
         <li>Confirme que o metrics-server responde:
 <pre>kubectl top nodes</pre></li>
       </ol>
-      <div class="esperado">4 HPAs, nenhum com <code>&lt;unknown&gt;</code>. O <code>volunteer-worker</code> escala de <b>1 para 6</b> réplicas no pico (medido em 25/09).</div>
+      <div class="esperado">4 HPAs, nenhum com <code>&lt;unknown&gt;</code>. O <code>volunteer-worker</code> escala de <b>1 para 6</b> réplicas no pico e volta a <b>1</b> cerca de 10 min depois da carga, a janela de estabilização de 600 s do HPA (medido em 25/09: 13:03 → 6, 13:14 → 1). Parado, a CPU do worker fica abaixo de 15% do request.</div>
       <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
     </div>
   </div>

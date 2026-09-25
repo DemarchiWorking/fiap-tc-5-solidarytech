@@ -206,23 +206,30 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 kubectl -n argocd get applications
 ```
 
-Esperado: **14 Applications**, todas `Synced` / `Healthy`.
+Esperado: **15 Applications**, todas `Synced` / `Healthy`.
 
 ### O teste que realmente prova GitOps
 
-Mude a réplica de um Deployment na mão e veja o ArgoCD desfazer:
+Altere na mão um campo que o Git declara — o teto do HPA do `ngo-service` — e
+veja o ArgoCD desfazer:
 
 ```bash
-kubectl -n solidary-ngo scale deploy/ngo-service --replicas=1
+kubectl -n solidary-ngo patch hpa ngo-service --type merge -p '{"spec":{"maxReplicas":3}}'
 ```
 
-Confira em seguida: volta para 2. Medido neste ambiente, **em menos de 15
-segundos**. O `selfHeal: true` reconcilia contra o Git — é a diferença entre
-"usei ArgoCD" e "o Git é a fonte da verdade".
+```bash
+kubectl -n solidary-ngo get hpa ngo-service -w
+```
 
-> `spec.replicas` do `donation-service` é ignorado de propósito
-> (`ignoreDifferences`), porque quem manda nele é o HPA. Faça o teste no
-> `ngo-service`.
+O `MAXPODS` volta para **6 em ~18 s** (medido em 25/09): o `selfHeal: true`
+dispara um sync automático (`initiatedBy: automated`) e reaplica o valor do
+Git — é a diferença entre "usei ArgoCD" e "o Git é a fonte da verdade".
+
+> **Não** use `kubectl scale` para este teste. `spec.replicas` de todos os
+> Deployments de aplicação é ignorado de propósito (`ignoreDifferences` +
+> `RespectIgnoreDifferences=true`): quem manda nas réplicas é o HPA. Escalar o
+> `ngo-service` para 1 e vê-lo voltar a 2 prova o `minReplicas` do HPA, não o
+> GitOps — era o teste antigo deste roteiro, corrigido em 25/09.
 
 ---
 

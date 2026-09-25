@@ -392,19 +392,25 @@ Esperado: **15 Applications**, todas `Synced` / `Healthy`.
 
 ### 7.1 O teste que realmente prova GitOps
 
+Altere na mão um campo que o Git declara — o teto do HPA do `ngo-service`:
+
 ```bash
-kubectl -n solidary-ngo scale deploy/ngo-service --replicas=1
+kubectl -n solidary-ngo patch hpa ngo-service --type merge -p '{"spec":{"maxReplicas":3}}'
 ```
 
 ```bash
-kubectl -n solidary-ngo get deploy ngo-service -w
+kubectl -n solidary-ngo get hpa ngo-service -w
 ```
 
-Volta para 2 em **menos de 15 segundos** — medido. O `selfHeal: true`
-reconcilia contra o Git.
+O `MAXPODS` volta para **6 em ~18 s** (medido em 25/09): o `selfHeal: true`
+dispara um sync automático (`initiatedBy: automated`) e reaplica o valor do
+Git — é a diferença entre "usei ArgoCD" e "o Git é a fonte da verdade".
 
-> Faça no `ngo-service`, não no `donation-service`: o `spec.replicas` deste é
-> ignorado de propósito (`ignoreDifferences`), porque quem manda nele é o HPA.
+> **Não** use `kubectl scale` para este teste. `spec.replicas` de todos os
+> Deployments de aplicação é ignorado de propósito (`ignoreDifferences` +
+> `RespectIgnoreDifferences=true`): quem manda nas réplicas é o HPA. Escalar o
+> `ngo-service` para 1 e vê-lo voltar a 2 prova o `minReplicas` do HPA, não o
+> GitOps — era o teste antigo deste roteiro, corrigido em 25/09.
 
 ---
 

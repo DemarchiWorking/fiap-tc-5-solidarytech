@@ -22,7 +22,7 @@ código alterada — só `configurar-repo` apontando o GitOps para a conta nova.
 | | |
 |---|---|
 | **Infraestrutura** | 52 recursos por Terraform em 15 min · **0 recursos IAM** · plano revisado antes de cada apply |
-| **Aplicações** | 3 serviços + worker · **0 reinícios** · worker escalou **1 → 6** sob carga (HPA) |
+| **Aplicações** | 3 serviços + worker · **0 reinícios** · worker escalou **1 → 6** sob carga e voltou a **1** dez minutos depois (HPA, 25/09) |
 | **GitOps** | **15/15** Applications `Synced` / `Healthy` |
 | **APIs (endereço público)** | todas as rotas `200` · `POST /donations` → **201** · 30/30 chamadas externas OK |
 | **Carga (k6)** | 12.879 requisições · **0% de falha** · p95 **7,2 ms** · 8.100 doações, 0 erro |
@@ -47,7 +47,7 @@ Datadog, gravação). A engenharia está validada no ambiente real.
 | # | Item | Tempo | Por que importa |
 |---|---|---|---|
 | 1–2 | ~~`gh auth login`, `sync-creds` e pipelines~~ | feito | 25/09 09:59 UTC (conta `716532857874`) — **só repita numa sessão nova do lab** (os secrets expiram com ela): `./solidary sync-creds` e `./solidary publicar-imagens` |
-| 3 | **Prints** (10, lista abaixo) | ~30 min | O PDF mostra uma caixa vermelha "EVIDÊNCIA PENDENTE" onde falta print |
+| 3 | **Prints** — faltam **4 de 10** (lista abaixo, marcados ⏳) | ~15 min | O PDF mostra uma caixa vermelha "EVIDÊNCIA PENDENTE" onde falta print |
 | 4 | **Watchdog** — criar o *Watchdog monitor* e capturar a tela | 5 min | Fecha o AIOps (F3.1). Ver a observação sobre linha de base abaixo |
 | 5 | **Vídeo** (15–20 min) — [`docs/roteiro-video.md`](docs/roteiro-video.md) | — | Entregável obrigatório |
 | 6 | Link do vídeo no relatório + `python scripts/gerar-relatorio.py` | 2 min | Último campo *a preencher* |
@@ -68,16 +68,16 @@ sozinho.
 
 | Arquivo | Onde |
 |---|---|
-| `f0-argocd.png` | `<NLB>/argocd/` — 15 Applications `Synced`/`Healthy` |
-| `f0-pipeline-verde.png` | GitHub → Actions → *CI — donation-service* de 25/09 (5 jobs verdes, inclusive push e GitOps) |
-| `f0-pods-running.png` | `kubectl get pods -A \| grep solidary` |
-| `f0-trace-distribuido.png` | Datadog (app.datadoghq.com) → APM → Traces |
-| `f1-dashboard-sre.png` | Grafana → *SRE: SLOs e Error Budget* (**rode a carga antes**) |
-| `f2-tags-console.png` | AWS → Tag Editor → `CostCenter = NGO-Core` |
-| `f2-dashboard-finops.png` | Grafana → *FinOps* |
-| `f3-anomalia-watchdog.png` | Datadog → Watchdog |
-| `f4-velero-backups.png` | `kubectl -n velero get backups.velero.io` |
-| `f4-dr-plan.png` | `AMBIENTE=dr-usw2 ./solidary plan` (só leitura) |
+| ⏳ `f0-argocd.png` | `<NLB>/argocd/` — 15 Applications `Synced`/`Healthy` |
+| ✅ `f0-pipeline-verde.png` | GitHub → Actions → *CI — donation-service* de 25/09 (5 jobs verdes, inclusive push e GitOps) |
+| ✅ `f0-pods-running.png` | `kubectl get pods -A \| grep solidary` |
+| ✅ `f0-trace-distribuido.png` | Datadog (app.datadoghq.com) → APM → Traces |
+| ⏳ `f1-dashboard-sre.png` | Grafana → *SRE: SLOs e Error Budget* (**rode a carga antes**) |
+| ⏳ `f2-tags-console.png` | AWS → Tag Editor → `CostCenter = NGO-Core` |
+| ⏳ `f2-dashboard-finops.png` | Grafana → *FinOps* |
+| ✅ `f3-anomalia-watchdog.png` | Datadog → Watchdog |
+| ✅ `f4-velero-backups.png` | `kubectl -n velero get backups.velero.io` |
+| ✅ `f4-dr-plan.png` | `AMBIENTE=dr-usw2 ./solidary plan` (só leitura) |
 
 `./solidary senhas` mostra as URLs e as credenciais do Grafana e do ArgoCD.
 
@@ -181,7 +181,16 @@ Nenhum deles aparecia em gate, revisão de código ou `kubectl get`.
 | 29 | `commonLabels` nos seletores | NetworkPolicy aplicada e sem efeito, em silêncio |
 | 30 | Verificador de links só na CI | CI vermelha duas vezes com os gates locais verdes |
 
-**O padrão:** os gates estáticos validam a **forma**. Os defeitos 18–30 só
+**Revalidação de 25/09** (conta `716532857874`) — corrigidos e comprovados em produção
+([`elasticidade-worker-e-sync.txt`](docs/07-evidencias/elasticidade-worker-e-sync.txt)):
+
+| # | Defeito | Como se manifestava |
+|---|---|---|
+| 31 | **Liveness probe do worker importava boto3, OpenTelemetry e o app Flask** (1,4 s de CPU a cada 30 s, com chamada ao IMDS e ao DynamoDB) | HPA preso em **6/6 réplicas por mais de 2 h** com a fila vazia; liveness dependente da AWS. Corrigido: probe de 0,1 s — o worker agora sobe 1 → 6 e volta a 1 |
+| 32 | **Sync do ArgoCD sobrescrevia as réplicas do HPA** (`ignoreDifferences` sem `RespectIgnoreDifferences`) | Todo deploy derrubava as réplicas ao valor do Git — medido: worker **6 → 1** no instante do sync. Corrigido: sync sob carga manteve as réplicas |
+| 33 | Roteiro "provava" o selfHeal escalando o `ngo-service` | Quem devolvia as 2 réplicas era o `minReplicas` do HPA, não o ArgoCD. Teste trocado: drift no `maxReplicas` do HPA, revertido pelo ArgoCD em 18 s |
+
+**O padrão:** os gates estáticos validam a **forma**. Os defeitos 18–33 só
 apareceram subindo numa conta nova e **olhando o sistema operar** — o Collector
 subia, o contador subia, e nada chegava ao APM; o Velero fazia backup, e o
 ArgoCD os apagava.

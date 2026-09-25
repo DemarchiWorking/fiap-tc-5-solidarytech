@@ -1,0 +1,86 @@
+ELASTICIDADE DO WORKER E SYNC DO GITOPS — dois defeitos achados e corrigidos em producao
+2026-09-25  ·  conta 716532857874  ·  EKS solidarytech-prod-eks  ·  us-east-1
+=======================================================================
+
+1. SINTOMA
+   O HPA do volunteer-worker ficou em 6/6 replicas por mais de 2 horas depois
+   da carga das 10:08 (pods criados por volta de 10:10, ainda de pe as 12:32),
+   com a fila vazia.
+     12:32 UTC  HPA volunteer-worker: cpu 62%/70%, 6 replicas
+                condicao: ScaleDownStabilized — "recent recommendations were
+                higher than current one"
+     kubectl top, fila vazia: 3 pods entre 54m e 103m de CPU, 3 pods em 1m
+
+2. CAUSA 1 — livenessProbe cara e dependente da AWS
+   livenessProbe: exec `python worker.py --probe`, a cada 30 s, em cada replica.
+   A checagem ficava no fim do modulo: cada probe importava boto3,
+   OpenTelemetry e o app Flask — que conecta no DynamoDB ao ser importado.
+   Medido dentro do pod:
+     probe: parede=1.72s  cpu=1.38s
+     probe: parede=1.75s  cpu=1.40s
+   E a cada probe o log registrava "Found credentials from IAM Role: LabRole" e
+   "conectado ao DynamoDB": a liveness dependia do IMDS e do DynamoDB, e podia
+   reiniciar worker saudavel numa oscilacao da AWS.
+   1,4 s de CPU a cada 30 s = ~47m por pod parado = ~47% do request de 100m.
+   Com o HPA mirando 70%, as proprias probes mantinham o worker no teto.
+
+   CORRECAO — commit af8a695: constantes e funcoes do heartbeat (so biblioteca
+   padrao) antes dos imports pesados, e o --probe sai ali. Mesmo comando no
+   manifesto: sem mudanca de YAML, sem risco de ordem entre imagem e manifesto.
+   Dois testes de regressao rodam a probe num interpretador limpo e exigem que
+   nada de boto3, botocore, opentelemetry, flask, app ou telemetry seja carregado.
+   Local: ruff 0.16.6 limpo, pytest 46/46, bandit -lll sem achados.
+   CI (push 12:52:51): Lint, Testes, SAST, Build+Trivy+push e Atualizar o GitOps
+   verdes; commit do bot 8055aa8; implantado pelo ArgoCD as 12:57:27.
+   Medido depois, no pod novo (3 execucoes):
+     probe: rc=0 parede=123ms cpu=101ms
+     probe: rc=0 parede=123ms cpu=101ms
+     probe: rc=0 parede=133ms cpu=99ms
+   14 vezes menos CPU, e nenhuma chamada a AWS.
+
+3. CAUSA 2 — o sync do ArgoCD sobrescrevia as replicas do HPA
+   Evento no instante do sync do deploy af8a695:
+     2026-09-25T12:56:56Z  Scaled down replica set volunteer-worker-67cdc56cc8 from 6 to 1
+   O ApplicationSet das aplicacoes declara ignoreDifferences em /spec/replicas,
+   mas sem RespectIgnoreDifferences=true isso so vale para o DIFF: o sync aplica
+   o manifesto inteiro, com o replicas do Git (worker 1, APIs 2). Um deploy
+   durante um pico cortaria o worker de 6 para 1 e o donation-service de 10
+   para 2 — capacidade derrubada no pior momento.
+
+   CORRECAO — commit e03d991: syncOptions += RespectIgnoreDifferences=true.
+   O app-of-apps aplicou nas 4 Applications de aplicacao as 13:00:03:
+     app-donation / app-ngo / app-volunteer / app-loadtest:
+       ["CreateNamespace=true","RespectIgnoreDifferences=true"]
+   Teste, com a carga rodando e o worker escalado pelo HPA:
+     antes do sync:  spec.replicas=3
+     sync do app-volunteer (validacao-respect-ignore-differences) Succeeded 13:01:46Z
+     depois do sync: spec.replicas=3
+
+4. ELASTICIDADE COMPROVADA NOS DOIS SENTIDOS — carga k6 disparada as 12:59:03
+     13:00:55Z  HPA New size: 2 (cpu acima do alvo)
+     13:01:40Z  HPA New size: 3
+     13:02:40Z  HPA New size: 5
+     13:03:11Z  HPA New size: 6        pico: 118% do request
+     13:04:37   k6 Complete — CPU cai para 14%, depois 3% a 9%
+                (antes da correcao, parado: ~62%)
+     13:13:57Z  Scaled down replica set volunteer-worker-6bdd95dc56 from 6 to 4
+     13:14:12Z  Scaled down replica set volunteer-worker-6bdd95dc56 from 4 to 2
+     13:14:27Z  Scaled down replica set volunteer-worker-6bdd95dc56 from 2 to 1
+                ~10 min apos a carga = stabilizationWindowSeconds 600 do HPA
+     13:26      HPA volunteer-worker: cpu 1%/70%, 1 replica (validacao-final.txt, secao F)
+
+5. SELFHEAL DO GITOPS — o teste antigo media o HPA, nao o ArgoCD
+   O roteiro escalava o ngo-service para 1 e via voltar a 2. Mas replicas e
+   ignorado pelo ArgoCD em todos os Deployments de aplicacao: quem devolvia as
+   2 replicas era o minReplicas do HPA. Teste correto, com um campo que o Git
+   declara:
+     13:00:48  kubectl -n solidary-ngo patch hpa ngo-service ... maxReplicas=3
+     maxReplicas de volta a 6 em 18 s — sync automatico do ArgoCD
+     (initiatedBy: automated, "successfully synced (all tasks run)", 13:01:04Z)
+
+LEITURA
+   Nenhum gate pegaria os dois defeitos: a probe passava, o HPA escalava para
+   cima e o ArgoCD mostrava Synced/Healthy o tempo todo. Eles so aparecem
+   medindo o sistema PARADO (um HPA que nao desce) e observando um deploy REAL
+   (o evento 6 -> 1 no instante do sync). Custo evitado: 5 replicas ociosas do
+   worker (500m de CPU e 480Mi reservados) e um corte de capacidade a cada deploy.

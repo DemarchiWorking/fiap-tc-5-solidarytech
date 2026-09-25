@@ -142,6 +142,16 @@ falha**, p95 de 7,2 ms · Datadog: 51.733 spans entregues, **0 × 403** · Veler
 backup de 914 itens e restore em 12 s · DR: plano 34/0/0. Nenhuma linha de
 código mudou entre as contas — só a configuração gerada por `configurar-repo`.
 
+A revalidação de 25/09 **mediu o sistema parado e observou um deploy real**, e
+achou três defeitos que nenhum gate pegaria — todos corrigidos e comprovados em
+produção ([`elasticidade-worker-e-sync.txt`](../07-evidencias/elasticidade-worker-e-sync.txt)):
+
+| Defeito | Efeito medido | Correção e prova |
+|---|---|---|
+| Liveness probe do worker importava boto3, OpenTelemetry e o app Flask (que conecta no DynamoDB) | 1,4 s de CPU a cada 30 s por pod: o HPA ficou **6/6 por mais de 2 h** com a fila vazia; a liveness dependia do IMDS e do DynamoDB | `--probe` antes dos imports pesados (mesmo comando no manifesto) · probe de **0,1 s** · o worker escalou 1 → 6 sob carga e **voltou a 1** em 10 min (janela de 600 s) |
+| Sync do ArgoCD sobrescrevia as réplicas do HPA (`ignoreDifferences` sem `RespectIgnoreDifferences`) | No deploy da correção acima: worker **6 → 1** no instante do sync | `RespectIgnoreDifferences=true` · sync sob carga **manteve** as réplicas |
+| O roteiro "provava" o selfHeal escalando um Deployment | Quem revertia era o `minReplicas` do HPA, não o ArgoCD | Drift no `maxReplicas` do HPA, revertido pelo ArgoCD em **18 s** |
+
 ### Evidências — Fundação
 
 ![ArgoCD com todas as Applications Synced / Healthy](../07-evidencias/f0-argocd.png)

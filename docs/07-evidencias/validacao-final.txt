@@ -3,12 +3,12 @@ Gerado por scripts/coletar-evidencias.sh
 =======================================================================
 
 === A. SESSAO ===
-  2026-09-25 10:27 UTC
+  2026-09-25 13:26 UTC
   conta 716532857874
   NLB   http://a173bbf9cd96d4f029926b4b1283fd97-8653edf64db9f672.elb.us-east-1.amazonaws.com
 
 === B. GIT ===
-  HEAD fc49a8d  ·  origin/main fc49a8d
+  HEAD e03d991  ·  origin/main e03d991
 
 === C. NOS E APLICACOES ===
   no  ip-10-0-12-4.ec2.internal        Ready    v1.34.11-eks-f4fc4f1
@@ -16,17 +16,12 @@ Gerado por scripts/coletar-evidencias.sh
   no  ip-10-0-3-99.ec2.internal        Ready    v1.34.11-eks-f4fc4f1
   solidary-donation   donation-service-fcd6b8bbb-lrxsj               Running    r=0
   solidary-donation   donation-service-fcd6b8bbb-vdzgk               Running    r=0
-  solidary-loadtest   k6-run-1790330915-czjcn                        Completed  r=0
-  solidary-ngo        ngo-service-66df6d4575-4hgtx                   Running    r=0
+  solidary-loadtest   k6-run-1790341141-7njkb                        Completed  r=0
+  solidary-ngo        ngo-service-66df6d4575-rqr44                   Running    r=0
   solidary-ngo        ngo-service-66df6d4575-vftt9                   Running    r=0
-  solidary-volunteer  volunteer-service-fd5876f89-4vpxg              Running    r=0
-  solidary-volunteer  volunteer-service-fd5876f89-5fg5f              Running    r=0
-  solidary-volunteer  volunteer-worker-67cdc56cc8-475rh              Running    r=0
-  solidary-volunteer  volunteer-worker-67cdc56cc8-6skxq              Running    r=0
-  solidary-volunteer  volunteer-worker-67cdc56cc8-8tqtl              Running    r=0
-  solidary-volunteer  volunteer-worker-67cdc56cc8-pmrjz              Running    r=0
-  solidary-volunteer  volunteer-worker-67cdc56cc8-qr78p              Running    r=0
-  solidary-volunteer  volunteer-worker-67cdc56cc8-z9w2x              Running    r=0
+  solidary-volunteer  volunteer-service-85c79d4fb7-7vx5w             Running    r=0
+  solidary-volunteer  volunteer-service-85c79d4fb7-h9n8f             Running    r=0
+  solidary-volunteer  volunteer-worker-6bdd95dc56-xqtx8              Running    r=0
 
 === D. ARGOCD ===
        15 Synced Healthy
@@ -42,7 +37,7 @@ Gerado por scripts/coletar-evidencias.sh
   solidary-donation   donation-service   cpu 1%/70%  min=2 max=10 atual=2
   solidary-ngo        ngo-service        cpu 1%/70%  min=2 max=6 atual=2
   solidary-volunteer  volunteer-service  cpu 2%/70%  min=2 max=6 atual=2
-  solidary-volunteer  volunteer-worker   cpu 82%/70%  min=1 max=6 atual=6
+  solidary-volunteer  volunteer-worker   cpu 1%/70%  min=1 max=6 atual=1
 
 === G. SLIs (Prometheus) ===
   slo:donation_disponibilidade_erro:ratio_rate5m       0
@@ -59,17 +54,20 @@ Gerado por scripts/coletar-evidencias.sh
   respostas 403 no log:   0
   payloads descartados:   0
   connector de trace metrics: ativo
-  otelcol_exporter_sent_metric_points{exporter="datadog"} 140
-  otelcol_exporter_sent_spans{exporter="datadog"} 52142
+  otelcol_exporter_sent_metric_points{exporter="datadog"} 1217
+  otelcol_exporter_sent_spans{exporter="datadog"} 160110
 
 === I. BACKUP / DR / TAGS / IAM ===
   BSL default Available
-  backups no cluster: 1
-    velero-diario-validacao-202609251016   Completed   914
-  backups no bucket solidarytech-prod-velero-857874 (us-west-2): 1
-  CostCenter=NGO-Core        44 recursos (us-east-1 + us-west-2)
-  Project=SolidaryTech       44 recursos (us-east-1 + us-west-2)
-  Environment=Production     44 recursos (us-east-1 + us-west-2)
+  backups no cluster: 4
+    velero-diario-validacao-202609251016       Completed   914
+    velero-horario-aplicacoes-20260925110054   Completed   187
+    velero-horario-aplicacoes-20260925120054   Completed   66
+    velero-horario-aplicacoes-20260925130054   Completed   148
+  backups no bucket solidarytech-prod-velero-857874 (us-west-2): 4
+  CostCenter=NGO-Core        42 recursos (us-east-1 + us-west-2)
+  Project=SolidaryTech       42 recursos (us-east-1 + us-west-2)
+  Environment=Production     42 recursos (us-east-1 + us-west-2)
   recursos do projeto com Environment != Production: 0
   recursos no state: 52
   recursos IAM:      0
@@ -77,4 +75,4 @@ Gerado por scripts/coletar-evidencias.sh
 === J. ENTREGAVEIS ===
   campos pendentes no relatorio: 1
   evidencias .txt: 16
-  evidencias .png: 0
+  evidencias .png: 6

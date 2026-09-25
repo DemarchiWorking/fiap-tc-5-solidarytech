@@ -70,6 +70,14 @@ spec:
           prune: true
         syncOptions:
           - CreateNamespace=true
+          # O ignoreDifferences acima so vale para o DIFF. Sem esta opcao, todo
+          # sync (cada deploy novo) aplica o manifesto inteiro, com o
+          # `replicas` do Git. Medido em 25/09 no deploy af8a695: o evento foi
+          # "Scaled down replica set volunteer-worker-... from 6 to 1" no
+          # instante do sync. Um deploy durante um pico cortaria o worker de 6
+          # para 1 e o donation-service de 10 para 2. Com a opcao, o sync
+          # preserva o valor vivo dos campos ignorados: o HPA segue dono.
+          - RespectIgnoreDifferences=true
         retry:
           # Os Jobs de init de banco podem falhar na primeira tentativa se o RDS
           # ainda estiver aceitando conexoes. Retry com backoff evita que o

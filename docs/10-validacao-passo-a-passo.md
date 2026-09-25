@@ -319,7 +319,7 @@ kubectl -n solidary-volunteer logs -f deploy/volunteer-worker
 **Passo 5.3** — confirme que a fila drenou:
 
 ```bash
-aws sqs get-queue-attributes --queue-url https://sqs.us-east-1.amazonaws.com/227007723638/solidarytech-prod-donation-events --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible
+aws sqs get-queue-attributes --queue-url $(aws sqs get-queue-url --queue-name solidarytech-prod-donation-events --query QueueUrl --output text) --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible
 ```
 
 Esperado: ambos em `"0"`.
@@ -594,7 +594,11 @@ aws resourcegroupstaggingapi get-resources --tag-filters Key=CostCenter,Values=N
 ```
 
 Repita para `Key=Project,Values=SolidaryTech` e
-`Key=Environment,Values=Production`. Esperado: **42** em cada.
+`Key=Environment,Values=Production`. Esperado: **o mesmo número nas três**
+(44–45 em 25/09). O total oscila entre execuções porque inclui recursos
+derivados que herdam as tags — instâncias e discos dos nós, ENIs, snapshot
+automático do RDS. O que prova o requisito é a igualdade entre as três e o
+`./solidary evidencias` (seção I) mostrar **0** com `Environment` ≠ `Production`.
 
 ### 12.2 Tags, no console
 
@@ -643,7 +647,7 @@ Termina em ~15 segundos.
 ### 13.3 Confirmar que o dado saiu do cluster
 
 ```bash
-aws s3 ls s3://solidarytech-prod-velero-723638/backups/ --recursive --human-readable | tail -10
+aws s3 ls s3://$(aws s3api list-buckets --query "Buckets[?starts_with(Name,'solidarytech-prod-velero')].Name" --output text)/backups/ --recursive --human-readable | tail -10
 ```
 
 ### 13.4 A prova do desenho sem IRSA
@@ -719,7 +723,7 @@ aws iam get-role --role-name LabRole --query 'Role.Arn' --output text
 ./solidary check
 ```
 
-Roda os cinco: política do AWS Academy (15 verificações), observabilidade (7),
+Roda os cinco: política do AWS Academy (16 verificações), observabilidade (7),
 contrato PromQL × código, workflows (5) e manifestos.
 
 ```bash
@@ -764,8 +768,8 @@ reaproveita.
 | RDS PostgreSQL | `solidarytech-prod-postgres` |
 | Fila SQS | `solidarytech-prod-donation-events` |
 | Tabela DynamoDB | `SolidaryTechVolunteers` |
-| Bucket Velero | `solidarytech-prod-velero-723638` |
-| Bucket Loki | `solidarytech-prod-loki-723638` |
-| Bucket de state | `solidarytech-tfstate-9649781b` |
+| Bucket Velero | `solidarytech-prod-velero-<6 últimos dígitos da conta>` (25/09: `…-857874`, em us-west-2) |
+| Bucket Loki | `solidarytech-prod-loki-<6 últimos dígitos da conta>` (25/09: `…-857874`) |
+| Bucket de state | `infra/environments/prod-use1/backend.hcl` (25/09: `solidarytech-tfstate-3fd524bf`) |
 | Repositórios ECR | `solidarytech/{ngo,donation,volunteer}-service` |
-| Conta | `227007723638` · região `us-east-1` |
+| Conta | `aws sts get-caller-identity` (25/09: `716532857874`) · região `us-east-1` |

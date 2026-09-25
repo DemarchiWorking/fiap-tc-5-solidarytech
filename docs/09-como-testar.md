@@ -158,7 +158,7 @@ kubectl -n solidary-volunteer logs -f deploy/volunteer-worker
 **Passo 3** — confirme que a fila drenou:
 
 ```bash
-aws sqs get-queue-attributes --queue-url https://sqs.us-east-1.amazonaws.com/227007723638/solidarytech-prod-donation-events --attribute-names ApproximateNumberOfMessages
+aws sqs get-queue-attributes --queue-url $(aws sqs get-queue-url --queue-name solidarytech-prod-donation-events --query QueueUrl --output text) --attribute-names ApproximateNumberOfMessages
 ```
 
 **Passo 4** — o contador de eventos processados:
@@ -449,7 +449,7 @@ YAML
 Termina em ~15 segundos. **Confirme que o dado saiu do cluster:**
 
 ```bash
-aws s3 ls s3://solidarytech-prod-velero-723638/backups/ --recursive --human-readable | tail -10
+aws s3 ls s3://$(aws s3api list-buckets --query "Buckets[?starts_with(Name,'solidarytech-prod-velero')].Name" --output text)/backups/ --recursive --human-readable | tail -10
 ```
 
 > Isto prova a aposta central do desenho: **sem IRSA** (o Learner Lab não deixa

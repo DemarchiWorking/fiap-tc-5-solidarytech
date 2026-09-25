@@ -27,6 +27,81 @@ import signal
 import sys
 import time
 
+# Arquivo de heartbeat: a unica forma de o Kubernetes saber que este processo
+# ainda esta vivo.
+#
+# O worker nao escuta porta nenhuma — consome SQS num laco — entao nao existe
+# httpGet para uma livenessProbe apontar. Sem probe, um travamento e INVISIVEL:
+# o pod continua Running, o Kubernetes nao reinicia nada, as mensagens se
+# acumulam na fila e o problema so aparece quando alguem repara que voluntario
+# nenhum foi notificado. E exatamente a falha silenciosa que o enunciado
+# descreve como origem do incidente de 6 horas.
+#
+# O laco toca este arquivo a cada volta; a probe confere se ele esta recente.
+HEARTBEAT = os.getenv("HEARTBEAT_FILE", "/tmp/worker-heartbeat")
+
+# Tolerancia da probe. Um ciclo normal dura no maximo WAIT_TIME_SECONDS (long
+# polling) mais o processamento do lote. 90s da folga para tres ciclos lentos
+# seguidos sem gerar reinicio por falso positivo — reiniciar um worker saudavel
+# devolve as mensagens em voo para a fila e piora a latencia que a probe
+# deveria proteger.
+HEARTBEAT_TIMEOUT = int(os.getenv("HEARTBEAT_TIMEOUT", "90"))
+
+
+def bater_heartbeat() -> None:
+    """Registra que o laco completou mais uma volta.
+
+    Escrita atomica (arquivo temporario + os.replace) de proposito: se o
+    processo morrer no meio de um write comum, a probe leria um arquivo
+    truncado e o mtime ficaria ambiguo. Com replace, ou o arquivo antigo
+    permanece intacto ou o novo aparece inteiro.
+
+    Falha ao escrever NAO derruba o worker: um /tmp cheio nao pode ser motivo
+    para parar de processar doacoes. O silencio do heartbeat ja e o sinal — a
+    probe reinicia o pod, que e o comportamento correto de qualquer forma.
+    """
+    try:
+        temporario = f"{HEARTBEAT}.tmp"
+        with open(temporario, "w", encoding="utf-8") as arquivo:
+            arquivo.write(str(time.time()))
+        os.replace(temporario, HEARTBEAT)
+    except OSError:
+        log.warning("nao foi possivel escrever o heartbeat", exc_info=True)
+
+
+def heartbeat_recente(agora: float | None = None) -> bool:
+    """Responde a pergunta da livenessProbe: o laco girou ha pouco?
+
+    Vive aqui, e nao numa linha de shell dentro do YAML, por dois motivos: da
+    para testar, e a regra de "quao velho e velho demais" fica junto da
+    constante que a define, em vez de duplicada num manifesto que ninguem
+    lembra de atualizar.
+    """
+    agora = time.time() if agora is None else agora
+    try:
+        idade = agora - os.path.getmtime(HEARTBEAT)
+    except OSError:
+        # Arquivo ainda nao existe: normal durante a inicializacao. Quem cobre
+        # essa janela e a startupProbe, com failureThreshold generoso.
+        return False
+    return idade < HEARTBEAT_TIMEOUT
+
+
+# A livenessProbe executa `python worker.py --probe` a cada 30 s em cada
+# replica, entao a resposta precisa sair AQUI — antes dos imports abaixo.
+#
+# Medido em 25/09: com a checagem no fim do arquivo, cada probe carregava
+# boto3, OpenTelemetry e o app Flask (que conecta no DynamoDB ao ser
+# importado) e custava ~1,4 s de CPU. A cada 30 s, isso da ~47m de CPU por pod
+# parado — quase metade do request de 100m. Com o HPA do worker mirando 70%,
+# a propria probe segurava as 6 replicas no ar horas depois da carga acabar.
+# E uma liveness que dependia do IMDS e do DynamoDB podia reiniciar worker
+# saudavel numa oscilacao da AWS — o oposto do que ela existe para proteger.
+#
+# Por isso os imports seguintes vem depois de codigo, de proposito.
+if __name__ == "__main__" and "--probe" in sys.argv:
+    sys.exit(0 if heartbeat_recente() else 1)
+
 import boto3
 from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import BotoCoreError, ClientError
@@ -48,26 +123,6 @@ log = configure_logging(SERVICE_NAME, VERSION)
 # fila ociosa geraria custo continuo sem processar nada.
 WAIT_TIME_SECONDS = 20
 MAX_MESSAGES = 10
-
-# Arquivo de heartbeat: a unica forma de o Kubernetes saber que este processo
-# ainda esta vivo.
-#
-# O worker nao escuta porta nenhuma — consome SQS num laco — entao nao existe
-# httpGet para uma livenessProbe apontar. Sem probe, um travamento e INVISIVEL:
-# o pod continua Running, o Kubernetes nao reinicia nada, as mensagens se
-# acumulam na fila e o problema so aparece quando alguem repara que voluntario
-# nenhum foi notificado. E exatamente a falha silenciosa que o enunciado
-# descreve como origem do incidente de 6 horas.
-#
-# O laco toca este arquivo a cada volta; a probe confere se ele esta recente.
-HEARTBEAT = os.getenv("HEARTBEAT_FILE", "/tmp/worker-heartbeat")
-
-# Tolerancia da probe. Um ciclo normal dura no maximo WAIT_TIME_SECONDS (long
-# polling) mais o processamento do lote. 90s da folga para tres ciclos lentos
-# seguidos sem gerar reinicio por falso positivo — reiniciar um worker saudavel
-# devolve as mensagens em voo para a fila e piora a latencia que a probe
-# deveria proteger.
-HEARTBEAT_TIMEOUT = int(os.getenv("HEARTBEAT_TIMEOUT", "90"))
 
 _encerrando = False
 
@@ -215,45 +270,6 @@ class DonationEventWorker:
         return removidas
 
 
-def bater_heartbeat() -> None:
-    """Registra que o laco completou mais uma volta.
-
-    Escrita atomica (arquivo temporario + os.replace) de proposito: se o
-    processo morrer no meio de um write comum, a probe leria um arquivo
-    truncado e o mtime ficaria ambiguo. Com replace, ou o arquivo antigo
-    permanece intacto ou o novo aparece inteiro.
-
-    Falha ao escrever NAO derruba o worker: um /tmp cheio nao pode ser motivo
-    para parar de processar doacoes. O silencio do heartbeat ja e o sinal — a
-    probe reinicia o pod, que e o comportamento correto de qualquer forma.
-    """
-    try:
-        temporario = f"{HEARTBEAT}.tmp"
-        with open(temporario, "w", encoding="utf-8") as arquivo:
-            arquivo.write(str(time.time()))
-        os.replace(temporario, HEARTBEAT)
-    except OSError:
-        log.warning("nao foi possivel escrever o heartbeat", exc_info=True)
-
-
-def heartbeat_recente(agora: float | None = None) -> bool:
-    """Responde a pergunta da livenessProbe: o laco girou ha pouco?
-
-    Vive aqui, e nao numa linha de shell dentro do YAML, por dois motivos: da
-    para testar, e a regra de "quao velho e velho demais" fica junto da
-    constante que a define, em vez de duplicada num manifesto que ninguem
-    lembra de atualizar.
-    """
-    agora = time.time() if agora is None else agora
-    try:
-        idade = agora - os.path.getmtime(HEARTBEAT)
-    except OSError:
-        # Arquivo ainda nao existe: normal durante a inicializacao. Quem cobre
-        # essa janela e a startupProbe, com failureThreshold generoso.
-        return False
-    return idade < HEARTBEAT_TIMEOUT
-
-
 def construir_metricas(medidor=None):
     """Cria os instrumentos do worker.
 
@@ -349,12 +365,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    # `python worker.py --probe` responde a livenessProbe: 0 se o laco girou
-    # ha menos de HEARTBEAT_TIMEOUT segundos, 1 caso contrario.
-    #
-    # A imagem nao tem curl no runtime e o worker nao sobe servidor HTTP, entao
-    # a probe e `exec`. Reusar o proprio modulo evita duplicar a regra de
-    # frescor dentro do YAML.
-    if "--probe" in sys.argv:
-        sys.exit(0 if heartbeat_recente() else 1)
+    # `python worker.py --probe` ja respondeu la em cima, antes dos imports
+    # pesados. A imagem nao tem curl no runtime e o worker nao sobe servidor
+    # HTTP, entao a probe e `exec`; reusar o proprio modulo evita duplicar a
+    # regra de frescor dentro do YAML.
     sys.exit(main())

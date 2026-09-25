@@ -11,6 +11,9 @@ O foco esta em duas propriedades que, se quebrarem, falham em silencio:
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -259,6 +262,49 @@ def test_falha_de_escrita_nao_derruba_o_worker(heartbeat_isolado, monkeypatch):
 
     monkeypatch.setattr("builtins.open", escrita_falha)
     modulo.bater_heartbeat()  # nao pode levantar
+
+
+# Regressao de 25/09: a livenessProbe roda `python worker.py --probe` a cada
+# 30 s em cada replica. Quando a checagem ficava no fim do modulo, cada probe
+# importava boto3, OpenTelemetry e o app Flask — que conecta no DynamoDB ao ser
+# importado — e custava ~1,4 s de CPU: o bastante para o HPA de CPU do worker
+# nunca descer do maximo depois de uma carga. O teste roda a probe num
+# interpretador LIMPO (o deste processo ja tem tudo importado) e confere o que
+# foi carregado.
+_PASTA_DO_SERVICO = os.path.dirname(os.path.abspath(__file__))
+_PROBE_ISOLADA = (
+    "import runpy, sys\n"
+    "sys.argv = ['worker.py', '--probe']\n"
+    "try:\n"
+    "    runpy.run_path('worker.py', run_name='__main__')\n"
+    "except SystemExit as fim:\n"
+    "    pesados = ('boto3', 'botocore', 'opentelemetry', 'flask', 'app', 'telemetry')\n"
+    "    print(fim.code, sorted(m for m in pesados if m in sys.modules))\n"
+)
+
+
+def _rodar_probe(arquivo_de_heartbeat):
+    ambiente = {**os.environ, "HEARTBEAT_FILE": str(arquivo_de_heartbeat)}
+    resultado = subprocess.run(
+        [sys.executable, "-c", _PROBE_ISOLADA],
+        cwd=_PASTA_DO_SERVICO,
+        env=ambiente,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return resultado.stdout.strip()
+
+
+def test_probe_com_batimento_recente_aprova_sem_importar_dependencias(tmp_path):
+    batimento = tmp_path / "worker-heartbeat"
+    batimento.write_text("0", encoding="utf-8")
+    assert _rodar_probe(batimento) == "0 []"
+
+
+def test_probe_sem_batimento_reprova_sem_importar_dependencias(tmp_path):
+    assert _rodar_probe(tmp_path / "inexistente") == "1 []"
 
 
 # ---------------------------------------------------------------------------

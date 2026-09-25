@@ -28,7 +28,7 @@ ambiente **destruído e recriado do zero** numa conta de Learner Lab nova
 | **FinOps** | 42 recursos com as 3 tags · **0** com `Environment` ≠ `Production` · forecast **US$ 202,74/mês** |
 | **DevSecOps** | **0 HIGH/CRITICAL** nas 3 imagens e nas dependências · gitleaks: 0 no histórico |
 | **Segurança de rede** | pods expostos que não usam AWS (`ngo-service`, Grafana) **sem acesso ao IMDS** — testado de dentro |
-| **CI** | os 9 passos da *Validação* reproduzidos localmente e verdes (`./solidary check` agora inclui os links) |
+| **CI/CD na conta nova** | 5 pipelines verdes (25/09 00:15 UTC): CI dos 3 serviços publicou no ECR e commitou no GitOps, ArgoCD implantou; *Validação* verde; `terraform plan` na CI: **No changes** |
 | **Rubrica** | `./solidary rubrica` → **34 ok**, 2 pendentes (prints e link do vídeo), **0 faltando** |
 
 **O que falta é apresentação e três ações que exigem a sua conta** (GitHub,
@@ -40,8 +40,7 @@ Datadog, gravação). A engenharia está validada no ambiente real.
 
 | # | Item | Tempo | Por que importa |
 |---|---|---|---|
-| 1 | **`gh auth login`** e depois `./solidary sync-creds` | 3 min | Sem isso a CI não publica no ECR da conta nova — e a demo "pipelines rodando" precisa dela |
-| 2 | Disparar as pipelines (`./solidary publicar-imagens` + Actions → *Validação* e *Terraform* → *Run workflow*) | 15 min | CI verde, imagem nova no ECR e commit do `update-gitops` — é o que o vídeo mostra |
+| 1–2 | ~~`gh auth login`, `sync-creds` e pipelines~~ | feito | 25/09 00:15 UTC — **só repita numa sessão nova do lab** (os secrets expiram com ela): `./solidary sync-creds` e `./solidary publicar-imagens` |
 | 3 | **Prints** (10, lista abaixo) | ~30 min | O PDF mostra uma caixa vermelha "EVIDÊNCIA PENDENTE" onde falta print |
 | 4 | **Watchdog** — criar o *Watchdog monitor* e capturar a tela | 5 min | Fecha o AIOps (F3.1). Ver a observação sobre linha de base abaixo |
 | 5 | **Vídeo** (15–20 min) — [`docs/roteiro-video.md`](docs/roteiro-video.md) | — | Entregável obrigatório |
@@ -64,7 +63,7 @@ sozinho.
 | Arquivo | Onde |
 |---|---|
 | `f0-argocd.png` | `<NLB>/argocd/` — 15 Applications `Synced`/`Healthy` |
-| `f0-pipeline-verde.png` | GitHub → Actions → execução verde (depois dos itens 1 e 2) |
+| `f0-pipeline-verde.png` | GitHub → Actions → *CI — donation-service* de 25/09 (5 jobs verdes, inclusive push e GitOps) |
 | `f0-pods-running.png` | `kubectl get pods -A \| grep solidary` |
 | `f0-trace-distribuido.png` | Datadog (app.datadoghq.com) → APM → Traces |
 | `f1-dashboard-sre.png` | Grafana → *SRE: SLOs e Error Budget* (**rode a carga antes**) |

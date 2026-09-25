@@ -61,6 +61,11 @@ A chave do Datadog **não** é digitada: o deploy a lê do cofre (ADR-014).
 
 ## 3 · Pipelines na conta nova — ~15 min *(demo "CI/CD rodando")*
 
+> Já feito em 25/09 00:15 UTC (5 pipelines verdes). Repita **só numa sessão
+> nova do lab** — os secrets AWS no GitHub expiram junto com a sessão. Sem o
+> celular para o `gh auth login`: o `gh` aceita a credencial que o Git já usa
+> nesta máquina (`git credential fill` → `gh auth login --with-token`, por pipe).
+
 No terminal do Windows (onde o `gh` está instalado):
 
 ```bash

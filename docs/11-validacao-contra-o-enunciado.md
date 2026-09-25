@@ -31,7 +31,7 @@ pontos. Não basta configurar; é preciso mostrar operando na prática."*
 | Terraform provisionando **cluster, bancos, mensageria e rede** | ✅ | EKS, RDS, DynamoDB, SQS+DLQ, VPC — 0 recurso IAM | `terraform -chdir=infra/environments/prod-use1 state list` |
 | Pipelines com **testes** | ✅ | lint ‖ testes (Go com `-race`, pytest) | `.github/workflows/ci-servico.yml` |
 | **SAST/SCA** (Trivy/Sonar) | ✅ | gosec + bandit (SAST) · Trivy em dependências e imagem, CRITICAL bloqueia · SBOM | [`devsecops-auditoria.txt`](07-evidencias/devsecops-auditoria.txt) |
-| **Construção da imagem** | 🟨 | O job existe e rodou verde em 10/09; na conta nova as imagens foram publicadas pela máquina de build (sem `gh` autenticado) | [`AMANHA.md`](../AMANHA.md) passo 3 |
+| **Construção da imagem** | ✅ | CI dos 3 serviços na conta nova, 25/09 00:15 UTC: build → Trivy → push no ECR → commit do bot no GitOps (`deploy(...): 0e03a49`) → ArgoCD implantou; `terraform plan` na CI: *No changes* | [Actions](https://github.com/DemarchiWorking/fiap-tc-5-solidarytech/actions) |
 | GitOps com ArgoCD/FluxCD | ✅ | App-of-Apps · `selfHeal` e `prune` · 15 Applications | `kubectl -n argocd get applications` |
 | Prometheus, Grafana, Loki e/ou OpenTelemetry **rodando** | ✅ | todos no ar; dois OTel Collectors | `./solidary evidencias` → G |
 | APM (Datadog/New Relic) com **Distributed Tracing** | ✅ | chave validada · 0 × 403 · spans e trace metrics subindo · trace atravessa o SQS | [`apm-datadog.txt`](07-evidencias/apm-datadog.txt) |
@@ -91,8 +91,8 @@ pontos. Não basta configurar; é preciso mostrar operando na prática."*
 código ou de infraestrutura.
 
 **Pendente — só o grupo pode fazer** (sequência em [`AMANHA.md`](../AMANHA.md)):
-autenticar o `gh` e rodar as pipelines na conta nova · Watchdog monitor ·
-10 prints · vídeo · link do vídeo no PDF.
+Watchdog monitor · 10 prints · vídeo · link do vídeo no PDF. As pipelines já
+rodaram verdes na conta nova (25/09).
 
 **Como refazer esta validação** com o ambiente no ar:
 

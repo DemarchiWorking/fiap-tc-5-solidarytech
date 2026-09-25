@@ -23,10 +23,12 @@ ambiente **destruído e recriado do zero** numa conta de Learner Lab nova
 | **SLIs** | taxa de erro **0** · p95 **4,8 ms** · frescor **0** · error budget **100%** |
 | **Observabilidade** | 27 alvos no Prometheus, **0 down** |
 | **APM (Datadog)** | chave **no cofre**, validada (site US1) · **0 respostas 403** · trace metrics ativas |
-| **Backup** | BSL `Available` em `us-west-2` · backup `Completed` (203 itens) · ArgoCD não apaga mais |
+| **Backup e restore** | manifestos + **3 volumes** (`Completed`, 471 itens) · **restore executado**: PVC recuperado do snapshot em 13 s |
 | **DR — Opção B** | `plan` da região espelho: **34 a criar, 0 a alterar, 0 a destruir** |
 | **FinOps** | 42 recursos com as 3 tags · **0** com `Environment` ≠ `Production` · forecast **US$ 202,74/mês** |
 | **DevSecOps** | **0 HIGH/CRITICAL** nas 3 imagens e nas dependências · gitleaks: 0 no histórico |
+| **Segurança de rede** | pods expostos que não usam AWS (`ngo-service`, Grafana) **sem acesso ao IMDS** — testado de dentro |
+| **CI** | os 9 passos da *Validação* reproduzidos localmente e verdes (`./solidary check` agora inclui os links) |
 | **Rubrica** | `./solidary rubrica` → **34 ok**, 2 pendentes (prints e link do vídeo), **0 faltando** |
 
 **O que falta é apresentação e três ações que exigem a sua conta** (GitHub,
@@ -122,9 +124,10 @@ sozinho.
 | Item | Estado | Evidência |
 |---|---|---|
 | PCN com RTO/RPO | ✅ | [`pcn.md`](docs/06-dr-pcn/pcn.md) |
-| Opção A — Velero cross-region | ✅ | backup `Completed`, bucket em `us-west-2` |
+| Opção A — Velero cross-region | ✅ | manifestos e volumes + **restore executado** · [`dr-velero-backup-restore.txt`](docs/07-evidencias/dr-velero-backup-restore.txt) |
 | Opção B — warm standby por Terraform | ✅ | [`dr-plano-regiao-secundaria.txt`](docs/07-evidencias/dr-plano-regiao-secundaria.txt) |
 | Segredos fora do Git **e fora do terminal** | ✅ | RDS e Datadog no Secrets Manager (ADR-014) |
+| NetworkPolicies com menor privilégio | ✅ | IMDS bloqueado para quem não usa AWS; RDS privado; S3 sem acesso público |
 | Conformidade AWS Academy | ✅ | 0 IAM · LabRole por data source · 16 verificações |
 
 ---
@@ -168,8 +171,12 @@ Nenhum deles aparecia em gate, revisão de código ou `kubectl get`.
 | 24 | **Sem trace metrics** (`DisableAPMStats` na 0.159) | Watchdog sem métricas para analisar |
 | 25 | Contador de spans "enviados" usado como prova | 51.705 "enviados" com todo payload recusado |
 | 26 | Chave do APM em `export`, `ps` e `.env.local` | `chmod 600` vira **777** em `/mnt/c` — proteção anunciada não existia |
+| 27 | **`ngo-service` alcançava o IMDS** | API pública e sem autenticação a um passo da credencial da conta |
+| 28 | **Grafana exposto sem NetworkPolicy** | SSRF pelo proxy de datasources até o IMDS |
+| 29 | `commonLabels` nos seletores | NetworkPolicy aplicada e sem efeito, em silêncio |
+| 30 | Verificador de links só na CI | CI vermelha duas vezes com os gates locais verdes |
 
-**O padrão:** os gates estáticos validam a **forma**. Os defeitos 18–26 só
+**O padrão:** os gates estáticos validam a **forma**. Os defeitos 18–30 só
 apareceram subindo numa conta nova e **olhando o sistema operar** — o Collector
 subia, o contador subia, e nada chegava ao APM; o Velero fazia backup, e o
 ArgoCD os apagava.
@@ -192,6 +199,7 @@ ArgoCD os apagava.
 
 | Seção | Documento |
 |---|---|
+| **Validação contra o enunciado** | [`docs/11-validacao-contra-o-enunciado.md`](docs/11-validacao-contra-o-enunciado.md) |
 | Relatório (E3) | [`RELATORIO-DE-ENTREGA.md`](docs/relatorio/RELATORIO-DE-ENTREGA.md) → `RELATORIO-FASE5.pdf` |
 | SLI / SLO / SLA | [`docs/03-sre/sli-slo-sla.md`](docs/03-sre/sli-slo-sla.md) |
 | PCN com RTO e RPO | [`docs/06-dr-pcn/pcn.md`](docs/06-dr-pcn/pcn.md) |
@@ -239,6 +247,10 @@ arquivar o state local do bootstrap, `make bootstrap`, `./solidary datadog`,
   que não existe mais, e nenhum recurso deste projeto usa SSH. Privado, o link do
   repositório pararia de funcionar para a banca. Se quiser purgar mesmo assim:
   `git filter-repo` + `push --force` — decisão sua, reescreve o histórico.
+- **Login no Grafana e no ArgoCD**: as duas ferramentas respondem por HTTP (o lab
+  não dá domínio para TLS), então a senha trafega sem cifra. Fora de rede
+  confiável, entre por túnel autenticado pelo IAM:
+  `kubectl -n argocd port-forward svc/argocd-server 8080:80` → <http://localhost:8080/argocd>.
 - **`labsuser.pem` na raiz do projeto**: está no `.gitignore` e nunca foi
   versionada, mas vai junto em qualquer `.zip` da pasta. Mova para fora
   (por exemplo, `~/.ssh/`).

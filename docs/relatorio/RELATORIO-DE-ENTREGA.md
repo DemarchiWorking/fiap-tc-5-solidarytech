@@ -101,7 +101,7 @@ como `decimal.Decimal` e o encoder JSON do Flask não serializa esse tipo.
 
 Antes da entrega, o ambiente foi **destruído e recriado do zero numa conta de
 Learner Lab diferente** — a prova mais dura de que tudo é código. A auditoria
-e a própria subida encontraram doze defeitos, nenhum visível para os gates:
+e a própria subida encontraram dezesseis defeitos, nenhum visível para os gates:
 
 | Defeito | Efeito | Correção |
 |---|---|---|
@@ -117,6 +117,10 @@ e a própria subida encontraram doze defeitos, nenhum visível para os gates:
 | **Sem trace metrics**: na versão 0.159 o exporter não as calcula (`DisableAPMStats`) | Watchdog sem métricas para analisar | `datadog/connector` + pipeline dedicado |
 | Contador de spans "enviados" usado como prova de entrega | 51.705 "enviados" com todo payload recusado | Prova = chave validada + 0 × 403 + contador |
 | Chave do APM em `export`, `--from-literal` e `.env.local` (`chmod 600` vira 777 em `/mnt/c`) | Chave no histórico, em `ps` e em disco | **Cofre** (Secrets Manager) — ADR-014 |
+| **`ngo-service` alcançava o IMDS** (policy copiada do donation) | API pública e sem autenticação a um passo da credencial da LabRole | Saída só para DNS, Collector e banco — medido: IMDS e internet bloqueados |
+| **Grafana exposto e sem NetworkPolicy** | SSRF pelo proxy de datasources até o IMDS | Policy que bloqueia só o IMDS — medido: bloqueado, datasources ok |
+| `commonLabels` injetava labels no `podSelector` | Policy aplicada e sem efeito, em silêncio | `labels` com `includeSelectors: false` |
+| Verificador de links só existia na CI | CI vermelha duas vezes com os gates locais verdes | Um script só, chamado pela CI e pelo `./solidary check` |
 
 Os dois defeitos do smoke se escondiam mutuamente: com o healthcheck quebrado,
 o teste nunca chegava ao hot path, onde o segundo estava. E os quatro do
@@ -385,12 +389,44 @@ CI (OIDC bloqueado) · nós em subnet pública (decisão de custo revertível po
 variável) · cofre do APM sem IAM granular — quem tem a sessão da conta lê o
 segredo; em produção, role dedicada + External Secrets Operator (ADR-014).
 
-**Medido em 24/09:** backup storage location `Available` no bucket de
-`us-west-2`; backup horário `Completed` com 203 itens; plano da região
-espelho **34 a criar, 0 a alterar, 0 a destruir**, com as mesmas tags
-([`dr-plano-regiao-secundaria.txt`](../07-evidencias/dr-plano-regiao-secundaria.txt)).
-O restore ainda não foi exercitado de ponta a ponta — o procedimento está no
-[runbook de DR](../06-dr-pcn/runbook-dr.md).
+**Medido em 24/09 — Opção A em ação, e não só configurada:**
+
+| Etapa | Resultado |
+|---|---|
+| Backup (schedule diário: manifestos **e volumes**) | `Completed` · 471/471 itens · **3/3 snapshots de volume** · 11 s |
+| Manifestos | `tar.gz` de 683 KB no bucket de **us-west-2** (outra região) |
+| Volumes | 3 snapshots EBS cifrados (Prometheus, Grafana, Alertmanager) |
+| **Restore executado** | PVC do Prometheus recuperado do snapshot num namespace isolado: `Completed`, **PVC `Bound` em 13 s**, volume EBS novo criado a partir do snapshot |
+| Limpeza do drill | namespace e volume do drill removidos — sem custo órfão |
+
+Os snapshots de volume são **regionais** (us-east-1) e os manifestos, cross-region.
+Os volumes do cluster são só de observabilidade; o dado de doação vive no RDS,
+com PITR. Em produção: node-agent do Velero ou cópia dos snapshots pelo AWS
+Backup ([`dr-velero-backup-restore.txt`](../07-evidencias/dr-velero-backup-restore.txt)).
+
+**Opção B:** plano da região espelho **34 a criar, 0 a alterar, 0 a destruir**,
+com as mesmas tags ([`dr-plano-regiao-secundaria.txt`](../07-evidencias/dr-plano-regiao-secundaria.txt)).
+
+### Revisão de segurança da superfície exposta (24/09)
+
+Sem IRSA, a credencial da LabRole está no IMDS de cada nó, e a NetworkPolicy é
+a única barreira entre um pod comprometido e a conta AWS. A revisão testou de
+dentro dos pods — pedindo só o *token* do IMDSv2, nunca a credencial:
+
+| Superfície | Antes | Depois |
+|---|---|---|
+| `ngo-service` (API pública, sem autenticação, não usa AWS) | IMDS **200** · internet liberada | IMDS **bloqueado** · internet **bloqueada** · banco e API ok |
+| Grafana (exposto, sem NetworkPolicy) | IMDS alcançável pelo proxy de datasources | IMDS **bloqueado** · Prometheus, Loki e API do K8s ok |
+| `donation` / `volunteer` (precisam de SQS e DynamoDB) | IMDS liberado | mantido — sem IRSA, é a fonte da credencial |
+| Grafana e ArgoCD sem sessão | — | 401 nas APIs; Grafana sem acesso anônimo |
+| Security groups | — | abertos à internet só nas NodePorts do ingress |
+| RDS · buckets S3 | — | RDS não público e cifrado · 3 buckets com bloqueio público total |
+
+**Risco residual declarado:** Grafana e ArgoCD respondem por **HTTP** (sem
+domínio para TLS no lab) — o login deve ser feito por `kubectl port-forward`
+fora de rede confiável; endpoint do EKS público, autenticado por IAM; APIs sem
+autenticação (ADR-008). Em produção: ACM + TLS no NLB, SSO nas ferramentas de
+administração e ferramentas internas atrás de VPN ou SSM.
 
 ### Evidências — DR
 

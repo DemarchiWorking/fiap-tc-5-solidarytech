@@ -134,6 +134,7 @@ na fila** — nenhuma doação se perde.
 | [Como subir — checklist e troubleshooting](COMO-SUBIR.md) | operação |
 | [Enunciado transcrito](docs/00-enunciado/README.md) | — |
 | [**Matriz de requisitos × evidências**](docs/01-requisitos-e-criterios-de-aceitacao.md) | checklist de nota |
+| [**Validação contra o enunciado**](docs/11-validacao-contra-o-enunciado.md) — cada exigência do coordenador e a prova em execução | **visão da banca** |
 | [Arquitetura](docs/02-arquitetura/README.md) e [ADRs 001–014](docs/02-arquitetura/adr/README.md) | — |
 | [**Evolução v3 → v4 → v5**](docs/02-arquitetura/evolucao-v3-v4-v5.md) | Regra de Ouro |
 | [**SLI, SLO, SLA e Error Budget**](docs/03-sre/sli-slo-sla.md) · [Chaos drill / MTTR](docs/03-sre/mttr-chaos-drill.md) | **F1** |

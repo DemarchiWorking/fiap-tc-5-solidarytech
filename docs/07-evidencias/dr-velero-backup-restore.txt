@@ -1,0 +1,59 @@
+DR — OPCAO A (VELERO): BACKUP DE MANIFESTOS E VOLUMES + RESTORE EXECUTADO
+2026-09-24 23:47 UTC  ·  conta 722616916018
+=======================================================================
+
+Enunciado: "configure o Velero no Kubernetes para fazer backup do estado do
+cluster (manifestos e volumes) para um bucket externo".
+
+1. BACKUP — execucao do schedule diario (o que inclui volumes), disparada para
+   validacao: o ambiente foi recriado as 20:30 UTC e o horario das 03:00 ainda
+   nao tinha passado nesta conta.
+   backup:     velero-diario-validacao-202609242344
+   namespaces: ["solidary-ngo","solidary-donation","solidary-volunteer","monitoring","argocd"]
+   fase:       Completed
+   itens:      471/471
+   snapshots:  3/3
+   inicio/fim: 2026-09-24T23:44:24Z -> 2026-09-24T23:44:35Z
+   expira:     2026-10-24T23:44:24Z
+
+2. MANIFESTOS — no bucket externo, em OUTRA regiao (us-west-2)
+        4209  velero-backup.json
+          27  velero-diario-validacao-202609242344-itemoperations.json.gz
+       29240  velero-diario-validacao-202609242344-logs.gz
+          29  velero-diario-validacao-202609242344-podvolumebackups.json.gz
+        3368  velero-diario-validacao-202609242344-resource-list.json.gz
+          49  velero-diario-validacao-202609242344-results.gz
+         443  velero-diario-validacao-202609242344-volumeinfo.json.gz
+         402  velero-diario-validacao-202609242344-volumesnapshots.json.gz
+      682938  velero-diario-validacao-202609242344.tar.gz
+
+3. VOLUMES — snapshots EBS dos PVCs (cifrados), na regiao do volume (us-east-1)
+   snap-069485490bcc1ca95    2 GiB  completed  cifrado=True  kube-prometheus-stack-grafana
+   snap-0678012d4743968c9   10 GiB  completed  cifrado=True  prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0
+   snap-03b74ef041ef72b06    1 GiB  completed  cifrado=True  alertmanager-kube-prometheus-stack-alertmanager-db-alertmanager-kube-prometheus-stack-alertmanager-0
+
+4. RESTORE EXECUTADO — PVC do Prometheus recuperado do snapshot, num namespace
+   isolado (dr-drill-restore), sem tocar em producao
+   restore:    drill-volume-prometheus-234614  (backup velero-diario-validacao-202609242344)
+   fase:       Completed
+   itens:      3/3   erros:    avisos: 1
+   inicio/fim: 2026-09-24T23:46:17Z -> 2026-09-24T23:46:21Z
+   aviso (lido em restores/drill-volume-prometheus-234614/...-results.gz no bucket):
+     - failed to list stub VolumeGroupSnapshotContents: no matches for kind "VolumeGroupSnapshotContent" in version "groupsnapshot.storage.k8s.io/v1beta2"
+     (benigno: CRD de snapshot em grupo que o cluster nao usa)
+   PVC restaurado: Bound 10Gi  ->  PV velero-clone-e667bb7b-5cbb-4e54-9269-5c5d8e4b0818
+   volume EBS novo vol-0e5cc0c0a03bb0f44, criado A PARTIR de snap-0678012d4743968c9 (10 GiB, cifrado=True, us-east-1a)
+   tempo medido do restore ate o PVC Bound: 13 s
+
+5. LIMPEZA DO DRILL — o volume criado pelo restore nao pode virar custo orfao
+   namespace dr-drill-restore: removido (a primeira leitura pegou o namespace ainda
+   em Terminating; reconferido: NotFound, e nenhum PV velero-clone restante)
+   volume vol-0e5cc0c0a03bb0f44: apagado (NotFound)
+
+LEITURA
+   Manifestos: bucket externo em us-west-2 — sobrevivem a falha da regiao.
+   Volumes: snapshot EBS em us-east-1 — recuperados de fato (item 4), mas
+   REGIONAIS. Os volumes do cluster sao so de observabilidade (Prometheus,
+   Grafana, Alertmanager); o dado de doacao vive no RDS, com PITR (PCN).
+   Em producao: node-agent do Velero (backup de volume para o bucket
+   cross-region) ou copia dos snapshots para us-west-2 pelo AWS Backup.

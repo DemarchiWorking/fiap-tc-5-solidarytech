@@ -3,12 +3,12 @@ Gerado por scripts/coletar-evidencias.sh
 =======================================================================
 
 === A. SESSAO ===
-  2026-09-24 23:20 UTC
+  2026-09-24 23:59 UTC
   conta 722616916018
   NLB   http://a863353274daa41cba5c5d7f255f497f-bc648a711b65f224.elb.us-east-1.amazonaws.com
 
 === B. GIT ===
-  HEAD 14c82c3  ·  origin/main 14c82c3
+  HEAD 83760f8  ·  origin/main d4a7a1d
 
 === C. NOS E APLICACOES ===
   no  ip-10-0-18-228.ec2.internal      Ready    v1.34.11-eks-f4fc4f1
@@ -16,8 +16,8 @@ Gerado por scripts/coletar-evidencias.sh
   no  ip-10-0-7-144.ec2.internal       Ready    v1.34.11-eks-f4fc4f1
   solidary-donation   donation-service-65675c5885-2v9m4              Running    r=0
   solidary-donation   donation-service-65675c5885-4sv5r              Running    r=0
-  solidary-loadtest   k6-run-1790289375-cd572                        Completed  r=0
   solidary-loadtest   k6-run-1790291522-ljsfr                        Completed  r=0
+  solidary-loadtest   k6-run-1790294054-bh87p                        Completed  r=0
   solidary-ngo        ngo-service-6d99c95c78-khglm                   Running    r=0
   solidary-ngo        ngo-service-6d99c95c78-qhntm                   Running    r=0
   solidary-volunteer  volunteer-service-696ff69dcb-f5vd2             Running    r=0
@@ -40,14 +40,14 @@ Gerado por scripts/coletar-evidencias.sh
   POST /donations  HTTP 201
 
 === F. ELASTICIDADE (HPA) ===
-  solidary-donation   donation-service   cpu 1%/70%  min=2 max=10 atual=2
-  solidary-ngo        ngo-service        cpu 1%/70%  min=2 max=6 atual=2
+  solidary-donation   donation-service   cpu 16%/70%  min=2 max=10 atual=2
+  solidary-ngo        ngo-service        cpu 2%/70%  min=2 max=6 atual=2
   solidary-volunteer  volunteer-service  cpu 2%/70%  min=2 max=6 atual=2
-  solidary-volunteer  volunteer-worker   cpu 39%/70%  min=1 max=6 atual=6
+  solidary-volunteer  volunteer-worker   cpu 45%/70%  min=1 max=6 atual=6
 
 === G. SLIs (Prometheus) ===
   slo:donation_disponibilidade_erro:ratio_rate5m       0
-  slo:donation_latencia:p95                            0.004809712145814303
+  slo:donation_latencia:p95                            0.004800765499426164
   slo:donation_frescor_erro:ratio_rate1h               0
   slo:donation_disponibilidade:error_budget_restante   1
   alvos do Prometheus ativos                           27
@@ -60,14 +60,15 @@ Gerado por scripts/coletar-evidencias.sh
   respostas 403 no log:   0
   payloads descartados:   0
   connector de trace metrics: ativo
-  otelcol_exporter_sent_metric_points{exporter="datadog"} 53
-  otelcol_exporter_sent_spans{exporter="datadog"} 52228
+  otelcol_exporter_sent_metric_points{exporter="datadog"} 288
+  otelcol_exporter_sent_spans{exporter="datadog"} 105499
 
 === I. BACKUP / DR / TAGS / IAM ===
   BSL default Available
-  backups no cluster: 1
+  backups no cluster: 2
+    velero-diario-validacao-202609242344       Completed   471
     velero-horario-aplicacoes-20260924230024   Completed   203
-  backups no bucket solidarytech-prod-velero-916018 (us-west-2): 3
+  backups no bucket solidarytech-prod-velero-916018 (us-west-2): 4
   CostCenter=NGO-Core        42 recursos (us-east-1 + us-west-2)
   Project=SolidaryTech       42 recursos (us-east-1 + us-west-2)
   Environment=Production     42 recursos (us-east-1 + us-west-2)
@@ -77,5 +78,5 @@ Gerado por scripts/coletar-evidencias.sh
 
 === J. ENTREGAVEIS ===
   campos pendentes no relatorio: 1
-  evidencias .txt: 15
+  evidencias .txt: 16
   evidencias .png: 0

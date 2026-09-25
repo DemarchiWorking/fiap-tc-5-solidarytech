@@ -313,7 +313,7 @@ aws dynamodb describe-table --table-name SolidaryTechVolunteers --query 'Table.{
 **Passo 5.2** — veja o worker consumir:
 
 ```bash
-kubectl -n solidary-volunteer logs -f deploy/volunteer-worker
+kubectl -n solidary-volunteer logs -f -l app=volunteer-worker --prefix --max-log-requests=6
 ```
 
 **Passo 5.3** — confirme que a fila drenou:

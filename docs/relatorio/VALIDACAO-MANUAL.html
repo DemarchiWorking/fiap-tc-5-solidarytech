@@ -166,7 +166,7 @@
     <div><span>Projeto</span><b>SolidaryTech: plataforma de doações para ONGs</b></div>
     <div><span>Versão · Data</span><b>1.0 · 25/09/2026</b></div>
     <div><span>Ambiente de referência</span><b>AWS Academy Learner Lab · conta 716532857874 · us-east-1</b></div>
-    <div><span>Última execução completa</span><b>25/09/2026 10:50 UTC · 48/48 verificações OK</b></div>
+    <div><span>Última execução completa</span><b>25/09/2026 12:03 UTC · 48/48 verificações OK</b></div>
     <div><span>Integrantes</span><b>Leonardo Alves Freitas (rm369434)<br>Antonio Eduardo Silveira Demarchi (rm370045)</b></div>
     <div><span>Repositório</span><b>github.com/DemarchiWorking/fiap-tc-5-solidarytech</b></div>
   </div>
@@ -558,10 +558,10 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/donations -H 'Content-Typ
 <pre>curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/volunteers -H 'Content-Type: application/json' -d '{"ngo_id":1,"name":"Joao Souza","email":"joao@exemplo.org","skills":["logistica"]}'
 curl -s $BASE/volunteers/1</pre></li>
         <li><b>Fluxo assíncrono:</b> a doação do passo 2 gera um evento na SQS, consumido pelo worker:
-<pre>kubectl -n solidary-volunteer logs deploy/volunteer-worker --since=5m | tail -5
+<pre>kubectl -n solidary-volunteer logs -l app=volunteer-worker --prefix --since=5m | tail -5
 aws sqs get-queue-attributes --queue-url $(aws sqs get-queue-url --queue-name solidarytech-prod-donation-events --query QueueUrl --output text) --attribute-names ApproximateNumberOfMessages RedrivePolicy</pre></li>
       </ol>
-      <div class="esperado">ONG: JSON com <code>id</code> (201); e-mail inválido: <b>400</b>. Doação: <b>201</b>; inválida: <b>400</b>. Voluntário: <b>201</b>; listagem: <b>200</b>. Worker registra o processamento; fila com <code>ApproximateNumberOfMessages = 0</code> (drenada) e DLQ com <code>maxReceiveCount = 3</code>.</div>
+      <div class="esperado">ONG: JSON com <code>id</code> (201); e-mail inválido: <b>400</b>. Doação: <b>201</b>; inválida: <b>400</b>. Voluntário: <b>201</b>; listagem: <b>200</b>. O worker registra o processamento (<code>-l app=volunteer-worker --prefix</code> lê <b>todas</b> as réplicas: <code>logs deploy/…</code> lê só uma e, com 6 réplicas, costuma não mostrar a doação); fila com <code>ApproximateNumberOfMessages = 0</code> (drenada) e DLQ com <code>maxReceiveCount = 3</code>.</div>
       <div class="falha"><code>HTTP 000</code> = timeout, não erro da aplicação: confira <code>$BASE</code> (sessão nova, NLB novo) e se o DNS do NLB já propagou (até 3 min após a subida).</div>
       <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
     </div>
@@ -578,7 +578,7 @@ kubectl -n solidary-volunteer get pods -l app=volunteer-worker -w</pre></li>
         <li>Confirme que o metrics-server responde:
 <pre>kubectl top nodes</pre></li>
       </ol>
-      <div class="esperado">4 HPAs, nenhum com <code>&lt;unknown&gt;</code>. O <code>volunteer-worker</code> escala de <b>1 para 6</b> réplicas no pico e volta depois.</div>
+      <div class="esperado">4 HPAs, nenhum com <code>&lt;unknown&gt;</code>. O <code>volunteer-worker</code> escala de <b>1 para 6</b> réplicas no pico (medido em 25/09).</div>
       <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
     </div>
   </div>

@@ -88,9 +88,14 @@ echo "Perfil:      $PERFIL"
 echo "Access Key:  ${ACCESS_KEY:0:4}****${ACCESS_KEY: -4}"
 echo
 
-gh secret set AWS_ACCESS_KEY_ID     --repo "$REPO" --body "$ACCESS_KEY"
-gh secret set AWS_SECRET_ACCESS_KEY --repo "$REPO" --body "$SECRET_KEY"
-[[ -n "$SESSION_TOKEN" ]] && gh secret set AWS_SESSION_TOKEN --repo "$REPO" --body "$SESSION_TOKEN"
+# Valor por STDIN, e nao por --body. Com --body o segredo vira argumento do
+# processo `gh` e aparece na lista de processos (ps, Gerenciador de Tarefas)
+# enquanto ele roda. printf e builtin do bash: nao cria processo com o valor
+# na linha de comando. Mesmo principio do configurar-datadog.sh (ADR-014).
+printf '%s' "$ACCESS_KEY" | gh secret set AWS_ACCESS_KEY_ID     --repo "$REPO"
+printf '%s' "$SECRET_KEY" | gh secret set AWS_SECRET_ACCESS_KEY --repo "$REPO"
+[[ -n "$SESSION_TOKEN" ]] && printf '%s' "$SESSION_TOKEN" | gh secret set AWS_SESSION_TOKEN --repo "$REPO"
+unset ACCESS_KEY SECRET_KEY SESSION_TOKEN
 
 verde "Secrets atualizados."
 echo

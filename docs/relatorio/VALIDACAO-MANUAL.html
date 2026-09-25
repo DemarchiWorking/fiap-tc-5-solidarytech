@@ -141,8 +141,12 @@
     .pagina { margin-top: 18mm; }
   }
   @media screen and (max-width: 820px) {
-    .capa { width: auto; height: auto; min-height: 100vh; padding: 48px 16px 24px; margin: 0; }
-    .capa h1 { font-size: 26px; }
+    .capa { width: auto; height: auto; min-height: 0; padding: 40px 16px 24px; margin: 0; }
+    .capa h1 { font-size: 26px; max-width: 100%; margin-top: 16px; }
+    .capa .sub, .capa .selo { max-width: 100%; overflow-wrap: anywhere; }
+    .capa .meta { grid-template-columns: 1fr; margin-top: 24px; }
+    .capa .meta div b { overflow-wrap: anywhere; }
+    .capa::after { display: none; }
     main { padding: 16px; margin: 0; }
     .kpis { grid-template-columns: repeat(2, 1fr); }
     .sumario { columns: 1; }

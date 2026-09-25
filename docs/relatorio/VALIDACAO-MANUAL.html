@@ -30,7 +30,7 @@
   @page {
     size: A4;
     margin: 16mm 14mm 18mm 14mm;
-    @bottom-left { content: "SolidaryTech · Caderno de Validação Manual · v1.0"; font: 7.5pt "Segoe UI", Arial, sans-serif; color: #64748b; }
+    @bottom-left { content: "SolidaryTech · Caderno de Validação Manual · v1.1"; font: 7.5pt "Segoe UI", Arial, sans-serif; color: #64748b; }
     @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 7.5pt "Segoe UI", Arial, sans-serif; color: #64748b; }
   }
   @page capa { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
@@ -164,7 +164,7 @@
 
   <div class="meta">
     <div><span>Projeto</span><b>SolidaryTech: plataforma de doações para ONGs</b></div>
-    <div><span>Versão · Data</span><b>1.0 · 25/09/2026</b></div>
+    <div><span>Versão · Data</span><b>1.1 · 25/09/2026</b></div>
     <div><span>Ambiente de referência</span><b>AWS Academy Learner Lab · conta 716532857874 · us-east-1</b></div>
     <div><span>Última execução completa</span><b>25/09/2026 12:03 UTC · 48/48 verificações OK</b></div>
     <div><span>Integrantes</span><b>Leonardo Alves Freitas (rm369434)<br>Antonio Eduardo Silveira Demarchi (rm370045)</b></div>
@@ -209,6 +209,16 @@
     <li>Não use o endereço <code>*.eks.amazonaws.com</code> no navegador: é a API do Kubernetes e responde <b>401</b> por projeto. A interface é pelo NLB.</li>
     <li>A sessão do Learner Lab dura 4 horas. Se expirar, refaça P-01 e P-02: <b>os endereços mudam</b>.</li>
   </ul>
+
+  <h3 class="bloco">Controle do documento</h3>
+  <table>
+    <thead><tr><th style="width:9%">Versão</th><th style="width:19%">Data (UTC)</th><th>Alteração</th></tr></thead>
+    <tbody>
+      <tr><td>1.0</td><td>25/09/2026 12:20</td><td>Criação: 39 cartões e matriz de rastreabilidade. Todos os comandos executados na conta 716532857874 antes de entrar no documento.</td></tr>
+      <tr><td>1.1</td><td>25/09/2026 13:45</td><td>Correções após nova validação em execução: horário da última validação completa (12:03, não 10:50); log do worker lido em <b>todas</b> as réplicas (F0-10); prova de selfHeal por drift no HPA, porque o teste antigo media o <code>minReplicas</code> (F0-07); elasticidade 1 → 6 → 1 comprovada após as correções <code>af8a695</code> e <code>e03d991</code> (F0-11); acesso ao ArgoCD e ao Grafana detalhado, com login recomendado por túnel cifrado (P-03); aviso do Chrome para HTTP (A.1).</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:8.6pt;color:var(--muted)"><b>Classificação:</b> uso do grupo e da banca avaliadora. Não contém senha, token nem chave: credenciais são lidas no terminal de quem valida. <b>Responsáveis:</b> os integrantes da capa. <b>Fonte:</b> <code>docs/relatorio/VALIDACAO-MANUAL.html</code> no repositório (o PDF é gerado a partir dele).</p>
 
   <h3 class="bloco">Sumário</h3>
   <div class="sumario">
@@ -312,15 +322,25 @@ echo $BASE</pre></li>
   </div>
 
   <div class="req">
-    <header><span class="id">P-03</span><h4>Senhas das interfaces (Grafana e ArgoCD)</h4><span class="selo-st st-ok">Medido</span></header>
+    <header><span class="id">P-03</span><h4>Acesso às interfaces: login do ArgoCD e do Grafana</h4><span class="selo-st st-ok">Medido</span></header>
     <div class="corpo">
       <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 1 min</span></div>
       <ol class="passos">
         <li>Exiba usuário, senha e URL base (somente no seu terminal):
 <pre>./solidary senhas</pre></li>
+        <li>Se o atalho falhar, leia cada senha direto do Secret de origem:
+<pre>kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo</pre></li>
+        <li><b>Login recomendado: por túnel cifrado.</b> O ingress é HTTP (o Learner Lab não oferece domínio para TLS), e a senha do <code>admin</code> trafegaria aberta pela internet. O <code>port-forward</code> passa pela API do Kubernetes, que é TLS. Um terminal para cada, aberto enquanto usar a interface:
+<pre><span class="c"># ArgoCD  → http://localhost:8080/argocd/</span>
+kubectl -n argocd port-forward svc/argocd-server 8080:80
+<span class="c"># Grafana → http://localhost:3000/grafana/</span>
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80</pre></li>
+        <li>Alternativa, só em rede confiável: <code>$BASE/argocd/</code> e <code>$BASE/grafana/</code> pelo NLB. Nesse caso o Chrome mostra <i>"O site não pode fazer uma conexão segura"</i>: confira que o endereço é o <code>$BASE</code> e clique em <b>Ir para o site</b>.</li>
       </ol>
-      <div class="esperado">Duas linhas <code>admin / …</code> (Grafana e ArgoCD) e a URL base igual a <code>$BASE</code>.</div>
-      <div class="aviso"><b>Segurança:</b> não cole as senhas em chat, documento ou print. Elas são geradas a cada subida e morrem com o ambiente.</div>
+      <div class="esperado">Usuário <b><code>admin</code></b> nos dois, <b>sem cadastro</b>. As senhas não têm valor padrão: são geradas aleatoriamente na instalação (ArgoCD: Secret <code>argocd-initial-admin-secret</code>; Grafana: Secret <code>grafana-admin</code>) e mudam a cada ambiente recriado. O login leva às telas de Applications e de Dashboards.</div>
+      <div class="aviso"><b>Segurança:</b> não cole as senhas em chat, documento ou print. Elas morrem com o ambiente.</div>
+      <div class="info"><b>Em produção fora do laboratório</b>, o acesso seria diferente, e o relatório declara o risco residual na seção <i>Revisão de segurança da superfície exposta</i>: TLS no ingress (domínio e certificado, que o Learner Lab não oferece); login por SSO/OIDC em vez do <code>admin</code> local; e, no primeiro acesso, troca da senha inicial do ArgoCD (<i>User Info → Update Password</i>) e remoção do Secret <code>argocd-initial-admin-secret</code>, como recomenda a documentação do ArgoCD.</div>
       <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
     </div>
   </div>
@@ -1001,6 +1021,7 @@ git add docs/ &amp;&amp; git commit -m "docs: prints, video e PDF final" &amp;&a
       <tr><td>HPA com <code>&lt;unknown&gt;</code></td><td>metrics-server fora</td><td><code>kubectl -n argocd get app metrics-server</code></td></tr>
       <tr><td>Datadog sem serviços</td><td>Sem carga, ou chave/site errados (403)</td><td>P-04; checar F0-09 passo 1</td></tr>
       <tr><td>Application <code>OutOfSync</code> por minutos</td><td>Sincronização em curso após deploy</td><td>Aguardar; <b>Refresh</b> → <b>Hard refresh</b> na UI</td></tr>
+      <tr><td>Chrome: <i>"O site não pode fazer uma conexão segura"</i></td><td>ArgoCD e Grafana são servidos em HTTP pelo NLB (sem TLS no lab); o modo HTTPS do Chrome avisa</td><td>Conferir que o endereço é o <code>$BASE</code> e clicar em <b>Ir para o site</b></td></tr>
       <tr><td>Pré-voo acusa conta diferente</td><td>O Academy trocou a conta</td><td><code>COMO-SUBIR.md</code> (~35 min, sem mudar código)</td></tr>
     </tbody>
   </table>

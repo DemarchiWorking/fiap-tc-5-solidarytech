@@ -381,8 +381,15 @@ O worker escala de 1 até 6 réplicas conforme a fila cresce.
 ## PASSO 7 — ArgoCD (GitOps)
 
 **URL:** `$BASE/argocd/`
-**Usuário:** `admin`
-**Senha:** `./solidary senhas`
+**Usuário:** `admin` (sem cadastro)
+**Senha:** `./solidary senhas` — gerada na instalação, sem valor padrão
+
+> **Login recomendado por túnel cifrado.** O ingress é HTTP (sem domínio para
+> TLS no Learner Lab), então a senha trafegaria aberta pela internet. Num
+> segundo terminal, `kubectl -n argocd port-forward svc/argocd-server 8080:80`
+> e abra `http://localhost:8080/argocd/`. Pelo NLB, só em rede confiável — o
+> Chrome avisa "O site não pode fazer uma conexão segura"; confira o endereço e
+> clique em **Ir para o site**.
 
 ```bash
 kubectl -n argocd get applications
@@ -758,8 +765,8 @@ reaproveita.
 | API ONGs | `$BASE/ngo/ngos` | — |
 | API Doações | `$BASE/donations` | — |
 | API Voluntários | `$BASE/volunteers/1` | — |
-| ArgoCD | `$BASE/argocd/` | `admin` / `./solidary senhas` |
-| Grafana | `$BASE/grafana/` | `admin` / `./solidary senhas` |
+| ArgoCD | `localhost:8080/argocd/` via port-forward (recomendado) ou `$BASE/argocd/` | `admin` / `./solidary senhas` |
+| Grafana | `localhost:3000/grafana/` via port-forward (recomendado) ou `$BASE/grafana/` | `admin` / `./solidary senhas` |
 | Prometheus | `localhost:9090` via port-forward | sem auth |
 | OpenCost | `localhost:9003` via port-forward | sem auth |
 | Datadog APM | https://app.datadoghq.com | conta do grupo (site US1) |

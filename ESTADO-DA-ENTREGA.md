@@ -11,6 +11,10 @@ ambiente **recriado do zero** numa conta de Learner Lab nova — a terceira
 Da conta vazia ao sistema no ar, com CI e GitOps: **~35 min**, sem uma linha de
 código alterada — só `configurar-repo` apontando o GitOps para a conta nova.
 
+> **Validar à mão, requisito por requisito:**
+> [`docs/relatorio/VALIDACAO-MANUAL.pdf`](docs/relatorio/VALIDACAO-MANUAL.pdf) — 39 cartões
+> (comando, resultado esperado, o que fazer se falhar, campo de aceite).
+
 ---
 
 ## Resumo em uma tela

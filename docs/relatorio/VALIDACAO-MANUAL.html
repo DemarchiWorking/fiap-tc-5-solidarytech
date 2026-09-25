@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caderno de Validação — SolidaryTech</title>
+<meta name="description" content="Roteiro manual, requisito por requisito, para comprovar a entrega do Tech Challenge Fase 5 (SolidaryTech) em execução no AWS Academy.">
+<style>
+  :root {
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --paper: #ffffff;
+    --soft: #f8fafc;
+    --navy: #0b1f3a;
+    --navy-2: #13315c;
+    --accent: #0f766e;
+    --accent-soft: #e6f4f2;
+    --ok: #15803d;
+    --ok-soft: #e8f6ed;
+    --warn: #b45309;
+    --warn-soft: #fdf3e2;
+    --bad: #b91c1c;
+    --bad-soft: #fdecec;
+    --code-bg: #0f172a;
+    --code-ink: #e2e8f0;
+    --code-dim: #94a3b8;
+  }
+  @page {
+    size: A4;
+    margin: 16mm 14mm 18mm 14mm;
+    @bottom-left { content: "SolidaryTech · Caderno de Validação Manual · v1.0"; font: 7.5pt "Segoe UI", Arial, sans-serif; color: #64748b; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 7.5pt "Segoe UI", Arial, sans-serif; color: #64748b; }
+  }
+  @page capa { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 9.6pt/1.5 "Segoe UI", "Inter", system-ui, -apple-system, Arial, sans-serif;
+  }
+  main { max-width: 190mm; margin: 0 auto; padding: 0 4mm; }
+  h1, h2, h3, h4 { color: var(--navy); line-height: 1.25; margin: 0; }
+  a { color: var(--accent); text-decoration: none; }
+  code, pre, kbd { font-family: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace; }
+  p { margin: 0 0 6pt; }
+  ul, ol { margin: 0 0 6pt; padding-left: 16pt; }
+  li { margin: 0 0 3pt; }
+  :not(pre) > code { background: var(--soft); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; font-size: 8.6pt; color: var(--navy-2); }
+
+  /* ---------- capa ---------- */
+  .capa {
+    page: capa; height: 297mm; width: 210mm; margin: 0 auto; position: relative; overflow: hidden;
+    background: linear-gradient(160deg, #0b1f3a 0%, #13315c 58%, #0f766e 140%); color: #fff;
+    padding: 30mm 22mm 20mm; display: flex; flex-direction: column; break-after: page;
+  }
+  .capa::after {
+    content: ""; position: absolute; right: -40mm; top: 60mm; width: 150mm; height: 150mm; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.08); box-shadow: 0 0 0 18mm rgba(255,255,255,.025), 0 0 0 40mm rgba(255,255,255,.02);
+  }
+  .capa .selo { font-size: 8.5pt; letter-spacing: .22em; text-transform: uppercase; color: #9fe3da; font-weight: 600; }
+  .capa h1 { color: #fff; font-size: 30pt; font-weight: 700; margin: 10mm 0 4mm; letter-spacing: -.01em; max-width: 150mm; }
+  .capa .sub { font-size: 13pt; color: #cbd5e1; max-width: 140mm; font-weight: 400; }
+  .capa .barra { width: 22mm; height: 3px; background: #2dd4bf; margin: 9mm 0; border-radius: 2px; }
+  .capa .meta { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 10mm; font-size: 9pt; position: relative; z-index: 1; }
+  .capa .meta div span { display: block; color: #94a3b8; font-size: 7.5pt; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 1mm; }
+  .capa .meta div b { font-weight: 600; color: #fff; }
+  .capa .rodape { margin-top: 12mm; padding-top: 5mm; border-top: 1px solid rgba(255,255,255,.15); font-size: 8pt; color: #94a3b8; position: relative; z-index: 1; }
+
+  /* ---------- estrutura ---------- */
+  .pagina { break-before: page; }
+  .cabecalho-secao { display: flex; align-items: baseline; gap: 10pt; border-bottom: 2px solid var(--navy); padding-bottom: 5pt; margin: 0 0 10pt; }
+  .cabecalho-secao .num { font-size: 22pt; font-weight: 700; color: var(--accent); line-height: 1; }
+  .cabecalho-secao h2 { font-size: 16pt; }
+  .cabecalho-secao .desc { margin-left: auto; font-size: 8.5pt; color: var(--muted); text-align: right; max-width: 70mm; }
+  h3.bloco { font-size: 11pt; margin: 12pt 0 6pt; color: var(--navy-2); }
+  .lead { font-size: 10pt; color: var(--ink-2); }
+
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; font-size: 8.6pt; }
+  th { background: var(--navy); color: #fff; text-align: left; font-weight: 600; padding: 5pt 6pt; }
+  td { border-bottom: 1px solid var(--line); padding: 4.5pt 6pt; vertical-align: top; }
+  tr:nth-child(even) td { background: var(--soft); }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6pt; margin: 8pt 0 12pt; }
+  .kpi { border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 4px; padding: 7pt 8pt; background: var(--soft); }
+  .kpi b { display: block; font-size: 15pt; color: var(--navy); line-height: 1.1; }
+  .kpi span { font-size: 7.8pt; color: var(--muted); }
+
+  .aviso { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 6pt 9pt; border-radius: 0 4px 4px 0; margin: 6pt 0 10pt; font-size: 9pt; }
+  .info { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 6pt 9pt; border-radius: 0 4px 4px 0; margin: 6pt 0 10pt; font-size: 9pt; }
+  .perigo { border-left: 3px solid var(--bad); background: var(--bad-soft); padding: 6pt 9pt; border-radius: 0 4px 4px 0; margin: 6pt 0 10pt; font-size: 9pt; }
+
+  /* ---------- sumario ---------- */
+  .sumario { columns: 2; column-gap: 12mm; font-size: 9.2pt; }
+  .sumario div { display: flex; gap: 6pt; padding: 3pt 0; border-bottom: 1px dotted var(--line); break-inside: avoid; }
+  .sumario div b { color: var(--accent); min-width: 34pt; }
+
+  /* ---------- selos ---------- */
+  .selo-st { display: inline-block; font-size: 7.3pt; font-weight: 700; letter-spacing: .04em; padding: 1.5pt 6pt; border-radius: 10pt; white-space: nowrap; text-transform: uppercase; }
+  .st-ok { background: var(--ok-soft); color: var(--ok); }
+  .st-pend { background: var(--warn-soft); color: var(--warn); }
+  .st-doc { background: #eef2ff; color: #4338ca; }
+  .icone { display: inline-block; font-size: 7.3pt; font-weight: 600; padding: 1.5pt 5pt; border-radius: 3px; border: 1px solid var(--line); color: var(--ink-2); background: #fff; margin-right: 3pt; white-space: nowrap; }
+
+  /* ---------- cartao de requisito ---------- */
+  .req { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 11pt; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
+  .req > header { display: flex; align-items: center; gap: 8pt; background: var(--soft); border-bottom: 1px solid var(--line); padding: 6pt 10pt; break-after: avoid; }
+  .req > header .id { font: 700 8.5pt "Cascadia Mono", Consolas, monospace; color: #fff; background: var(--navy); padding: 2pt 6pt; border-radius: 3px; }
+  .req > header h4 { font-size: 10.5pt; flex: 1; }
+  .req .corpo { padding: 7pt 10pt 8pt; }
+  .req .enunciado { font-style: italic; color: var(--ink-2); border-left: 2px solid var(--line); padding-left: 7pt; margin: 0 0 6pt; font-size: 8.8pt; }
+  .req .meta { display: flex; flex-wrap: wrap; gap: 4pt 12pt; font-size: 8.2pt; color: var(--muted); margin-bottom: 6pt; }
+  .req .meta b { color: var(--ink-2); font-weight: 600; }
+  .req ol.passos { counter-reset: p; list-style: none; padding-left: 0; margin: 0 0 6pt; }
+  .req ol.passos > li { counter-increment: p; position: relative; padding-left: 20pt; margin-bottom: 5pt; }
+  .req ol.passos > li::before { content: counter(p); position: absolute; left: 0; top: 0; width: 14pt; height: 14pt; border-radius: 50%; background: var(--accent); color: #fff; font-size: 7.5pt; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 4px; padding: 6pt 8pt; margin: 3pt 0 4pt; font-size: 8pt; line-height: 1.45; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  pre .c { color: var(--code-dim); }
+  pre.saida { background: #f1f5f9; color: var(--ink-2); border: 1px solid var(--line); }
+  .esperado, .falha { border-radius: 4px; padding: 5pt 8pt; margin-top: 5pt; font-size: 8.8pt; break-inside: avoid; }
+  .esperado { background: var(--ok-soft); border: 1px solid #c7e8d3; }
+  .esperado::before { content: "RESULTADO ESPERADO"; display: block; font-size: 7pt; font-weight: 700; letter-spacing: .08em; color: var(--ok); margin-bottom: 2pt; }
+  .falha { background: var(--bad-soft); border: 1px solid #f5c9c9; }
+  .falha::before { content: "SE NÃO BATER"; display: block; font-size: 7pt; font-weight: 700; letter-spacing: .08em; color: var(--bad); margin-bottom: 2pt; }
+  .esperado, .falha, .aviso, .info, .perigo { break-after: avoid; page-break-after: avoid; }
+  .aceite { break-before: avoid; page-break-before: avoid; break-inside: avoid; }
+  .aceite { display: flex; gap: 14pt; align-items: center; border-top: 1px dashed var(--line); margin-top: 7pt; padding-top: 5pt; font-size: 8.2pt; color: var(--muted); }
+  .aceite .box { width: 9pt; height: 9pt; border: 1.3px solid var(--ink-2); border-radius: 2px; display: inline-block; vertical-align: -1pt; margin-right: 4pt; }
+  .aceite .linha { flex: 1; border-bottom: 1px solid var(--line); height: 10pt; }
+
+  .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 16mm; margin-top: 18mm; }
+  .assinaturas div { border-top: 1px solid var(--ink-2); padding-top: 3pt; font-size: 8.5pt; color: var(--ink-2); }
+
+  @media screen {
+    body { background: #e2e8f0; }
+    .capa { margin: 16px auto; box-shadow: 0 8px 30px rgba(15,23,42,.25); }
+    main { background: #fff; padding: 14mm 12mm; margin: 16px auto 40px; box-shadow: 0 8px 30px rgba(15,23,42,.12); max-width: 210mm; }
+    .pagina { margin-top: 18mm; }
+  }
+  @media screen and (max-width: 820px) {
+    .capa { width: auto; height: auto; min-height: 100vh; padding: 48px 16px 24px; margin: 0; }
+    .capa h1 { font-size: 26px; }
+    main { padding: 16px; margin: 0; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .sumario { columns: 1; }
+    .cabecalho-secao { flex-wrap: wrap; }
+    .cabecalho-secao .desc { margin-left: 0; text-align: left; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ======================================================= CAPA -->
+<section class="capa">
+  <div class="selo">FIAP Pós Tech · DevOps &amp; Arquitetura Cloud · Tech Challenge Fase 5</div>
+  <h1>Caderno de Validação Manual dos Requisitos</h1>
+  <div class="sub">SolidaryTech: como comprovar, passo a passo e em execução, que cada exigência do Hackathon está completa e funcionando no AWS Academy.</div>
+  <div class="barra"></div>
+  <div class="sub" style="font-size:10.5pt;max-width:150mm">39 verificações rastreáveis ao enunciado · comando exato · resultado esperado · o que fazer se falhar · campo de aceite</div>
+
+  <div class="meta">
+    <div><span>Projeto</span><b>SolidaryTech: plataforma de doações para ONGs</b></div>
+    <div><span>Versão · Data</span><b>1.0 · 25/09/2026</b></div>
+    <div><span>Ambiente de referência</span><b>AWS Academy Learner Lab · conta 716532857874 · us-east-1</b></div>
+    <div><span>Última execução completa</span><b>25/09/2026 10:50 UTC · 48/48 verificações OK</b></div>
+    <div><span>Integrantes</span><b>Leonardo Alves Freitas (rm369434)<br>Antonio Eduardo Silveira Demarchi (rm370045)</b></div>
+    <div><span>Repositório</span><b>github.com/DemarchiWorking/fiap-tc-5-solidarytech</b></div>
+  </div>
+  <div class="rodape">Documento de validação técnica. Os valores "medidos" foram obtidos no ambiente real na data indicada. Endereços e senhas mudam a cada subida do ambiente e nunca são gravados neste documento.</div>
+</section>
+
+<main>
+
+<!-- ======================================================= 0. COMO USAR -->
+<section>
+  <div class="cabecalho-secao"><span class="num">00</span><h2>Como usar este caderno</h2><span class="desc">Leia antes de executar qualquer passo</span></div>
+
+  <p class="lead">Cada exigência do enunciado virou um <b>cartão de requisito</b> com: o texto do enunciado, onde executar, os passos com o comando exato, o resultado esperado (o valor medido em 25/09) e o que fazer se não bater. Ao final de cada cartão há um campo de aceite para o responsável marcar.</p>
+
+  <div class="kpis">
+    <div class="kpi"><b>48/48</b><span>verificações automáticas OK em 25/09</span></div>
+    <div class="kpi"><b>15/15</b><span>Applications ArgoCD Synced/Healthy</span></div>
+    <div class="kpi"><b>0 %</b><span>falha em 12.879 requisições (k6)</span></div>
+    <div class="kpi"><b>0</b><span>recursos IAM criados (Academy)</span></div>
+  </div>
+
+  <h3 class="bloco">Legenda</h3>
+  <table>
+    <thead><tr><th style="width:28%">Marcador</th><th>Significado</th></tr></thead>
+    <tbody>
+      <tr><td><span class="icone">TERMINAL</span></td><td>Terminal do <b>WSL (Ubuntu)</b>, já dentro da pasta do projeto (<code>tc5</code>). Nunca CMD ou PowerShell: o <code>kubectl</code> do Windows não conhece o cluster.</td></tr>
+      <tr><td><span class="icone">NAVEGADOR</span></td><td>Abrir no navegador. <code>$BASE</code> é o endereço público do NLB (passo P-02).</td></tr>
+      <tr><td><span class="icone">CONSOLE AWS</span></td><td>Painel do AWS Academy → <b>Start Lab</b> → clicar em <b>AWS</b> (bolinha verde).</td></tr>
+      <tr><td><span class="icone">REPOSITÓRIO</span></td><td>Leitura de arquivo do repositório: prova documental, não de execução.</td></tr>
+      <tr><td><span class="selo-st st-ok">Medido</span></td><td>Validado em execução em 25/09/2026; o valor esperado é o medido.</td></tr>
+      <tr><td><span class="selo-st st-doc">Documental</span></td><td>Exigência atendida por documento (PCN, forecast, desenho): valide lendo.</td></tr>
+      <tr><td><span class="selo-st st-pend">Pendente do grupo</span></td><td>Depende de conta ou ação do grupo (Datadog, prints, vídeo).</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="bloco">Regras de segurança durante a validação</h3>
+  <ul>
+    <li><b>Nenhuma credencial em arquivo, print ou chat.</b> Senhas saem só no seu terminal (<code>./solidary senhas</code>). A chave do Datadog vive no AWS Secrets Manager e <b>não</b> é digitada em nenhum passo deste caderno.</li>
+    <li>Passos marcados com <b>faixa vermelha</b> alteram o ambiente de propósito (falha simulada, restore). Execute exatamente como descrito; todos se desfazem sozinhos ou têm o passo de volta.</li>
+    <li>Não use o endereço <code>*.eks.amazonaws.com</code> no navegador: é a API do Kubernetes e responde <b>401</b> por projeto. A interface é pelo NLB.</li>
+    <li>A sessão do Learner Lab dura 4 horas. Se expirar, refaça P-01 e P-02: <b>os endereços mudam</b>.</li>
+  </ul>
+
+  <h3 class="bloco">Sumário</h3>
+  <div class="sumario">
+    <div><b>P</b>Preparação da sessão de teste</div>
+    <div><b>RO</b>Regra de Ouro: projeto evolutivo</div>
+    <div><b>F0</b>Fundação DevOps (obrigatória)</div>
+    <div><b>F1</b>SRE: SLI, SLO e MTTR</div>
+    <div><b>F2</b>FinOps</div>
+    <div><b>F3</b>ITSM e AIOps</div>
+    <div><b>F4</b>Segurança, Backup e DR</div>
+    <div><b>E</b>Entregáveis e evidências visuais</div>
+    <div><b>Z</b>Encerramento e higiene</div>
+    <div><b>A</b>Apêndices: diagnóstico, acessos, aceite</div>
+  </div>
+</section>
+
+<!-- ======================================================= MATRIZ -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">01</span><h2>Matriz de rastreabilidade</h2><span class="desc">Exigência do enunciado → verificação deste caderno → situação em 25/09</span></div>
+  <table>
+    <thead><tr><th style="width:9%">ID</th><th style="width:45%">Exigência</th><th style="width:30%">Como é comprovada</th><th style="width:16%">Situação</th></tr></thead>
+    <tbody>
+      <tr><td>RO-01</td><td>Sem deploy manual via kubectl</td><td>Commits do bot + ArgoCD</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>RO-02</td><td>Sem infraestrutura clicada no console</td><td><code>terraform plan</code> sem mudanças</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>RO-03</td><td>Sem voo cego</td><td>F0-08 + F0-09</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-01</td><td>Dockerfiles otimizados (3 serviços)</td><td>Multi-stage, non-root, 0 HIGH/CRITICAL</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-02</td><td>Kubernetes gerenciado (EKS)</td><td>EKS 1.34 ACTIVE, 3 nós</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-03</td><td>Terraform: cluster, bancos, mensageria, rede</td><td>52 recursos no state</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-04</td><td>Pipelines com testes</td><td>Jobs Lint e Testes verdes</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-05</td><td>SAST/SCA (Trivy/Sonar)</td><td>gosec/bandit + Trivy + SBOM</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-06</td><td>Construção e publicação da imagem</td><td>ECR imutável = imagem em execução</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-07</td><td>GitOps com ArgoCD</td><td>15/15 + selfHeal em 8 s</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-08</td><td>Prometheus, Grafana, Loki, OpenTelemetry</td><td>27 alvos, 0 down</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-09</td><td>APM com Distributed Tracing</td><td>Datadog: 0 × 403, trace via SQS</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-10</td><td>Aplicações funcionais (3 APIs + fila)</td><td>11 chamadas públicas</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F0-11</td><td>Elasticidade (HPA)</td><td>Worker 1 → 6 sob carga</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F1-01</td><td>≥ 2 SLIs do donation-service (Golden Metrics)</td><td>3 recording rules</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F1-02</td><td>SLO para cada SLI</td><td>99,9 % · 99 % &lt; 300 ms · 99,5 % &lt; 60 s</td><td><span class="selo-st st-doc">Documental</span></td></tr>
+      <tr><td>F1-03</td><td>Dashboard exclusivo de SLO e error budget</td><td>Painel Grafana SRE</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F1-04</td><td>Evidenciar redução de MTTR</td><td>Chaos drill (MTTD 76 s)</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F2-01</td><td>Tags Project / Environment / CostCenter</td><td>Mesmo total nas 3 tags</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F2-02</td><td>Rightsizing via GitOps</td><td>requests/limits em 100 % dos containers</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F2-03</td><td>Forecast mensal</td><td>US$ 202,74/mês</td><td><span class="selo-st st-doc">Documental</span></td></tr>
+      <tr><td>F2-04</td><td>≥ 1 recomendação nativa de nuvem</td><td>5 recomendações quantificadas</td><td><span class="selo-st st-doc">Documental</span></td></tr>
+      <tr><td>F3-01</td><td>IA do APM (Watchdog) detectando anomalias</td><td>Monitor Watchdog</td><td><span class="selo-st st-pend">Pendente do grupo</span></td></tr>
+      <tr><td>F3-02</td><td>Ciclo de vida do incidente</td><td>Diagrama + post-mortem</td><td><span class="selo-st st-doc">Documental</span></td></tr>
+      <tr><td>F4-01</td><td>PCN com RTO e RPO</td><td>RTO 1 h · RPO 15 min + RDS PITR</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F4-02</td><td>Velero: backup de manifestos e volumes em bucket externo</td><td>914 itens, bucket em us-west-2</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F4-03</td><td>Restore comprovado</td><td>PVC Bound em 12 s</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F4-04</td><td>Ambiente espelho em outra região</td><td>Plano 34/0/0 em us-west-2</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F4-05</td><td>Segurança de rede e IMDS</td><td>NetworkPolicies + IMDS bloqueado</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F4-06</td><td>Gestão de segredos</td><td>Secrets Manager, 0 segredo no Git</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>F4-07</td><td>Conformidade com o AWS Academy</td><td>16 verificações + 0 IAM</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>E-01</td><td>Repositório público com IaC, manifestos e pipelines</td><td>Aba anônima</td><td><span class="selo-st st-ok">Medido</span></td></tr>
+      <tr><td>E-02</td><td>Vídeo de até 20 minutos</td><td>Roteiro pronto</td><td><span class="selo-st st-pend">Pendente do grupo</span></td></tr>
+      <tr><td>E-03</td><td>PDF com nomes, RMs, links e evidências visuais</td><td>10 prints + link do vídeo</td><td><span class="selo-st st-pend">Pendente do grupo</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ======================================================= P. PREPARACAO -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">P</span><h2>Preparação da sessão de teste</h2><span class="desc">15 min · obrigatória antes de qualquer outro cartão</span></div>
+
+  <div class="req">
+    <header><span class="id">P-01</span><h4>Credenciais da sessão e pré-voo</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">CONSOLE AWS</span><span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 3 min</span></div>
+      <ol class="passos">
+        <li>No painel do AWS Academy: <b>Start Lab</b> → aguarde a bolinha verde → <b>AWS Details</b> → <b>AWS CLI: Show</b>. Copie o bloco.</li>
+        <li>Abra o WSL e entre no projeto:
+<pre>wsl
+tc5</pre></li>
+        <li>Cole o bloco em <code>~/.aws/credentials</code> (substituindo o anterior) e rode o pré-voo:
+<pre>nano ~/.aws/credentials      <span class="c"># colar, Ctrl+O, Enter, Ctrl+X</span>
+sed -i 's/\r$//' ~/.aws/credentials   <span class="c"># remove CRLF, se colado do Windows</span>
+./solidary pre-voo</pre></li>
+      </ol>
+      <div class="esperado">Veredito <b>GO</b>, com a linha <i>"credencial do Datadog no cofre (…d0e9 @ datadoghq.com)"</i> e a conta da sessão igual à do GitOps.</div>
+      <div class="falha"><b>NO-GO por conta diferente:</b> o laboratório trocou de conta. Siga o <code>COMO-SUBIR.md</code> (bootstrap → apply → configurar-repo → deploy, ~35 min). <b>ExpiredToken:</b> sessão vencida; repita o passo 1.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">P-02</span><h4>Conectar ao cluster e descobrir o endereço público</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 1 min</span></div>
+      <ol class="passos">
+        <li>Aponte o <code>kubectl</code> para o EKS e confira os nós:
+<pre>./solidary kubeconfig
+kubectl get nodes</pre></li>
+        <li>Guarde o endereço público numa variável; todos os cartões usam <code>$BASE</code>:
+<pre>BASE="http://$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+echo $BASE</pre></li>
+      </ol>
+      <div class="esperado">3 nós <code>Ready</code> em <code>v1.34</code>. <code>$BASE</code> no formato <code>http://…elb.us-east-1.amazonaws.com</code>.</div>
+      <div class="falha"><code>dial tcp [::1]:8080</code>: você está no PowerShell/CMD, não no WSL. <code>$BASE</code> vazio: o ingress ainda não recebeu o NLB; aguarde 3 min.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">P-03</span><h4>Senhas das interfaces (Grafana e ArgoCD)</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 1 min</span></div>
+      <ol class="passos">
+        <li>Exiba usuário, senha e URL base (somente no seu terminal):
+<pre>./solidary senhas</pre></li>
+      </ol>
+      <div class="esperado">Duas linhas <code>admin / …</code> (Grafana e ArgoCD) e a URL base igual a <code>$BASE</code>.</div>
+      <div class="aviso"><b>Segurança:</b> não cole as senhas em chat, documento ou print. Elas são geradas a cada subida e morrem com o ambiente.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">P-04</span><h4>Gerar tráfego real (pré-requisito dos painéis e do APM)</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 6 min</span></div>
+      <ol class="passos">
+        <li>Dispare o teste de carga k6 (roda dentro do cluster, via GitOps):
+<pre>./solidary carga
+kubectl -n solidary-loadtest get jobs -w      <span class="c"># Ctrl+C quando COMPLETIONS = 1/1</span></pre></li>
+        <li>Leia o resumo do k6:
+<pre>kubectl -n solidary-loadtest logs job/$(kubectl -n solidary-loadtest get jobs --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}') | grep -E "http_req_failed|http_req_duration|checks"</pre></li>
+      </ol>
+      <div class="esperado"><code>checks 100%</code> · <code>http_req_failed 0.00%</code> · p95 na casa de <b>7 ms</b> (25/09: 12.879 requisições, p95 7,2 ms).</div>
+      <div class="info">Sem carga, os painéis de SLO mostram <code>NaN</code>, o que é o comportamento correto sem tráfego, e o Watchdog não tem linha de base. <b>Rode sempre antes de prints e do vídeo.</b></div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= RO -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">RO</span><h2>Regra de Ouro: projeto evolutivo</h2><span class="desc">"Não haverá deploy manual, infraestrutura clicada nem voo cego"</span></div>
+
+  <div class="req">
+    <header><span class="id">RO-01</span><h4>Nenhum deploy manual via kubectl</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <p class="enunciado">"Não haverá deploy manual via kubectl."</p>
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 3 min</span></div>
+      <ol class="passos">
+        <li>Mostre que toda versão em produção nasceu de um commit do bot da CI:
+<pre>git pull --ff-only
+git log --oneline --grep="^deploy(" -5</pre></li>
+        <li>Compare a tag do último commit com a imagem que está rodando:
+<pre>kubectl -n solidary-donation get deploy donation-service -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'</pre></li>
+        <li>No ArgoCD (<code>$BASE/argocd/</code>) abra <b>app-donation</b> → <b>History and rollback</b>: a revisão implantada é o mesmo commit.</li>
+      </ol>
+      <div class="esperado">Commits <code>deploy(donation-service): &lt;sha&gt;</code> de autoria <b>github-actions[bot]</b>; a imagem em execução termina com o mesmo <code>&lt;sha&gt;</code> (25/09: <code>b02dc80…</code>).</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">RO-02</span><h4>Nenhuma infraestrutura criada no console</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <p class="enunciado">"Não haverá infraestrutura clicada no console."</p>
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 3 min</span></div>
+      <ol class="passos">
+        <li>Rode um plano (somente leitura) contra a nuvem real:
+<pre>./solidary plan</pre></li>
+      </ol>
+      <div class="esperado"><code>No changes. Your infrastructure matches the configuration.</code>: o que existe na AWS é exatamente o código. A mesma verificação roda na CI (workflow <i>Terraform</i>, ação <code>plan</code>).</div>
+      <div class="falha">Se aparecer diferença, alguém alterou recurso pelo console (drift). Não aplique às cegas: leia o plano e reverta pelo código.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">RO-03</span><h4>Nenhum voo cego: monitoramento profundo</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <p class="enunciado">"Não haverá voo cego sem monitoramento profundo."</p>
+      <p>Comprovado pela soma de <b>F0-08</b> (métricas e logs), <b>F0-09</b> (traces no APM) e <b>F1-03</b> (SLOs). Marque este cartão após concluir os três.</p>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= F0 -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">F0</span><h2>Fundação DevOps</h2><span class="desc">Frente obrigatória: container, cluster, IaC, CI/CD, GitOps, observabilidade</span></div>
+
+  <div class="req">
+    <header><span class="id">F0-01</span><h4>Dockerfiles otimizados para os três serviços</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">REPOSITÓRIO</span></span><span><b>Tempo:</b> 3 min</span><span><b>Evidência:</b> <code>07-evidencias/devsecops-auditoria.txt</code></span></div>
+      <ol class="passos">
+        <li>Conte os estágios (multi-stage) e confira o usuário não-root e a imagem final:
+<pre>for s in ngo donation volunteer; do f=services/$s-service/Dockerfile; echo "$s: estagios=$(grep -c '^FROM' $f) | $(grep -E '^USER' $f | tail -1) | $(grep '^FROM' $f | tail -1)"; done</pre></li>
+        <li>Leia o resultado do scanner sobre as imagens publicadas:
+<pre>grep -iE "HIGH|CRITICAL|Total" docs/07-evidencias/devsecops-auditoria.txt | head -15</pre></li>
+      </ol>
+      <div class="esperado">ngo e volunteer: 3 estágios, <code>USER 10001:10001</code>, runtime <code>python:3.12-slim-bookworm</code> sem <code>pip</code>. donation: 4 estágios, <code>USER 65532:65532</code>, runtime <b>distroless</b> <code>static-debian12:nonroot</code>. <b>0 HIGH/CRITICAL</b> nas três imagens.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-02</span><h4>Implantação em Kubernetes gerenciado (EKS)</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">CONSOLE AWS</span></span><span><b>Tempo:</b> 2 min</span><span><b>Print:</b> <code>f0-pods-running.png</code></span></div>
+      <ol class="passos">
+        <li>Estado do cluster gerenciado:
+<pre>aws eks describe-cluster --name solidarytech-prod-eks --query "cluster.[version,status]" --output text</pre></li>
+        <li>Pods das aplicações (este é o print <code>f0-pods-running.png</code>):
+<pre>kubectl get pods -A | grep solidary</pre></li>
+        <li>Opcional: Console AWS → <b>EKS</b> → <b>Clusters</b> → <code>solidarytech-prod-eks</code>.</li>
+      </ol>
+      <div class="esperado"><code>1.34  ACTIVE</code>. Todos os pods <code>Running</code> com <b>0 restarts</b>: 2× ngo, 2× donation, 2× volunteer-service e o worker (1 a 6 conforme a fila). Jobs <code>db-init</code> e <code>k6-run</code> aparecem como <code>Completed</code>, o que é normal.</div>
+      <div class="info">No console, o EKS pode avisar que a LabRole não vê recursos do Kubernetes. É limitação do Learner Lab; o <code>kubectl</code> vê tudo.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-03</span><h4>Terraform provisionando cluster, bancos, mensageria e rede</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 2 min</span><span><b>Código:</b> <code>infra/modules/*</code></span></div>
+      <ol class="passos">
+        <li>Total de recursos sob gestão do Terraform:
+<pre>terraform -chdir=infra/environments/prod-use1 state list | wc -l</pre></li>
+        <li>Um recurso de cada categoria exigida:
+<pre>terraform -chdir=infra/environments/prod-use1 state list | grep -E "aws_eks_cluster|aws_db_instance|aws_dynamodb_table|aws_sqs_queue|aws_vpc\.|aws_subnet"</pre></li>
+      </ol>
+      <div class="esperado"><b>52</b> recursos. Cluster: <code>aws_eks_cluster.principal</code>; bancos: <code>aws_db_instance</code> (RDS PostgreSQL) e <code>aws_dynamodb_table</code>; mensageria: <code>aws_sqs_queue</code> principal e DLQ; rede: VPC e 4 subnets.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-04</span><h4>Pipelines de CI com testes</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 3 min</span><span><b>Print:</b> <code>f0-pipeline-verde.png</code></span></div>
+      <ol class="passos">
+        <li>Abra <a href="https://github.com/DemarchiWorking/fiap-tc-5-solidarytech/actions">github.com/DemarchiWorking/fiap-tc-5-solidarytech/actions</a> → à esquerda, <b>CI — donation-service</b> → execução mais recente.</li>
+        <li>Confira os cinco jobs em sequência e abra o job <b>Testes</b>.</li>
+      </ol>
+      <div class="esperado">Verdes: <b>Lint</b> → <b>Testes</b> (Go com <code>-race</code>; pytest nos serviços Python) → <b>SAST</b> → <b>Build, scan e push</b> → <b>Atualizar o GitOps</b>. Mesmo padrão para ngo e volunteer.</div>
+      <div class="falha">Para disparar de novo: clique no nome do workflow na barra lateral → <b>Run workflow</b>. Os secrets AWS do GitHub expiram com a sessão do lab: antes, rode <code>./solidary sync-creds</code>.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-05</span><h4>Segurança na esteira: SAST e SCA</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <p class="enunciado">"Pipelines com testes, SAST/SCA (Trivy/Sonar)…"</p>
+      <div class="meta"><span><b>Onde:</b> <span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 3 min</span></div>
+      <ol class="passos">
+        <li>Na mesma execução, abra <b>SAST (gosec/bandit + SonarCloud)</b>: análise estática do código.</li>
+        <li>Abra <b>Build, scan e push</b>: Trivy em duas camadas (dependências e imagem), com severidade CRITICAL bloqueante, e geração de SBOM.</li>
+        <li>Na página da execução, role até <b>Artifacts</b>: o SBOM está anexado.</li>
+      </ol>
+      <div class="esperado">SAST sem achados bloqueantes; Trivy com <b>0 HIGH/CRITICAL</b>; artefato de SBOM presente. O histórico do repositório registra 4 CVEs reais barradas pelo gate (ver <code>docs/10</code>, passo 8.3).</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-06</span><h4>Construção e publicação da imagem</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 2 min</span></div>
+      <ol class="passos">
+        <li>Repositórios imutáveis e com scan no push:
+<pre>aws ecr describe-repositories --query "repositories[?starts_with(repositoryName,'solidarytech/')].[repositoryName,imageTagMutability,imageScanningConfiguration.scanOnPush]" --output table</pre></li>
+        <li>Última imagem publicada pela CI:
+<pre>aws ecr describe-images --repository-name solidarytech/donation-service --query 'sort_by(imageDetails,&amp;imagePushedAt)[-1].[imageTags[0],imagePushedAt]' --output text</pre></li>
+      </ol>
+      <div class="esperado">3 repositórios <code>IMMUTABLE</code> com scan <code>True</code>. A tag é o SHA de 40 caracteres do commit, o mesmo visto em RO-01.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-07</span><h4>GitOps com ArgoCD, incluindo a autocorreção</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 4 min</span><span><b>Print:</b> <code>f0-argocd.png</code></span></div>
+      <ol class="passos">
+        <li>Estado de todas as aplicações:
+<pre>kubectl -n argocd get applications</pre></li>
+        <li>Abra <code>$BASE/argocd/</code>, entre com <code>admin</code> e a senha do P-03. A tela inicial é o print <code>f0-argocd.png</code>.</li>
+        <li><b>Prova de GitOps:</b> altere o cluster "na mão" e veja o ArgoCD desfazer:
+<pre>kubectl -n solidary-ngo scale deploy/ngo-service --replicas=1
+kubectl -n solidary-ngo get deploy ngo-service -w      <span class="c"># Ctrl+C quando voltar a 2/2</span></pre></li>
+      </ol>
+      <div class="esperado"><b>15</b> Applications <code>Synced</code> / <code>Healthy</code>. Após o <code>scale</code>, o Deployment volta para <b>2 réplicas em ~8 s</b> (medido 25/09) sem ninguém intervir: <code>selfHeal: true</code> reconcilia contra o Git.</div>
+      <div class="info">Use o <code>ngo-service</code>. No <code>donation-service</code> as réplicas são ignoradas de propósito (<code>ignoreDifferences</code>): quem manda nelas é o HPA.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-08</span><h4>Prometheus, Grafana, Loki e OpenTelemetry rodando</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 6 min</span></div>
+      <ol class="passos">
+        <li>Componentes da plataforma:
+<pre>kubectl -n monitoring get pods
+kubectl -n monitoring get deploy,ds -o name | grep -i otel</pre></li>
+        <li>Alvos do Prometheus. Deixe este comando aberto num segundo terminal:
+<pre>kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090</pre>
+          e abra <code>http://localhost:9090/targets</code>.</li>
+        <li>Loki: Grafana (<code>$BASE/grafana/</code>) → <b>Explore</b> → datasource <b>Loki</b> → consulta:
+<pre>{namespace="solidary-donation"} | json | trace_id != ""</pre></li>
+      </ol>
+      <div class="esperado">Todos os pods <code>Running</code>. Dois coletores OpenTelemetry: <code>deployment/otel-collector</code> (gateway de traces e métricas) e <code>daemonset/…-agent</code> (logs). Prometheus: <b>27 alvos, 0 down</b>. Loki devolve logs em JSON com <code>trace_id</code>, que é a correlação log ↔ trace.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-09</span><h4>APM com Distributed Tracing (Datadog)</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 8 min</span><span><b>Print:</b> <code>f0-trace-distribuido.png</code></span></div>
+      <ol class="passos">
+        <li>Prova de <b>entrega</b>, não só de envio: chave validada e nenhuma recusa:
+<pre>kubectl -n monitoring logs deploy/otel-collector | grep -c "API key validation successful"   <span class="c"># &gt;= 1</span>
+kubectl -n monitoring logs deploy/otel-collector | grep -c "403"                             <span class="c"># 0</span></pre></li>
+        <li>Volume de spans enviados. Deixe o port-forward aberto num segundo terminal:
+<pre>kubectl -n monitoring port-forward deploy/otel-collector 8888:8888
+curl -s http://localhost:8888/metrics | grep 'otelcol_exporter_sent_spans{.*datadog'</pre></li>
+        <li>Abra <a href="https://app.datadoghq.com">app.datadoghq.com</a> (site <b>US1</b>, conta do grupo) → <b>APM → Services</b>.</li>
+        <li><b>APM → Traces</b> → filtre <code>service:donation-service</code> → abra um trace de <code>POST /donations</code> (print <code>f0-trace-distribuido.png</code>).</li>
+        <li><b>APM → Service Map</b>: dependências entre os serviços e a fila.</li>
+      </ol>
+      <div class="esperado">Validação ≥ 1, <b>0 × 403</b>, contador de spans subindo (25/09: 55.044). No Datadog: <code>donation-service</code>, <code>ngo-service</code> e <code>volunteer-service</code> com requisições, erros e latência; um trace que atravessa <b>donation-service → SQS → volunteer-worker</b>.</div>
+      <div class="falha">Serviços sem dados: rode P-04 e aguarde 2 min. Com 403: a chave ou o site estão errados. Quem tem acesso à chave roda <code>./solidary datadog</code> (entrada oculta, grava no cofre e reinicia o coletor).</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-10</span><h4>Aplicações funcionais ponta a ponta (3 APIs + fluxo assíncrono)</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 5 min</span><span><b>Caminho:</b> NLB → ingress-nginx → Service → pod → banco</span></div>
+      <ol class="passos">
+        <li><b>ngo-service</b> (Flask + RDS). Cadastre uma ONG e teste a validação:
+<pre>curl -s -X POST $BASE/ngo/ngos -H 'Content-Type: application/json' -d '{"name":"Instituto Semear","email":"contato-'$(date +%s)'@semear.org","cause":"Educacao","city":"Curitiba"}'
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/ngo/ngos -H 'Content-Type: application/json' -d '{"name":"X","email":"nao-e-email","cause":"Y","city":"Z"}'</pre></li>
+        <li><b>donation-service</b> (Go, hot path). Doação válida e inválida:
+<pre>curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/donations -H 'Content-Type: application/json' -d '{"ngo_id":1,"amount":150.50,"donor_name":"Maria Silva"}'
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/donations -H 'Content-Type: application/json' -d '{"ngo_id":0,"amount":-5,"donor_name":""}'</pre></li>
+        <li><b>volunteer-service</b> (Flask + DynamoDB):
+<pre>curl -s -o /dev/null -w '%{http_code}\n' -X POST $BASE/volunteers -H 'Content-Type: application/json' -d '{"ngo_id":1,"name":"Joao Souza","email":"joao@exemplo.org","skills":["logistica"]}'
+curl -s $BASE/volunteers/1</pre></li>
+        <li><b>Fluxo assíncrono:</b> a doação do passo 2 gera um evento na SQS, consumido pelo worker:
+<pre>kubectl -n solidary-volunteer logs deploy/volunteer-worker --since=5m | tail -5
+aws sqs get-queue-attributes --queue-url $(aws sqs get-queue-url --queue-name solidarytech-prod-donation-events --query QueueUrl --output text) --attribute-names ApproximateNumberOfMessages RedrivePolicy</pre></li>
+      </ol>
+      <div class="esperado">ONG: JSON com <code>id</code> (201); e-mail inválido: <b>400</b>. Doação: <b>201</b>; inválida: <b>400</b>. Voluntário: <b>201</b>; listagem: <b>200</b>. Worker registra o processamento; fila com <code>ApproximateNumberOfMessages = 0</code> (drenada) e DLQ com <code>maxReceiveCount = 3</code>.</div>
+      <div class="falha"><code>HTTP 000</code> = timeout, não erro da aplicação: confira <code>$BASE</code> (sessão nova, NLB novo) e se o DNS do NLB já propagou (até 3 min após a subida).</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F0-11</span><h4>Elasticidade: autoscaling horizontal (HPA)</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 6 min (durante P-04)</span></div>
+      <ol class="passos">
+        <li>Com a carga rodando, acompanhe os HPAs e o worker:
+<pre>kubectl get hpa -A
+kubectl -n solidary-volunteer get pods -l app=volunteer-worker -w</pre></li>
+        <li>Confirme que o metrics-server responde:
+<pre>kubectl top nodes</pre></li>
+      </ol>
+      <div class="esperado">4 HPAs, nenhum com <code>&lt;unknown&gt;</code>. O <code>volunteer-worker</code> escala de <b>1 para 6</b> réplicas no pico e volta depois.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= F1 -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">F1</span><h2>SRE: SLI, SLO e MTTR</h2><span class="desc">Referência: <code>docs/03-sre/sli-slo-sla.md</code></span></div>
+
+  <table>
+    <thead><tr><th>SLI (donation-service)</th><th>Golden Metric</th><th>SLO</th><th>Recording rule</th><th>25/09</th></tr></thead>
+    <tbody>
+      <tr><td>Disponibilidade</td><td>Erros</td><td>99,9 % (janela 7 dias)</td><td><code>slo:donation_disponibilidade_erro:ratio_rate5m</code></td><td>0 erro</td></tr>
+      <tr><td>Latência</td><td>Latência</td><td>99 % &lt; 300 ms</td><td><code>slo:donation_latencia:p95</code></td><td>p95 4,8 ms</td></tr>
+      <tr><td>Frescor da fila</td><td>Saturação</td><td>99,5 % &lt; 60 s</td><td><code>slo:donation_frescor_erro:ratio_rate1h</code></td><td>0 erro</td></tr>
+      <tr><td>Error budget restante</td><td>n/a</td><td>n/a</td><td><code>slo:donation_disponibilidade:error_budget_restante</code></td><td>100 %</td></tr>
+    </tbody>
+  </table>
+
+  <div class="req">
+    <header><span class="id">F1-01</span><h4>No mínimo dois SLIs do donation-service, medidos</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 4 min</span><span><b>Pré-requisito:</b> P-04 e port-forward do F0-08</span></div>
+      <ol class="passos">
+        <li>Em <code>http://localhost:9090/graph</code>, execute cada uma das quatro <i>recording rules</i> da tabela acima.</li>
+        <li>Em <code>http://localhost:9090/rules</code>, confira os grupos <code>solidarytech.slo.*</code>.</li>
+      </ol>
+      <div class="esperado">As quatro consultas retornam número (não vazio, não <code>NaN</code>). Regras com estado <b>OK</b>.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F1-02</span><h4>SLO definido para cada SLI</h4><span class="selo-st st-doc">Documental</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">REPOSITÓRIO</span></span><span><b>Tempo:</b> 3 min</span></div>
+      <ol class="passos">
+        <li>Leia <code>docs/03-sre/sli-slo-sla.md</code>: cada SLI tem SLO, janela, justificativa e SLA contratual derivado.</li>
+        <li>Confira que o código implementa o que o documento promete:
+<pre>grep -n "record:" gitops/addons/observabilidade-config/slo-rules.yaml</pre></li>
+      </ol>
+      <div class="esperado">Três SLOs (99,9 %, 99 % &lt; 300 ms, 99,5 % &lt; 60 s), e as <i>recording rules</i> do arquivo batem com os nomes da tabela. <code>./solidary check</code> valida esse contrato PromQL × código automaticamente.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F1-03</span><h4>Dashboard exclusivo de SLOs e consumo do error budget</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 3 min</span><span><b>Print:</b> <code>f1-dashboard-sre.png</code></span></div>
+      <ol class="passos">
+        <li>Grafana (<code>$BASE/grafana/</code>) → <b>Dashboards</b> → <b>SolidaryTech — SRE: SLOs e Error Budget</b>.</li>
+        <li>Ajuste o intervalo para <b>Last 1 hour</b> e capture o print com a carga recém-executada.</li>
+      </ol>
+      <div class="esperado">Painéis <i>Disponibilidade (SLO 99,9%)</i>, <i>Latência &lt; 300ms (SLO 99%)</i> e <i>Frescor da fila &lt; 60s (SLO 99,5%)</i> com valores, e o error budget restante em ~100 %.</div>
+      <div class="falha">Painéis com <code>NaN</code> ou "No data": não há tráfego na janela. Rode P-04.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F1-04</span><h4>Evidenciar como a stack reduz o MTTR: chaos drill</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 10 min</span><span><b>Roteiro completo:</b> <code>docs/03-sre/mttr-chaos-drill.md</code></span></div>
+      <div class="perigo"><b>Altera produção por ~2 min, de propósito:</b> o <code>donation-service</code> fica sem réplicas. O HPA não recria a partir de zero e o ArgoCD ignora réplicas deste serviço, então a falha persiste até o passo 4. Não pule o passo 4.</div>
+      <ol class="passos">
+        <li>Anote a linha de base (hora e pods):
+<pre>date -u +%T; kubectl -n solidary-donation get pods</pre></li>
+        <li>Provoque a falha e anote <code>T_falha</code>:
+<pre>kubectl -n solidary-donation scale deployment/donation-service --replicas=0; date -u +%T</pre></li>
+        <li>Observe sem intervir: Prometheus (<code>localhost:9090/alerts</code>) até o alerta <code>DeploymentSemReplicaDisponivel</code> ficar <b>Firing</b>; anote <code>T_alerta</code>. No Grafana SRE, veja o error budget cair.</li>
+        <li>Restaure e anote <code>T_recuperado</code>:
+<pre>kubectl -n solidary-donation scale deployment/donation-service --replicas=2
+kubectl -n solidary-donation rollout status deployment/donation-service; date -u +%T</pre></li>
+      </ol>
+      <div class="esperado">Detecção automática (MTTD) na casa de <b>76 s</b>, contra ~6 h na linha de base da fase anterior (usuário reclamando). Preencha a tabela de resultados do <code>mttr-chaos-drill.md</code>; o documento rotula o que é medido e o que é meta.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= F2 -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">F2</span><h2>FinOps</h2><span class="desc">Referência: <code>docs/04-finops/README.md</code></span></div>
+
+  <div class="req">
+    <header><span class="id">F2-01</span><h4>Tags obrigatórias no Terraform em todos os recursos</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <p class="enunciado"><code>Project=SolidaryTech</code>, <code>Environment=Production</code>, <code>CostCenter=NGO-Core</code>.</p>
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span><span class="icone">CONSOLE AWS</span></span><span><b>Tempo:</b> 4 min</span><span><b>Print:</b> <code>f2-tags-console.png</code></span></div>
+      <ol class="passos">
+        <li>Conte os recursos com cada tag:
+<pre>for t in CostCenter=NGO-Core Project=SolidaryTech Environment=Production; do k=${t%=*}; v=${t#*=}; echo "$t: $(aws resourcegroupstaggingapi get-resources --tag-filters Key=$k,Values=$v --query 'length(ResourceTagMappingList)')"; done</pre></li>
+        <li>Confira a origem no código (<code>default_tags</code> do provider):
+<pre>grep -nE "default_tags|Project +=|Environment +=|CostCenter +=" infra/environments/prod-use1/providers.tf</pre></li>
+        <li>Console AWS → <b>Resource Groups &amp; Tag Editor</b> → <b>Tag Editor</b> → região <code>us-east-1</code>, tipo <i>All supported</i>, tag <code>CostCenter = NGO-Core</code> → <b>Search</b> (print <code>f2-tags-console.png</code>).</li>
+      </ol>
+      <div class="esperado"><code>default_tags</code> com <code>Project = "SolidaryTech"</code>, <code>Environment = "Production"</code>, <code>CostCenter = "NGO-Core"</code>. <b>O mesmo número nas três tags</b> (42 a 45: o total oscila porque inclui recursos derivados que herdam as tags, como nós, ENIs, discos e snapshot automático do RDS). A seção I do <code>./solidary evidencias</code> mostra <b>0</b> recursos com <code>Environment ≠ Production</code>.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F2-02</span><h4>Rightsizing de requests/limits nos YAML, via GitOps</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 4 min</span><span><b>Evidência:</b> <code>07-evidencias/rightsizing-medido.txt</code></span></div>
+      <ol class="passos">
+        <li>Requests e limits efetivamente aplicados:
+<pre>kubectl get deploy -A -o custom-columns='NS:.metadata.namespace,APP:.metadata.name,REQ_CPU:.spec.template.spec.containers[0].resources.requests.cpu,LIM_CPU:.spec.template.spec.containers[0].resources.limits.cpu,REQ_MEM:.spec.template.spec.containers[0].resources.requests.memory,LIM_MEM:.spec.template.spec.containers[0].resources.limits.memory' | grep -E "NS|solidary"</pre></li>
+        <li>Uso real sob carga, para comparar com o reservado:
+<pre>kubectl top pods -A | grep solidary</pre></li>
+        <li>Mostre que o ajuste veio do Git (e não do cluster):
+<pre>git log --oneline -- gitops/apps | grep -iE "rightsiz|recurso|limits" | head -5</pre></li>
+      </ol>
+      <div class="esperado">Todos os Deployments das aplicações com os quatro valores preenchidos; uso real abaixo dos limites e coerente com a tabela antes/depois do <code>rightsizing-medido.txt</code>.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F2-03</span><h4>Forecast mensal e custo por namespace</h4><span class="selo-st st-doc">Documental</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">REPOSITÓRIO</span><span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 4 min</span><span><b>Print:</b> <code>f2-dashboard-finops.png</code></span></div>
+      <ol class="passos">
+        <li>Leia <code>docs/04-finops/README.md</code> §3: forecast item a item.</li>
+        <li>Grafana → <b>SolidaryTech — FinOps: custo e rightsizing</b> (dados do OpenCost), para o print <code>f2-dashboard-finops.png</code>.</li>
+      </ol>
+      <div class="esperado">Forecast de <b>US$ 202,74/mês</b> com memória de cálculo. Painel FinOps com custo por namespace.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F2-04</span><h4>Pelo menos uma recomendação nativa de nuvem</h4><span class="selo-st st-doc">Documental</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">REPOSITÓRIO</span></span><span><b>Tempo:</b> 2 min</span></div>
+      <ol class="passos"><li>Leia <code>docs/04-finops/README.md</code> §4.</li></ol>
+      <div class="esperado"><b>5 recomendações</b> quantificadas (economia estimada em US$/mês), cada uma com o serviço AWS nativo correspondente.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= F3 -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">F3</span><h2>ITSM e AIOps</h2><span class="desc">Referência: <code>docs/05-itsm-aiops/README.md</code></span></div>
+
+  <div class="req">
+    <header><span class="id">F3-01</span><h4>Ativar a IA do APM (Watchdog) para detectar anomalias</h4><span class="selo-st st-pend">Pendente do grupo</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">NAVEGADOR</span></span><span><b>Tempo:</b> 10 min</span><span><b>Print:</b> <code>f3-anomalia-watchdog.png</code></span></div>
+      <div class="info">A base técnica já está comprovada: as trace metrics do <code>datadog/connector</code> chegam ao Datadog, e é sobre elas que o Watchdog trabalha. Falta criar o monitor, o que exige a conta do grupo.</div>
+      <ol class="passos">
+        <li>Rode P-04 (carga) para haver tráfego.</li>
+        <li><a href="https://app.datadoghq.com/monitors/create">app.datadoghq.com</a> → <b>Monitors</b> → <b>New Monitor</b> → tipo <b>Watchdog</b>.</li>
+        <li>Em <i>Define the alert</i>: categoria <b>APM</b>; escopo <code>env:prod</code>; serviços <code>donation-service</code>, <code>ngo-service</code>, <code>volunteer-service</code>.</li>
+        <li>Em <i>Notify your team</i>: nome <i>"[SolidaryTech] Anomalia detectada pelo Watchdog"</i>; destinatário = canal do ChatOps ou o e-mail do grupo → <b>Create</b>.</li>
+        <li>Abra <b>Watchdog</b> no menu lateral e capture o print (anomalias ou a lista de serviços monitorados).</li>
+      </ol>
+      <div class="esperado">Monitor Watchdog criado e ativo para <code>env:prod</code>. O Watchdog aprende a linha de base antes de acusar: se nenhuma anomalia surgir no dia, o print do monitor configurado mais a página do Watchdog com os serviços demonstra a funcionalidade ativa.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F3-02</span><h4>Ciclo de vida do incidente: detecção → post-mortem → stakeholders</h4><span class="selo-st st-doc">Documental</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">REPOSITÓRIO</span></span><span><b>Tempo:</b> 4 min</span></div>
+      <ol class="passos">
+        <li>Diagrama: <code>docs/relatorio/img/ciclo-incidente.svg</code> (também no PDF do relatório).</li>
+        <li>Processo: <code>docs/05-itsm-aiops/README.md</code> (severidades, papéis, comunicação).</li>
+        <li>Exercício real: <code>docs/05-itsm-aiops/post-mortem-2026-09-10-frescor.md</code>.</li>
+      </ol>
+      <div class="esperado">Todas as etapas desenhadas (detecção, triagem, mitigação, resolução, post-mortem, comunicação a stakeholders) e um post-mortem real, sem culpados e com ações corretivas.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= F4 -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">F4</span><h2>Segurança, Backup e Recuperação de Desastres</h2><span class="desc">Referências: <code>docs/06-dr-pcn/pcn.md</code> · ADR-014</span></div>
+
+  <div class="req">
+    <header><span class="id">F4-01</span><h4>PCN executivo com RTO e RPO para os dados de doação</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">REPOSITÓRIO</span><span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 4 min</span></div>
+      <ol class="passos">
+        <li>Leia <code>docs/06-dr-pcn/pcn.md</code>: RTO, RPO e justificativa de negócio.</li>
+        <li>Comprove que o RPO de 15 min é sustentado pelo RDS (backup contínuo, PITR):
+<pre>aws rds describe-db-instances --db-instance-identifier solidarytech-prod-postgres --query "DBInstances[0].{retencao:BackupRetentionPeriod,ultimoRestauravel:LatestRestorableTime,publico:PubliclyAccessible,cifrado:StorageEncrypted}" --output table</pre></li>
+      </ol>
+      <div class="esperado"><b>RTO 1 h · RPO 15 min</b>. RDS com retenção de <b>7 dias</b>, <code>LatestRestorableTime</code> a poucos minutos do horário atual (bem dentro do RPO), <code>publico = False</code>, <code>cifrado = True</code>.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F4-02</span><h4>Opção A: Velero com backup de manifestos e volumes para bucket externo</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 4 min</span><span><b>Print:</b> <code>f4-velero-backups.png</code></span></div>
+      <ol class="passos">
+        <li>Agendamentos e backups (o segundo comando é o print):
+<pre>kubectl -n velero get schedules.velero.io
+kubectl -n velero get backups.velero.io</pre></li>
+        <li>O armazenamento está autenticado (sem IRSA, pelo perfil do nó):
+<pre>kubectl -n velero get backupstoragelocations</pre></li>
+        <li>O dado saiu do cluster e da região:
+<pre>VB=$(aws s3api list-buckets --query "Buckets[?starts_with(Name,'solidarytech-prod-velero')].Name" --output text)
+aws s3api get-bucket-location --bucket $VB --output text
+aws s3 ls s3://$VB/backups/ --recursive --human-readable | tail -5</pre></li>
+      </ol>
+      <div class="esperado">Schedules <code>velero-diario</code> (03:00, com volumes, 30 dias) e <code>velero-horario-aplicacoes</code> (de hora em hora). Backups <code>Completed</code> (25/09: 914/914 itens, 3/3 snapshots de volume). BSL <code>Available</code>. Bucket em <b>us-west-2</b> com o <code>.tar.gz</code> dos manifestos.</div>
+      <div class="falha">Nenhum backup listado numa sessão recém-criada: o horário ainda não chegou. Dispare um backup a partir do schedule diário (<code>docs/10</code>, passo 13.2) e aguarde ~15 s.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F4-03</span><h4>Restore comprovado em namespace isolado</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 5 min</span><span><b>Evidência:</b> <code>07-evidencias/dr-velero-backup-restore.txt</code></span></div>
+      <div class="perigo"><b>Duas travas obrigatórias</b>, aprendidas em execução real (item 6 da evidência): (1) só restaure com <b>todos</b> os snapshots do backup em <code>completed</code>; (2) só apague PV cujo nome comece com <code>velero-clone-</code> e cujo <code>claimRef</code> esteja em <code>dr-drill-restore</code>. Nunca apague um PV <code>pvc-…</code>: esse é de produção.</div>
+      <ol class="passos">
+        <li>Escolha o backup e confirme os snapshots:
+<pre>BK=$(kubectl -n velero get backups.velero.io --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}'); echo $BK
+aws ec2 describe-snapshots --owner-ids self --filters "Name=tag:velero.io/backup,Values=$BK" --query 'Snapshots[].[SnapshotId,State]' --output text   <span class="c"># todos "completed"?</span></pre></li>
+        <li>Restaure só o PVC do Prometheus num namespace isolado:
+<pre>cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: velero.io/v1
+kind: Restore
+metadata: { name: drill-$(date +%H%M%S), namespace: velero }
+spec:
+  backupName: $BK
+  includedNamespaces: ["monitoring"]
+  includedResources: ["persistentvolumeclaims","persistentvolumes"]
+  labelSelector: { matchLabels: { app.kubernetes.io/name: prometheus } }
+  namespaceMapping: { monitoring: dr-drill-restore }
+  restorePVs: true
+EOF
+kubectl -n dr-drill-restore get pvc -w      <span class="c"># Ctrl+C em Bound</span></pre></li>
+        <li>Confira as travas e limpe só o que é do drill:
+<pre>PV=$(kubectl -n dr-drill-restore get pvc -o jsonpath='{.items[0].spec.volumeName}'); echo $PV   <span class="c"># TEM de ser velero-clone-…</span>
+kubectl delete namespace dr-drill-restore
+case "$PV" in velero-clone-*) kubectl delete pv "$PV" --ignore-not-found ;; *) echo "NAO APAGAR: $PV" ;; esac</pre></li>
+      </ol>
+      <div class="esperado">Restore <code>Completed</code>; PVC <b>Bound em ~12 s</b> num PV <code>velero-clone-…</code> criado <b>a partir do snapshot</b>; depois da limpeza, namespace e PV do drill <code>NotFound</code>, sem custo órfão.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F4-04</span><h4>Opção B: ambiente espelho em outra região com um comando</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 4 min</span><span><b>Print:</b> <code>f4-dr-plan.png</code></span></div>
+      <ol class="passos">
+        <li>Plano (somente leitura, não cria nada) da região secundária, com os mesmos módulos:
+<pre>AMBIENTE=dr-usw2 ./solidary plan</pre></li>
+      </ol>
+      <div class="esperado"><code>Plan: 34 to add, 0 to change, 0 to destroy.</code> em us-west-2: EKS, RDS, DynamoDB, SQS+DLQ e rede, com <code>Environment=Production</code> e <code>Role=warm-standby</code>. Só leitura da <code>LabRole</code>: 0 recurso IAM. Subir de fato: <code>./solidary dr-up</code> (não execute sem necessidade: gera custo).</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F4-05</span><h4>Segurança de rede: isolamento entre serviços e bloqueio do IMDS</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 4 min</span></div>
+      <ol class="passos">
+        <li>Políticas de rede aplicadas:
+<pre>kubectl get networkpolicies -A</pre></li>
+        <li>Conexão não autorizada é negada (ngo não fala com donation):
+<pre>kubectl -n solidary-ngo run teste-np --rm -i --image=curlimages/curl:8.11.1 --restart=Never -- curl -s -o /dev/null -w '%{http_code}\n' -m 8 http://donation-service.solidary-donation.svc.cluster.local/donations</pre></li>
+        <li>A API pública (sem autenticação) não alcança a credencial da nuvem (IMDS) nem a internet:
+<pre>kubectl -n solidary-ngo exec deploy/ngo-service -- python -c "import urllib.request;urllib.request.urlopen('http://169.254.169.254/latest/meta-data/',timeout=3)"
+kubectl -n solidary-ngo exec deploy/ngo-service -- python -c "import urllib.request;urllib.request.urlopen('https://www.google.com',timeout=3)"</pre></li>
+        <li>Banco privado e bucket sem acesso público:
+<pre>aws s3api get-public-access-block --bucket $VB --query PublicAccessBlockConfiguration --output text</pre></li>
+      </ol>
+      <div class="esperado">11 NetworkPolicies. Teste do passo 2: <code>000</code> após 8 s (pacote descartado). IMDS: <code>URLError: timed out</code>; internet: <code>Network is unreachable</code>. Bucket: <code>True True True True</code>. RDS <code>PubliclyAccessible = False</code> (F4-01).</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F4-06</span><h4>Gestão de segredos: nenhum segredo no Git</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 3 min</span><span><b>Decisão:</b> ADR-014</span></div>
+      <ol class="passos">
+        <li>Segredos no cofre (só os nomes, nunca o valor):
+<pre>aws secretsmanager list-secrets --query 'SecretList[?contains(Name,`solidarytech`)].Name' --output text</pre></li>
+        <li>Nenhuma senha literal nos manifestos:
+<pre>grep -rniE 'password:[[:space:]]*[^$\{[:space:]]' gitops/ | grep -v 'existingSecret\|secretKeyRef\|passwordKey' || echo "nenhuma senha no gitops/"</pre></li>
+        <li>A credencial do APM chega ao cluster pelo cofre (metadados, sem o valor):
+<pre>kubectl -n monitoring get secret apm-credentials -o jsonpath='{.metadata.labels}{"\n"}{.metadata.annotations}{"\n"}'</pre></li>
+      </ol>
+      <div class="esperado"><code>solidarytech/datadog</code> e o segredo do RDS listados; o <code>grep</code> retorna "nenhuma senha no gitops/"; o Secret traz <code>solidarytech.io/origem: secretsmanager</code> e <code>solidarytech.io/cofre: solidarytech/datadog</code> com a versão do cofre, sem o valor.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">F4-07</span><h4>Conformidade com as restrições do AWS Academy</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <div class="meta"><span><b>Onde:</b> <span class="icone">TERMINAL</span></span><span><b>Tempo:</b> 3 min</span></div>
+      <ol class="passos">
+        <li>Gates locais (os mesmos da CI):
+<pre>./solidary check</pre></li>
+        <li>Nenhum recurso IAM criado; a LabRole é apenas lida:
+<pre>terraform -chdir=infra/environments/prod-use1 state list | grep -E '(^|\.)aws_iam_' | grep -v '^data\.' | grep -v '\.data\.' || echo "nenhum recurso IAM"
+./solidary conformidade</pre></li>
+      </ol>
+      <div class="esperado"><i>"Todos os gates passaram."</i> (política do Academy com 16 verificações, observabilidade, contrato PromQL, workflows, manifestos, <code>terraform fmt</code>, links). <b>"nenhum recurso IAM"</b>. Relatório de conformidade: regiões permitidas, instâncias ≤ <code>large</code>, On-Demand.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= E -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">E</span><h2>Entregáveis e evidências visuais</h2><span class="desc">"Qualquer requisito que não for claramente demonstrado… sofrerá dedução"</span></div>
+
+  <div class="req">
+    <header><span class="id">E-01</span><h4>Repositório público com IaC, manifestos e pipelines</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <ol class="passos">
+        <li>Abra uma <b>janela anônima</b> e acesse <a href="https://github.com/DemarchiWorking/fiap-tc-5-solidarytech">github.com/DemarchiWorking/fiap-tc-5-solidarytech</a> (é o que a banca verá).</li>
+        <li>Confira as pastas <code>infra/</code>, <code>gitops/apps/</code>, <code>.github/workflows/</code> e o workflow <i>Validação</i> verde no último commit.</li>
+      </ol>
+      <div class="esperado">Repositório acessível sem login; último commit com <i>Validação</i> verde.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">E-02</span><h4>Evidências visuais: os 10 prints do relatório</h4><span class="selo-st st-pend">Pendente do grupo</span></header>
+    <div class="corpo">
+      <p>Salve em <code>docs/07-evidencias/</code> com <b>exatamente</b> estes nomes; o gerador do PDF os inclui sozinho e marca em vermelho o que faltar. Rode P-04 antes.</p>
+      <table>
+        <thead><tr><th style="width:5%"></th><th style="width:32%">Arquivo</th><th>Origem</th><th style="width:10%">Cartão</th></tr></thead>
+        <tbody>
+          <tr><td>☐</td><td><code>f0-argocd.png</code></td><td><code>$BASE/argocd/</code>: 15 Applications Synced/Healthy</td><td>F0-07</td></tr>
+          <tr><td>☐</td><td><code>f0-pipeline-verde.png</code></td><td>GitHub Actions → CI — donation-service (5 jobs verdes)</td><td>F0-04</td></tr>
+          <tr><td>☐</td><td><code>f0-pods-running.png</code></td><td><code>kubectl get pods -A | grep solidary</code></td><td>F0-02</td></tr>
+          <tr><td>☐</td><td><code>f0-trace-distribuido.png</code></td><td>Datadog → APM → Traces</td><td>F0-09</td></tr>
+          <tr><td>☐</td><td><code>f1-dashboard-sre.png</code></td><td>Grafana → SRE: SLOs e Error Budget</td><td>F1-03</td></tr>
+          <tr><td>☐</td><td><code>f2-tags-console.png</code></td><td>AWS → Tag Editor → <code>CostCenter = NGO-Core</code></td><td>F2-01</td></tr>
+          <tr><td>☐</td><td><code>f2-dashboard-finops.png</code></td><td>Grafana → FinOps: custo e rightsizing</td><td>F2-03</td></tr>
+          <tr><td>☐</td><td><code>f3-anomalia-watchdog.png</code></td><td>Datadog → Watchdog</td><td>F3-01</td></tr>
+          <tr><td>☐</td><td><code>f4-velero-backups.png</code></td><td><code>kubectl -n velero get backups.velero.io</code></td><td>F4-02</td></tr>
+          <tr><td>☐</td><td><code>f4-dr-plan.png</code></td><td><code>AMBIENTE=dr-usw2 ./solidary plan</code></td><td>F4-04</td></tr>
+        </tbody>
+      </table>
+      <div class="aviso">Antes de cada print, confira que não aparece senha, token ou chave na tela (terminal com <code>./solidary senhas</code> aberto, abas do console AWS com credenciais).</div>
+    </div>
+  </div>
+
+  <div class="req">
+    <header><span class="id">E-03</span><h4>Vídeo (até 20 min) e PDF final</h4><span class="selo-st st-pend">Pendente do grupo</span></header>
+    <div class="corpo">
+      <ol class="passos">
+        <li>Grave seguindo <code>docs/roteiro-video.md</code>, cobrindo: pitch; pipelines e ArgoCD (F0-04, F0-07 com o selfHeal); Terraform (RO-02); traces e alertas (F0-09, F1-04); dashboard SRE (F1-03); backup/DR (F4-02 a F4-04). Publique no YouTube como <b>não listado</b>.</li>
+        <li>Cole o link na seção 1 de <code>docs/relatorio/RELATORIO-DE-ENTREGA.md</code> e gere o PDF pelo PowerShell ou Git Bash do Windows:
+<pre>python scripts/gerar-relatorio.py</pre></li>
+        <li>Confira a rubrica e publique:
+<pre>./solidary rubrica
+git add docs/ &amp;&amp; git commit -m "docs: prints, video e PDF final" &amp;&amp; git push</pre></li>
+      </ol>
+      <div class="esperado">PDF sem aviso vermelho no topo; <code>./solidary rubrica</code> sem pendências; o vídeo abre numa aba anônima.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= Z -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">Z</span><h2>Encerramento e higiene</h2><span class="desc">Ao final de toda sessão de validação</span></div>
+
+  <div class="req">
+    <header><span class="id">Z-01</span><h4>Registrar a evidência consolidada e desligar o ambiente</h4><span class="selo-st st-ok">Medido</span></header>
+    <div class="corpo">
+      <ol class="passos">
+        <li>Consolide tudo num arquivo versionado (somente leitura no ambiente):
+<pre>./solidary evidencias      <span class="c"># gera docs/07-evidencias/validacao-final.txt</span></pre></li>
+        <li>Destrua o ambiente (o bucket de state e o cofre do Datadog são preservados):
+<pre>./solidary lab-down</pre></li>
+      </ol>
+      <div class="esperado"><code>validacao-final.txt</code> com as seções A a J preenchidas. <code>Destroy complete!</code> Custo evitado: ~US$ 6,73/dia.</div>
+      <div class="aviso">O <code>lab-down</code> não remove os volumes EBS criados pelos PVCs nem os snapshots do Velero. Confira no console (EC2 → Volumes / Snapshots) se sobrou algo com a tag <code>Project=SolidaryTech</code>.</div>
+      <div class="aceite"><span><span class="box"></span>Validado</span><span>Responsável</span><span class="linha"></span><span>Data/hora</span><span class="linha" style="max-width:30mm"></span></div>
+    </div>
+  </div>
+
+  <h3 class="bloco">Checklist de higiene antes da submissão</h3>
+  <table>
+    <thead><tr><th style="width:5%"></th><th>Item</th><th style="width:34%">Como</th></tr></thead>
+    <tbody>
+      <tr><td>☐</td><td>Rotacionar a chave do Datadog (trafegou em texto na fase anterior)</td><td>Datadog → Organization Settings → API Keys; depois <code>./solidary datadog</code></td></tr>
+      <tr><td>☐</td><td>Nenhuma chave <code>.pem</code>/<code>.ppk</code> dentro da pasta do projeto</td><td><code>git status --ignored | grep -iE "pem|ppk"</code></td></tr>
+      <tr><td>☐</td><td>Nenhum segredo no histórico do Git</td><td>Workflow <i>Terraform</i>, passo <i>gitleaks</i>, verde</td></tr>
+      <tr><td>☐</td><td>Repositório público</td><td>Teste em janela anônima (E-01)</td></tr>
+      <tr><td>☐</td><td>Ambientes de contas anteriores do lab desligados</td><td><code>lab-down</code> em cada conta ainda acessível</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ======================================================= A -->
+<section class="pagina">
+  <div class="cabecalho-secao"><span class="num">A</span><h2>Apêndices</h2><span class="desc">Diagnóstico rápido · acessos · recursos · aceite</span></div>
+
+  <h3 class="bloco">A.1 Diagnóstico rápido</h3>
+  <table>
+    <thead><tr><th style="width:30%">Sintoma</th><th style="width:30%">Causa</th><th>Ação</th></tr></thead>
+    <tbody>
+      <tr><td><code>dial tcp [::1]:8080</code></td><td>Terminal errado (PowerShell/CMD)</td><td><code>wsl</code> → <code>tc5</code></td></tr>
+      <tr><td><code>ExpiredToken</code> / <code>InvalidClientTokenId</code></td><td>Sessão do lab vencida</td><td>Refazer P-01 e P-02</td></tr>
+      <tr><td><code>curl</code> devolve <code>000</code></td><td>Timeout: <code>$BASE</code> antigo ou DNS do NLB propagando</td><td>Recalcular <code>$BASE</code>; aguardar 3 min</td></tr>
+      <tr><td>API do EKS responde <b>401</b> no navegador</td><td>Correto: a API exige token AWS</td><td>Usar <code>$BASE/…</code> no navegador e <code>kubectl</code> no WSL</td></tr>
+      <tr><td>Painéis com <code>NaN</code> / "No data"</td><td>Sem tráfego na janela</td><td>P-04 (<code>./solidary carga</code>)</td></tr>
+      <tr><td>HPA com <code>&lt;unknown&gt;</code></td><td>metrics-server fora</td><td><code>kubectl -n argocd get app metrics-server</code></td></tr>
+      <tr><td>Datadog sem serviços</td><td>Sem carga, ou chave/site errados (403)</td><td>P-04; checar F0-09 passo 1</td></tr>
+      <tr><td>Application <code>OutOfSync</code> por minutos</td><td>Sincronização em curso após deploy</td><td>Aguardar; <b>Refresh</b> → <b>Hard refresh</b> na UI</td></tr>
+      <tr><td>Pré-voo acusa conta diferente</td><td>O Academy trocou a conta</td><td><code>COMO-SUBIR.md</code> (~35 min, sem mudar código)</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="bloco">A.2 Tabela de acessos</h3>
+  <table>
+    <thead><tr><th>Interface</th><th>Endereço</th><th>Credencial</th></tr></thead>
+    <tbody>
+      <tr><td>APIs</td><td><code>$BASE/ngo/ngos</code> · <code>$BASE/donations</code> · <code>$BASE/volunteers/1</code></td><td>abertas</td></tr>
+      <tr><td>ArgoCD</td><td><code>$BASE/argocd/</code></td><td><code>admin</code> / <code>./solidary senhas</code></td></tr>
+      <tr><td>Grafana</td><td><code>$BASE/grafana/</code></td><td><code>admin</code> / <code>./solidary senhas</code></td></tr>
+      <tr><td>Prometheus</td><td><code>localhost:9090</code> (port-forward)</td><td>sem autenticação, só local</td></tr>
+      <tr><td>Métricas do coletor</td><td><code>localhost:8888</code> (port-forward)</td><td>só local</td></tr>
+      <tr><td>Datadog</td><td>app.datadoghq.com (US1)</td><td>conta do grupo</td></tr>
+      <tr><td>GitHub Actions</td><td>github.com/DemarchiWorking/fiap-tc-5-solidarytech/actions</td><td>conta GitHub</td></tr>
+      <tr><td>Console AWS</td><td>AWS Academy → Start Lab → AWS</td><td>sessão do Learner Lab</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="bloco">A.3 Recursos na AWS</h3>
+  <table>
+    <thead><tr><th>Recurso</th><th>Identificador</th></tr></thead>
+    <tbody>
+      <tr><td>Cluster EKS</td><td><code>solidarytech-prod-eks</code> (us-east-1, 1.34)</td></tr>
+      <tr><td>RDS PostgreSQL</td><td><code>solidarytech-prod-postgres</code></td></tr>
+      <tr><td>Fila e DLQ</td><td><code>solidarytech-prod-donation-events</code> · <code>…-dlq</code></td></tr>
+      <tr><td>DynamoDB</td><td><code>SolidaryTechVolunteers</code></td></tr>
+      <tr><td>ECR</td><td><code>solidarytech/{ngo,donation,volunteer}-service</code></td></tr>
+      <tr><td>Buckets</td><td><code>solidarytech-prod-velero-&lt;6 últimos dígitos da conta&gt;</code> (us-west-2) · <code>solidarytech-prod-loki-&lt;…&gt;</code></td></tr>
+      <tr><td>Cofre</td><td><code>solidarytech/datadog</code> (Secrets Manager)</td></tr>
+      <tr><td>Conta em 25/09</td><td><code>716532857874</code>: confira a atual com <code>aws sts get-caller-identity</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="bloco">A.4 Termo de aceite da validação</h3>
+  <p>Declaramos que os cartões marcados como <b>Validado</b> foram executados no ambiente indicado e que os resultados obtidos correspondem aos resultados esperados, ou que as divergências foram registradas abaixo.</p>
+  <table>
+    <thead><tr><th style="width:22%">Data da sessão</th><th style="width:22%">Conta AWS</th><th style="width:22%">Cartões validados</th><th>Divergências registradas</th></tr></thead>
+    <tbody><tr><td style="height:22pt"></td><td></td><td>___ / 39</td><td></td></tr></tbody>
+  </table>
+  <div class="assinaturas">
+    <div>Leonardo Alves Freitas · rm369434</div>
+    <div>Antonio Eduardo Silveira Demarchi · rm370045</div>
+  </div>
+</section>
+
+</main>
+</body>
+</html>

@@ -24,7 +24,7 @@
 - [ ] `make carga` rodando há ≥ 20 min — **sem tráfego os painéis de SLO ficam vazios**
 - [ ] Dashboards SRE e FinOps com dados
 - [ ] Uma execução do `self-heal.yml` já no histórico do Actions
-- [ ] Um backup do Velero concluído (`velero backup get`)
+- [ ] Um backup do Velero concluído (`kubectl -n velero get backups.velero.io` → `Completed`)
 - [ ] Abas abertas na ordem: Grafana(SRE) · Grafana(FinOps) · ArgoCD · Actions · Datadog (app.datadoghq.com) · Tag Editor · terminal
 - [ ] Cronômetro visível
 
@@ -159,13 +159,24 @@ make conformidade         # relatório de conformidade com o lab
 
 ### 2.5 Backup e DR em ação (2 min) — **F4.2**
 
-**Opção A — Velero:**
+**Opção A — Velero** (a CLI `velero` não está instalada; tudo via `kubectl`):
 ```bash
-velero backup get
-kubectl delete namespace solidary-volunteer          # apagar de propósito
-velero restore create --from-backup <mais-recente> --include-namespaces solidary-volunteer
-kubectl -n solidary-volunteer get pods               # de volta
+kubectl -n velero get schedules.velero.io
+kubectl -n velero get backups.velero.io -o custom-columns=NOME:.metadata.name,FASE:.status.phase,ITENS:.status.progress.itemsBackedUp
+kubectl -n velero get backupstoragelocations          # Available
+aws s3 ls s3://$(aws s3api list-buckets --query "Buckets[?starts_with(Name,'solidarytech-prod-velero')].Name" --output text)/backups/ --region us-west-2
 ```
+
+Restore ao vivo **sem tocar em produção**: o cartão F4-03 do
+[caderno de validação](relatorio/VALIDACAO-MANUAL.pdf) restaura o PVC do
+Prometheus num namespace isolado (`Bound` em ~12 s, medido em 25/09) e só apaga
+o que é do drill.
+
+> **Não apague namespaces de produção durante a gravação.** Além do risco ao vivo,
+> os Secrets materializados do cofre (credenciais de banco e do APM) moram neles.
+> Uma versão anterior deste roteiro mandava `kubectl delete namespace
+> solidary-volunteer` e usava a CLI `velero`, que não está instalada — corrigido
+> em 25/09.
 
 **Opção B — Warm standby:**
 ```bash
